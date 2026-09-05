@@ -64,24 +64,28 @@ type mediaInput struct {
 }
 
 type persistedStore struct {
-	Version   int       `json:"version"`
-	Items     []Media   `json:"items"`
-	SyncJobs  []syncJob `json:"syncJobs,omitempty"`
-	NextID    int       `json:"nextId,omitempty"`
-	NextJobID int64     `json:"nextJobId,omitempty"`
+	Version        int        `json:"version"`
+	Items          []Media    `json:"items"`
+	SyncJobs       []syncJob  `json:"syncJobs,omitempty"`
+	Activities     []Activity `json:"activities,omitempty"`
+	NextID         int        `json:"nextId,omitempty"`
+	NextJobID      int64      `json:"nextJobId,omitempty"`
+	NextActivityID int64      `json:"nextActivityId,omitempty"`
 }
 
 type store struct {
-	mu        sync.RWMutex
-	path      string
-	items     []Media
-	syncJobs  []syncJob
-	nextID    int
-	nextJobID int64
+	mu             sync.RWMutex
+	path           string
+	items          []Media
+	syncJobs       []syncJob
+	activities     []Activity
+	nextID         int
+	nextJobID      int64
+	nextActivityID int64
 }
 
 func newStore(path string) (*store, error) {
-	s := &store{path: path, items: []Media{}, syncJobs: []syncJob{}, nextID: 1, nextJobID: 1}
+	s := &store{path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{}, nextID: 1, nextJobID: 1, nextActivityID: 1}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -107,11 +111,17 @@ func newStore(path string) (*store, error) {
 		}
 		s.items = persisted.Items
 		s.syncJobs = persisted.SyncJobs
+		if persisted.Activities != nil {
+			s.activities = persisted.Activities
+		}
 		if persisted.NextID > s.nextID {
 			s.nextID = persisted.NextID
 		}
 		if persisted.NextJobID > s.nextJobID {
 			s.nextJobID = persisted.NextJobID
+		}
+		if persisted.NextActivityID > s.nextActivityID {
+			s.nextActivityID = persisted.NextActivityID
 		}
 	}
 	for _, item := range s.items {
@@ -127,6 +137,14 @@ func newStore(path string) (*store, error) {
 			s.nextID = job.MediaID + 1
 		}
 	}
+	for _, activity := range s.activities {
+		if activity.ID >= s.nextActivityID {
+			s.nextActivityID = activity.ID + 1
+		}
+	}
+	if overflow := len(s.activities) - maxStoredActivities; overflow > 0 {
+		s.activities = slices.Delete(s.activities, 0, overflow)
+	}
 	return s, nil
 }
 
@@ -135,8 +153,8 @@ func (s *store) persistLocked() error {
 		return err
 	}
 	data, err := json.MarshalIndent(persistedStore{
-		Version: 1, Items: s.items, SyncJobs: s.syncJobs,
-		NextID: s.nextID, NextJobID: s.nextJobID,
+		Version: 1, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
+		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -176,7 +194,9 @@ func main() {
 	mux.HandleFunc("GET /api/health", application.health)
 	mux.HandleFunc("GET /api/auth/check", application.authCheck)
 	mux.HandleFunc("GET /api/media", application.listMedia)
+	mux.HandleFunc("GET /api/activity", application.listActivity)
 	mux.HandleFunc("GET /api/discovery/search", application.searchDiscovery)
+	mux.HandleFunc("GET /api/discovery/global", application.searchGlobalDiscovery)
 	mux.HandleFunc("GET /api/import/anilist", application.previewAniListImport)
 	mux.HandleFunc("POST /api/import/anilist", application.importAniList)
 	mux.HandleFunc("GET /api/integrations/anilist", application.anilist.statusHandler)
@@ -244,7 +264,9 @@ func (a *app) createMedia(w http.ResponseWriter, r *http.Request) {
 	item := Media{ID: a.store.nextID, Title: strings.TrimSpace(input.Title), Type: input.Type, Status: input.Status, Progress: input.Progress, Total: input.Total, Rating: input.Rating, Notes: strings.TrimSpace(input.Notes), CoverURL: strings.TrimSpace(input.CoverURL), Provider: input.Provider, ProviderID: input.ProviderID, ProviderURL: strings.TrimSpace(input.ProviderURL), OriginalTitle: strings.TrimSpace(input.OriginalTitle), Description: strings.TrimSpace(input.Description), ReleaseYear: input.ReleaseYear, CreatedAt: now, UpdatedAt: now}
 	originalNextID := a.store.nextID
 	originalNextJobID := a.store.nextJobID
+	originalNextActivityID := a.store.nextActivityID
 	originalJobs := slices.Clone(a.store.syncJobs)
+	originalActivities := slices.Clone(a.store.activities)
 	a.store.nextID++
 	a.store.items = append(a.store.items, item)
 	index := len(a.store.items) - 1
@@ -252,12 +274,15 @@ func (a *app) createMedia(w http.ResponseWriter, r *http.Request) {
 		a.anilist.queueUpsertLocked(index)
 	}
 	item = a.store.items[index]
+	a.store.appendActivityLocked(activityForNewMedia(item, "added"))
 	err = a.store.persistLocked()
 	if err != nil {
 		a.store.items = a.store.items[:len(a.store.items)-1]
 		a.store.syncJobs = originalJobs
+		a.store.activities = originalActivities
 		a.store.nextID = originalNextID
 		a.store.nextJobID = originalNextJobID
+		a.store.nextActivityID = originalNextActivityID
 	}
 	a.store.mu.Unlock()
 	if err == nil && a.anilist != nil {
@@ -302,6 +327,8 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	originalJobs := slices.Clone(a.store.syncJobs)
 	originalNextJobID := a.store.nextJobID
+	originalActivities := slices.Clone(a.store.activities)
+	originalNextActivityID := a.store.nextActivityID
 	item.Title = strings.TrimSpace(input.Title)
 	item.Type = input.Type
 	item.Status = input.Status
@@ -321,11 +348,14 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 		a.anilist.queueUpsertLocked(index)
 	}
 	updated := *item
+	a.store.appendActivityLocked(activityForUpdatedMedia(original, updated))
 	err = a.store.persistLocked()
 	if err != nil {
 		a.store.items[index] = original
 		a.store.syncJobs = originalJobs
+		a.store.activities = originalActivities
 		a.store.nextJobID = originalNextJobID
+		a.store.nextActivityID = originalNextActivityID
 	}
 	a.store.mu.Unlock()
 	if err == nil && a.anilist != nil {
@@ -353,16 +383,25 @@ func (a *app) deleteMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	originalItems := slices.Clone(a.store.items)
 	originalJobs := slices.Clone(a.store.syncJobs)
+	originalActivities := slices.Clone(a.store.activities)
 	originalNextJobID := a.store.nextJobID
+	originalNextActivityID := a.store.nextActivityID
+	deleted := a.store.items[index]
 	if a.anilist != nil {
-		a.anilist.queueDeleteLocked(a.store.items[index])
+		a.anilist.queueDeleteLocked(deleted)
 	}
 	a.store.items = slices.Delete(a.store.items, index, index+1)
+	a.store.appendActivityLocked(Activity{
+		MediaID: deleted.ID, Title: deleted.Title, MediaType: deleted.Type, Action: "deleted",
+		Changes: ActivityChanges{FromStatus: deleted.Status}, OccurredAt: time.Now().UTC(),
+	})
 	err = a.store.persistLocked()
 	if err != nil {
 		a.store.items = originalItems
 		a.store.syncJobs = originalJobs
+		a.store.activities = originalActivities
 		a.store.nextJobID = originalNextJobID
+		a.store.nextActivityID = originalNextActivityID
 	}
 	a.store.mu.Unlock()
 	if err == nil && a.anilist != nil {

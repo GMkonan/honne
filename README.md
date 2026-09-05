@@ -12,7 +12,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open `http://localhost:8080`. The collection and pending synchronization jobs are stored in the `honne-data` Docker volume and survive container replacement.
+Open `http://localhost:8080`. The collection, activity journal, and pending synchronization jobs are stored in the `honne-data` Docker volume and survive container replacement.
 
 Useful commands:
 
@@ -157,10 +157,12 @@ docker compose build
 - `GET /api/health`: health check
 - `GET /api/auth/check`: reverse-proxy authentication check
 - `GET /api/media`: list the collection
+- `GET /api/activity`: list recent library activity (`?limit=30`, maximum 100)
 - `POST /api/media`: add media
 - `PATCH /api/media/{id}`: update media
 - `DELETE /api/media/{id}`: delete media
-- `GET /api/discovery/search?type=anime&q=bebop&page=1`: search metadata
+- `GET /api/discovery/search?type=anime&q=bebop&page=1`: search one metadata catalog
+- `GET /api/discovery/global?q=bebop`: search all available metadata catalogs
 - `GET /api/import/anilist?username=example`: preview a public AniList library
 - `POST /api/import/anilist`: import selected types and statuses
 - `GET /api/integrations/anilist`: connection and queue status

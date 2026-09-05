@@ -118,7 +118,9 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 
 	a.store.mu.Lock()
 	originalItems := slices.Clone(a.store.items)
+	originalActivities := slices.Clone(a.store.activities)
 	originalNextID := a.store.nextID
+	originalNextActivityID := a.store.nextActivityID
 	existing := make(map[string]bool, len(a.store.items))
 	for _, item := range a.store.items {
 		if item.Provider == "anilist" {
@@ -144,6 +146,7 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 		}
 		a.store.nextID++
 		a.store.items = append(a.store.items, item)
+		a.store.appendActivityLocked(activityForNewMedia(item, "imported"))
 		imported = append(imported, item)
 		existing[item.ProviderID] = true
 	}
@@ -152,7 +155,9 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		a.store.items = originalItems
+		a.store.activities = originalActivities
 		a.store.nextID = originalNextID
+		a.store.nextActivityID = originalNextActivityID
 		a.store.mu.Unlock()
 		writeError(w, http.StatusInternalServerError, "could not save imported titles")
 		return

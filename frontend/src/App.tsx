@@ -1,8 +1,13 @@
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import {
+  ArrowLeft,
   BookOpen,
+  Check,
   CirclePlus,
   Clapperboard,
+  Clock3,
+  Cog,
+  ExternalLink,
   Film,
   Library,
   Link2,
@@ -10,7 +15,9 @@ import {
   Menu,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Star,
   Trash2,
@@ -56,6 +63,36 @@ interface Media extends MediaInput {
   syncError?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface ActivityChanges {
+  fromStatus?: MediaStatus;
+  toStatus?: MediaStatus;
+  fromProgress?: number;
+  toProgress?: number;
+  fromRating?: number;
+  toRating?: number;
+}
+
+interface ActivityEvent {
+  id: number;
+  mediaId?: number;
+  title: string;
+  mediaType: MediaType;
+  action: "added" | "updated" | "deleted" | "imported";
+  changes: ActivityChanges;
+  occurredAt: string;
+}
+
+type LibrarySort = "recent" | "added" | "title" | "rating";
+type AppView = "library" | "activity" | "settings" | "search" | "detail";
+type DetailSelection =
+  | { kind: "local"; mediaId: number }
+  | { kind: "external"; result: DiscoveryResult };
+
+interface GlobalDiscoveryResponse {
+  results: DiscoveryResult[];
+  unavailableTypes: MediaType[];
 }
 
 interface AniListIntegrationStatus {
@@ -225,26 +262,154 @@ function mediaToInput(item: Media): MediaInput {
   };
 }
 
-function categoryCover(items: Media[], mediaType: MediaType): string {
-  const covers = items.filter((item) =>
-    item.type === mediaType && item.coverUrl.trim()
-  );
-  if (covers.length === 0) return "";
+function previewCover(items: Media[], type?: MediaType): string {
+  return items.find((item) =>
+    (!type || item.type === type) && item.coverUrl.trim()
+  )?.coverUrl.replaceAll('"', "") || "";
+}
 
-  const seed = covers.reduce(
-    (total, item) => total + item.id,
-    mediaType.length,
+function plannedLabel(type: MediaType | "all"): string {
+  if (["book", "manga", "light_novel"].includes(type)) return "Plan to read";
+  if (["anime", "series", "movie"].includes(type)) return "Plan to watch";
+  return "Plan to read/watch";
+}
+
+function statusLabel(
+  status?: MediaStatus,
+  type: MediaType | "all" = "all",
+): string {
+  if (status === "planned") return plannedLabel(type);
+  return statusOptions.find((option) => option.value === status)?.label ||
+    status?.replaceAll("_", " ") || "Unknown";
+}
+
+function activityDescription(activity: ActivityEvent): string {
+  if (activity.action === "added") {
+    return `Added to ${
+      statusLabel(activity.changes.toStatus, activity.mediaType)
+    }`;
+  }
+  if (activity.action === "imported") {
+    return `Imported as ${
+      statusLabel(activity.changes.toStatus, activity.mediaType)
+    }`;
+  }
+  if (activity.action === "deleted") return "Removed from the library";
+
+  const details: string[] = [];
+  if (activity.changes.toStatus) {
+    details.push(
+      `${statusLabel(activity.changes.fromStatus, activity.mediaType)} → ${
+        statusLabel(activity.changes.toStatus, activity.mediaType)
+      }`,
+    );
+  }
+  if (activity.changes.toProgress !== undefined) {
+    details.push(
+      `Progress ${
+        activity.changes.fromProgress ?? 0
+      } → ${activity.changes.toProgress}`,
+    );
+  }
+  if (activity.changes.toRating !== undefined) {
+    details.push(
+      activity.changes.toRating === 0
+        ? "Rating removed"
+        : `Rating ${
+          activity.changes.fromRating ?? 0
+        } → ${activity.changes.toRating}`,
+    );
+  }
+  return details.join(" · ") || "Updated details";
+}
+
+function relativeTime(value: string): string {
+  const elapsed = Date.now() - Date.parse(value);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return "just now";
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" })
+    .format(new Date(value));
+}
+
+function searchFromHash(): string {
+  const match = globalThis.location.hash.match(/^#search\/(.+)$/);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return "";
+  }
+}
+
+function routeFromHash(): AppView {
+  const hash = globalThis.location.hash;
+  if (hash === "#activity") return "activity";
+  if (hash === "#settings") return "settings";
+  if (hash.startsWith("#search")) return "search";
+  if (hash.startsWith("#media/") || hash.startsWith("#catalog/")) {
+    return "detail";
+  }
+  return "library";
+}
+
+function storedExternalDetail(): DetailSelection | null {
+  const match = globalThis.location.hash.match(
+    /^#catalog\/([^/]+)\/([^/]+)\/([^/]+)$/,
   );
-  return covers[seed % covers.length].coverUrl.replaceAll('"', "");
+  if (!match) return null;
+  try {
+    const provider = decodeURIComponent(match[1]);
+    const type = decodeURIComponent(match[2]);
+    const providerId = decodeURIComponent(match[3]);
+    const storageKey = `honne:catalog:${provider}:${type}:${providerId}`;
+    const result = JSON.parse(
+      globalThis.sessionStorage.getItem(storageKey) || "null",
+    ) as DiscoveryResult | null;
+    if (
+      result && result.provider === provider && result.type === type &&
+      result.providerId === providerId
+    ) {
+      return { kind: "external", result };
+    }
+  } catch {
+    // A missing or malformed session entry is handled by the not-found page.
+  }
+  return null;
 }
 
 function App() {
+  const [view, setView] = useState<AppView>(routeFromHash);
+  const [detail, setDetail] = useState<DetailSelection | null>(() => {
+    const match = globalThis.location.hash.match(/^#media\/(\d+)$/);
+    return match
+      ? { kind: "local", mediaId: Number(match[1]) }
+      : storedExternalDetail();
+  });
+  const [detailOrigin, setDetailOrigin] = useState<
+    "library" | "activity" | "search"
+  >("library");
+  const [globalQuery, setGlobalQuery] = useState(searchFromHash);
+  const [submittedQuery, setSubmittedQuery] = useState(searchFromHash);
+  const [globalResults, setGlobalResults] = useState<DiscoveryResult[]>([]);
+  const [unavailableTypes, setUnavailableTypes] = useState<MediaType[]>([]);
+  const [globalLoading, setGlobalLoading] = useState(false);
+  const [globalError, setGlobalError] = useState("");
+  const [searchGeneration, setSearchGeneration] = useState(0);
   const [items, setItems] = useState<Media[]>([]);
+  const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [activeType, setActiveType] = useState<MediaType | "all">("all");
   const [activeStatus, setActiveStatus] = useState<MediaStatus | "all">("all");
+  const [sortBy, setSortBy] = useState<LibrarySort>("recent");
   const [modalItem, setModalItem] = useState<Media | null | undefined>(
     undefined,
   );
@@ -255,24 +420,31 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [integrationOpen, setIntegrationOpen] = useState(false);
-  const [anilistStatus, setAniListStatus] = useState<AniListIntegrationStatus | null>(null);
+  const [anilistStatus, setAniListStatus] = useState<
+    AniListIntegrationStatus | null
+  >(null);
 
   useEffect(() => {
     let active = true;
     async function refresh(initial: boolean) {
       try {
-        const [library, integration] = await Promise.all([
+        const [library, integration, recentActivity] = await Promise.all([
           request<Media[]>("/api/media"),
           request<AniListIntegrationStatus>("/api/integrations/anilist"),
+          request<ActivityEvent[]>("/api/activity?limit=100"),
         ]);
         if (active) {
           setItems(library);
           setAniListStatus(integration);
+          setActivities(recentActivity);
         }
       } catch (caught: unknown) {
         if (active && initial) setError(errorMessage(caught));
       } finally {
-        if (active && initial) setLoading(false);
+        if (active && initial) {
+          setLoading(false);
+          setActivityLoading(false);
+        }
       }
     }
     void refresh(true);
@@ -283,11 +455,129 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    function syncRoute() {
+      const nextView = routeFromHash();
+      if (nextView === "detail") {
+        const match = globalThis.location.hash.match(/^#media\/(\d+)$/);
+        if (match) setDetail({ kind: "local", mediaId: Number(match[1]) });
+        else setDetail(storedExternalDetail());
+      }
+      if (nextView === "search") {
+        const query = searchFromHash();
+        if (query) {
+          setSubmittedQuery(query);
+          setGlobalQuery(query);
+        }
+      }
+      setView(nextView);
+      setMenuOpen(false);
+      globalThis.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    globalThis.addEventListener("hashchange", syncRoute);
+    return () => globalThis.removeEventListener("hashchange", syncRoute);
+  }, []);
+
+  useEffect(() => {
+    if (submittedQuery.trim().length < 2) return;
+    const controller = new AbortController();
+    let active = true;
+    setGlobalLoading(true);
+    setGlobalError("");
+    setGlobalResults([]);
+    setUnavailableTypes([]);
+    request<GlobalDiscoveryResponse>(
+      `/api/discovery/global?q=${encodeURIComponent(submittedQuery.trim())}`,
+      { signal: controller.signal },
+    ).then((response) => {
+      if (!active) return;
+      setGlobalResults(response.results);
+      setUnavailableTypes(response.unavailableTypes);
+    }).catch((caught: unknown) => {
+      if (
+        !active ||
+        (caught instanceof DOMException && caught.name === "AbortError")
+      ) return;
+      setGlobalError(errorMessage(caught));
+    }).finally(() => {
+      if (active) setGlobalLoading(false);
+    });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [submittedQuery, searchGeneration]);
+
+  function navigate(next: Exclude<AppView, "detail">) {
+    const hash = next === "library" ? "#library" : `#${next}`;
+    if (globalThis.location.hash === hash) {
+      setView(next);
+      globalThis.scrollTo({ top: 0, behavior: "smooth" });
+    } else globalThis.location.hash = hash;
+  }
+
+  function rememberDetailOrigin() {
+    if (view === "activity" || view === "search") setDetailOrigin(view);
+    else if (view !== "detail") setDetailOrigin("library");
+  }
+
+  function openLocalDetail(mediaId: number) {
+    rememberDetailOrigin();
+    setDetail({ kind: "local", mediaId });
+    globalThis.location.hash = `#media/${mediaId}`;
+  }
+
+  function openExternalDetail(result: DiscoveryResult) {
+    rememberDetailOrigin();
+    setDetail({ kind: "external", result });
+    try {
+      const storageKey =
+        `honne:catalog:${result.provider}:${result.type}:${result.providerId}`;
+      globalThis.sessionStorage.setItem(storageKey, JSON.stringify(result));
+    } catch {
+      // The current view still works when private browsing blocks storage.
+    }
+    setView("detail");
+    globalThis.location.hash = `#catalog/${
+      encodeURIComponent(result.provider)
+    }/${encodeURIComponent(result.type)}/${
+      encodeURIComponent(result.providerId)
+    }`;
+    globalThis.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function submitGlobalSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = globalQuery.trim();
+    if (query.length < 2) return;
+    setSubmittedQuery(query);
+    setSearchGeneration((current) => current + 1);
+    setMenuOpen(false);
+    const hash = `#search/${encodeURIComponent(query)}`;
+    if (globalThis.location.hash === hash) setView("search");
+    else globalThis.location.hash = hash;
+  }
+
+  function leaveDetail() {
+    if (detailOrigin === "search" && submittedQuery) {
+      globalThis.location.hash = `#search/${
+        encodeURIComponent(submittedQuery)
+      }`;
+      return;
+    }
+    navigate(detailOrigin);
+  }
+
   async function refreshAniListStatus() {
     const status = await request<AniListIntegrationStatus>(
       "/api/integrations/anilist",
     );
     setAniListStatus(status);
+  }
+
+  async function refreshActivity() {
+    const recent = await request<ActivityEvent[]>("/api/activity?limit=100");
+    setActivities(recent);
   }
 
   const filtered = items.filter((item) => {
@@ -297,11 +587,33 @@ function App() {
     return matchesSearch &&
       (activeType === "all" || item.type === activeType) &&
       (activeStatus === "all" || item.status === activeStatus);
+  }).sort((a, b) => {
+    if (sortBy === "title") return a.title.localeCompare(b.title);
+    if (sortBy === "rating") {
+      return b.rating - a.rating || a.title.localeCompare(b.title);
+    }
+    if (sortBy === "added") {
+      return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    }
+    return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
   });
 
   const inProgress =
     items.filter((item) => item.status === "in_progress").length;
   const completed = items.filter((item) => item.status === "completed").length;
+  const statusScope = activeType === "all"
+    ? items
+    : items.filter((item) => item.type === activeType);
+  const localSearchResults = submittedQuery.trim().length < 2
+    ? []
+    : items.filter((item) =>
+      item.title.toLocaleLowerCase("en").includes(
+        submittedQuery.toLocaleLowerCase("en"),
+      ) ||
+      (item.originalTitle || "").toLocaleLowerCase("en").includes(
+        submittedQuery.toLocaleLowerCase("en"),
+      )
+    );
 
   async function saveItem(values: MediaInput) {
     let saved: Media;
@@ -332,6 +644,11 @@ function App() {
         : [saved, ...current]
     );
     void refreshAniListStatus().catch(() => {});
+    void refreshActivity().catch(() => {});
+    if (!modalItem?.id && detail?.kind === "external") {
+      setDetail({ kind: "local", mediaId: saved.id });
+      globalThis.location.hash = `#media/${saved.id}`;
+    }
     setModalItem(undefined);
     setDraftItem(undefined);
   }
@@ -371,11 +688,12 @@ function App() {
     });
     setItems((current) => [...result.items, ...current]);
     void refreshAniListStatus().catch(() => {});
+    void refreshActivity().catch(() => {});
     setImportOpen(false);
     return result;
   }
 
-  async function deleteItem(item: Media) {
+  async function deleteItem(item: Media): Promise<boolean> {
     const hasRemoteSync = !!item.providerListEntryId ||
       ["waiting_auth", "pending", "synced", "error"].includes(
         item.syncStatus || "",
@@ -385,13 +703,16 @@ function App() {
     const message = removesFromAniList
       ? `Remove “${item.title}” from Honne and your AniList list?`
       : `Remove “${item.title}” from your collection?`;
-    if (!globalThis.confirm(message)) return;
+    if (!globalThis.confirm(message)) return false;
     try {
       await request<null>(`/api/media/${item.id}`, { method: "DELETE" });
       setItems((current) => current.filter(({ id }) => id !== item.id));
       void refreshAniListStatus().catch(() => {});
+      void refreshActivity().catch(() => {});
+      return true;
     } catch (caught: unknown) {
       setError(errorMessage(caught));
+      return false;
     }
   }
 
@@ -399,80 +720,64 @@ function App() {
     <div className="app-shell">
       <header className="topbar" id="top">
         <div className="topbar-inner">
-          <a className="brand" href="#top" aria-label="Honne, home">
+          <a className="brand" href="#library" aria-label="Honne, library">
             <span className="brand-glyph">本音</span>
             <span>honne</span>
           </a>
           <nav className={menuOpen ? "main-nav open" : "main-nav"}>
             <a
-              className="active"
-              href="#collection"
+              className={view === "library" ? "active" : ""}
+              href="#library"
+              aria-current={view === "library" ? "page" : undefined}
               onClick={() => setMenuOpen(false)}
             >
               Library
             </a>
             <a
-              href="#browse"
-              onClick={() => {
-                setDiscoveryType(null);
-                setMenuOpen(false);
-              }}
+              className={view === "activity" ? "active" : ""}
+              href="#activity"
+              aria-current={view === "activity" ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
             >
-              Browse
-            </a>
-            <a href="#collection" onClick={() => setMenuOpen(false)}>
               Activity
             </a>
-            <button
-              type="button"
-              className="nav-import"
-              onClick={() => {
-                setIntegrationOpen(true);
-                setMenuOpen(false);
-              }}
+            <a
+              className={view === "settings" ? "active" : ""}
+              href="#settings"
+              aria-current={view === "settings" ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
             >
-              <Link2 size={13} />
-              {anilistStatus?.connected
-                ? `@${anilistStatus.username}`
-                : "AniList"}
-              {!!anilistStatus?.pending && <span>{anilistStatus.pending}</span>}
-            </button>
-            <button
-              type="button"
-              className="nav-import"
-              onClick={() => {
-                setImportOpen(true);
-                setMenuOpen(false);
-              }}
+              Settings
+              {!!anilistStatus?.pending && (
+                <span className="nav-count">{anilistStatus.pending}</span>
+              )}
+            </a>
+            <form
+              className="mobile-global-search"
+              onSubmit={submitGlobalSearch}
             >
-              Import AniList
-            </button>
-            <button
-              type="button"
-              className="mobile-add"
-              onClick={() => {
-                setDiscoveryType(null);
-                setMenuOpen(false);
-              }}
-            >
-              <CirclePlus size={16} />Add title
-            </button>
+              <Search size={15} />
+              <input
+                value={globalQuery}
+                onChange={(event) => setGlobalQuery(event.target.value)}
+                placeholder="Search library and catalogs"
+                aria-label="Global search"
+              />
+            </form>
           </nav>
-          <label className="nav-search">
+          <form
+            className="nav-search"
+            role="search"
+            onSubmit={submitGlobalSearch}
+          >
             <Search size={15} />
             <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search library"
+              value={globalQuery}
+              onChange={(event) => setGlobalQuery(event.target.value)}
+              placeholder="Search everything"
+              aria-label="Search library and catalogs"
             />
-          </label>
-          <button
-            type="button"
-            className="top-add"
-            onClick={() => setDiscoveryType(null)}
-          >
-            <CirclePlus size={16} />Add title
-          </button>
+          </form>
           <button
             type="button"
             className="menu-button"
@@ -484,247 +789,289 @@ function App() {
         </div>
       </header>
 
-      <section className="library-hero">
-        <div className="hero-overlay" />
-        <div className="page-container hero-content">
-          <span className="profile-mark">本音</span>
-          <div>
-            <span className="hero-kicker">PERSONAL MEDIA LIBRARY</span>
-            <h1>My Library</h1>
-            <p>
-              {items.length} titles · {inProgress} in progress · {completed}
-              {" "}
-              completed
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <nav className="library-tabs">
-        <div className="page-container">
-          <a
-            className={activeStatus === "all" ? "active" : ""}
-            href="#collection"
-            onClick={() => setActiveStatus("all")}
-          >
-            All titles
-          </a>
-          <a
-            className={activeStatus === "in_progress" ? "active" : ""}
-            href="#collection"
-            onClick={() => setActiveStatus("in_progress")}
-          >
-            In progress <span>{inProgress}</span>
-          </a>
-          <a
-            className={activeStatus === "planned" ? "active" : ""}
-            href="#collection"
-            onClick={() => setActiveStatus("planned")}
-          >
-            Planned
-          </a>
-          <a
-            className={activeStatus === "completed" ? "active" : ""}
-            href="#collection"
-            onClick={() => setActiveStatus("completed")}
-          >
-            Completed <span>{completed}</span>
-          </a>
-        </div>
-      </nav>
-
-      <main className="page-container content" id="browse">
-        <section className="browse-section">
-          <header className="section-heading">
-            <div>
-              <span className="eyebrow">BROWSE</span>
-              <h2>Explore by format</h2>
-            </div>
-            <p>Choose a format to narrow your library.</p>
-          </header>
-          <div className="format-row">
-            {typeOptions.map(({ value, label, jpLabel, icon: Icon }) => {
-              const count = items.filter((item) => item.type === value).length;
-              const cover = categoryCover(items, value);
-              return (
-                <a
-                  href="#collection"
-                  className={`format-card ${cover ? "has-cover" : "is-empty"}`}
-                  style={cover
-                    ? { backgroundImage: `url("${cover}")` }
-                    : undefined}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    setDiscoveryType(value);
-                  }}
-                  key={value}
-                >
-                  <span className="format-shade" />
-                  {!cover && <Icon className="format-icon" size={25} />}
-                  <span className="format-copy">
-                    <small>{jpLabel}</small>
-                    <strong>{label}</strong>
-                    <span>{count} titles</span>
-                  </span>
-                </a>
-              );
-            })}
-          </div>
-        </section>
-
-        <div className="library-layout" id="collection">
-          <section className="library-main">
-            <label className="library-search">
-              <Search size={20} />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search your library..."
-              />
-            </label>
-            <div className="library-toolbar">
+      {view === "library" && (
+        <>
+          <section className="library-hero">
+            <div className="hero-overlay" />
+            <div className="page-container hero-content">
+              <span className="profile-mark">本音</span>
               <div>
-                <h2>Your collection</h2>
-                <span>{filtered.length} results</span>
+                <span className="hero-kicker">HONNE / 本音</span>
+                <h1>What stays with you.</h1>
+                <p>
+                  {items.length} works kept · {inProgress} still unfolding ·
+                  {" "}
+                  {completed} finished
+                </p>
               </div>
-              <label htmlFor="status-mobile">
-                Show{" "}
-                <select
-                  id="status-mobile"
-                  value={activeStatus}
-                  onChange={(event) =>
-                    setActiveStatus(event.target.value as MediaStatus | "all")}
-                >
-                  <option value="all">All statuses</option>
-                  {statusOptions.map((status) => (
-                    <option value={status.value} key={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
-
-            {error && (
-              <div className="error-banner">
-                <span>{error}</span>
-                <button
-                  type="button"
-                  onClick={() => setError("")}
-                  aria-label="Dismiss error"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-            {loading
-              ? (
-                <div className="empty-state">
-                  <span className="empty-code">LOADING LIBRARY</span>
-                  <p>Opening your collection...</p>
-                </div>
-              )
-              : filtered.length === 0
-              ? (
-                <div className="empty-state">
-                  <span className="empty-jp">空</span>
-                  <h3>
-                    {items.length
-                      ? "Nothing matches this view."
-                      : "Your library is empty."}
-                  </h3>
-                  <p>
-                    {items.length
-                      ? "Clear a filter or search for another title."
-                      : "Add a title manually now. Provider search will be added next."}
-                  </p>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => setDiscoveryType(null)}
-                  >
-                    <CirclePlus size={17} />
-                    {items.length
-                      ? "Add another title"
-                      : "Add your first title"}
-                  </button>
-                </div>
-              )
-              : (
-                <div className="media-grid">
-                  {filtered.map((item) => (
-                    <MediaCard
-                      item={item}
-                      onEdit={() => setModalItem(item)}
-                      onDelete={() => deleteItem(item)}
-                      key={item.id}
-                    />
-                  ))}
-                </div>
-              )}
           </section>
 
-          <aside className="library-panel">
-            <div className="panel-title">
-              <span>My collection</span>
-              <strong>{items.length}</strong>
-            </div>
-            <div className="status-list">
-              <button
-                type="button"
-                className={`all ${activeStatus === "all" ? "active" : ""}`}
-                onClick={() => setActiveStatus("all")}
-              >
-                <span>All titles</span>
-                <strong>{items.length}</strong>
-              </button>
-              {statusOptions.map((status) => {
-                const count = items.filter((item) =>
-                  item.status === status.value
-                ).length;
-                return (
-                  <button
-                    type="button"
-                    className={`${status.value} ${
-                      activeStatus === status.value ? "active" : ""
-                    }`}
-                    onClick={() => setActiveStatus(status.value)}
-                    key={status.value}
-                  >
-                    <span>{status.label}</span>
-                    <strong>{count}</strong>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="panel-section">
-              <h3>Media types</h3>
-              <div className="type-list">
-                <button
-                  type="button"
-                  className={activeType === "all" ? "active" : ""}
-                  onClick={() => setActiveType("all")}
-                >
-                  All media
-                </button>
-                {typeOptions.map((type) => (
-                  <button
-                    type="button"
-                    className={activeType === type.value ? "active" : ""}
-                    onClick={() => setActiveType(type.value)}
-                    key={type.value}
-                  >
-                    {type.label}
-                    <span>
-                      {items.filter((item) => item.type === type.value).length}
-                    </span>
-                  </button>
-                ))}
+          <main className="page-container content" id="filters">
+            <section className="filter-section" aria-label="Media type filters">
+              <div className="filter-surface">
+                <div className="filter-group format-filter">
+                  <span className="filter-label">Media type</span>
+                  <div className="format-options">
+                    <button
+                      type="button"
+                      aria-pressed={activeType === "all"}
+                      className={activeType === "all" ? "active" : ""}
+                      onClick={() => setActiveType("all")}
+                    >
+                      <SlidersHorizontal size={17} />
+                      <span>
+                        <strong>All media</strong>
+                        <small>{items.length}</small>
+                      </span>
+                    </button>
+                    {typeOptions.map(
+                      ({ value, label, jpLabel, icon: Icon }) => {
+                        const cover = previewCover(items, value);
+                        return (
+                          <button
+                            type="button"
+                            aria-pressed={activeType === value}
+                            className={`${
+                              activeType === value ? "active" : ""
+                            } ${cover ? "has-preview" : ""}`}
+                            style={cover
+                              ? { backgroundImage: `url("${cover}")` }
+                              : undefined}
+                            onClick={() => setActiveType(value)}
+                            key={value}
+                          >
+                            <Icon size={17} />
+                            <span>
+                              <strong>{label}</strong>
+                              <small>
+                                {jpLabel} ·{" "}
+                                {items.filter((item) => item.type === value)
+                                  .length}
+                              </small>
+                            </span>
+                          </button>
+                        );
+                      },
+                    )}
+                  </div>
+                </div>
               </div>
+            </section>
+
+            <div className="library-layout" id="collection">
+              <section className="library-main">
+                <label className="library-search">
+                  <Search size={20} />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search your library..."
+                  />
+                </label>
+                <div className="library-toolbar">
+                  <div>
+                    <h2>Your collection</h2>
+                    <span>{filtered.length} results</span>
+                  </div>
+                  <div className="collection-controls">
+                    <label className="toolbar-sort">
+                      <span>Sort</span>
+                      <select
+                        value={sortBy}
+                        onChange={(event) =>
+                          setSortBy(event.target.value as LibrarySort)}
+                      >
+                        <option value="recent">Recently updated</option>
+                        <option value="added">Recently added</option>
+                        <option value="title">Title A–Z</option>
+                        <option value="rating">Highest rated</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="clear-filters"
+                      disabled={activeType === "all" &&
+                        activeStatus === "all" && !search}
+                      onClick={() => {
+                        setActiveType("all");
+                        setActiveStatus("all");
+                        setSearch("");
+                      }}
+                      title="Reset library filters"
+                    >
+                      <RotateCcw size={13} /> Reset
+                    </button>
+                    <button
+                      type="button"
+                      className="collection-add"
+                      onClick={() => setDiscoveryType(null)}
+                    >
+                      <CirclePlus size={14} /> Add title
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="error-banner">
+                    <span>{error}</span>
+                    <button
+                      type="button"
+                      onClick={() => setError("")}
+                      aria-label="Dismiss error"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
+                {loading
+                  ? (
+                    <div className="empty-state">
+                      <span className="empty-code">LOADING LIBRARY</span>
+                      <p>Opening your collection...</p>
+                    </div>
+                  )
+                  : filtered.length === 0
+                  ? (
+                    <div className="empty-state">
+                      <span className="empty-jp">空</span>
+                      <h3>
+                        {items.length
+                          ? "Nothing matches this view."
+                          : "Your library is empty."}
+                      </h3>
+                      <p>
+                        {items.length
+                          ? "Clear a filter or search for another title."
+                          : "Browse metadata providers or add your first title manually."}
+                      </p>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => setDiscoveryType(null)}
+                      >
+                        <CirclePlus size={17} />
+                        {items.length
+                          ? "Add another title"
+                          : "Add your first title"}
+                      </button>
+                    </div>
+                  )
+                  : (
+                    <div className="media-grid">
+                      {filtered.map((item) => (
+                        <MediaCard
+                          item={item}
+                          onOpen={() => openLocalDetail(item.id)}
+                          onEdit={() => setModalItem(item)}
+                          onDelete={() => deleteItem(item)}
+                          key={item.id}
+                        />
+                      ))}
+                    </div>
+                  )}
+              </section>
+
+              <aside className="library-panel" aria-label="Status filters">
+                <div className="panel-title">
+                  <span>Status</span>
+                  <strong>{statusScope.length}</strong>
+                </div>
+                <div className="status-list">
+                  <button
+                    type="button"
+                    aria-pressed={activeStatus === "all"}
+                    className={`all ${activeStatus === "all" ? "active" : ""}`}
+                    onClick={() => setActiveStatus("all")}
+                  >
+                    <span>All titles</span>
+                    <strong>{statusScope.length}</strong>
+                  </button>
+                  {statusOptions.map((status) => (
+                    <button
+                      type="button"
+                      aria-pressed={activeStatus === status.value}
+                      className={`${status.value} ${
+                        activeStatus === status.value ? "active" : ""
+                      }`}
+                      onClick={() => setActiveStatus(status.value)}
+                      key={status.value}
+                    >
+                      <span>
+                        {status.value === "planned"
+                          ? plannedLabel(activeType)
+                          : status.label}
+                      </span>
+                      <strong>
+                        {statusScope.filter((item) =>
+                          item.status === status.value
+                        ).length}
+                      </strong>
+                    </button>
+                  ))}
+                </div>
+              </aside>
             </div>
-          </aside>
-        </div>
-      </main>
+          </main>
+        </>
+      )}
+
+      {view === "activity" && (
+        <ActivityPage
+          activities={activities}
+          loading={activityLoading}
+          items={items}
+          onOpen={openLocalDetail}
+        />
+      )}
+
+      {view === "settings" && (
+        <SettingsPage
+          status={anilistStatus}
+          onManageAniList={() => setIntegrationOpen(true)}
+          onImportAniList={() => setImportOpen(true)}
+        />
+      )}
+
+      {view === "search" && (
+        <GlobalSearchPage
+          query={submittedQuery}
+          input={globalQuery}
+          onInput={setGlobalQuery}
+          onSubmit={submitGlobalSearch}
+          localResults={localSearchResults}
+          externalResults={globalResults}
+          unavailableTypes={unavailableTypes}
+          loading={globalLoading}
+          error={globalError}
+          items={items}
+          onOpenLocal={openLocalDetail}
+          onOpenExternal={openExternalDetail}
+        />
+      )}
+
+      {view === "detail" && (
+        <MediaDetailPage
+          selection={detail}
+          loading={loading}
+          media={detail?.kind === "local"
+            ? items.find((item) => item.id === detail.mediaId)
+            : undefined}
+          existing={detail?.kind === "external"
+            ? items.find((item) =>
+              item.provider === detail.result.provider &&
+              item.providerId === detail.result.providerId
+            )
+            : undefined}
+          onBack={leaveDetail}
+          onOpenExisting={(item) => openLocalDetail(item.id)}
+          onAdd={reviewDiscovery}
+          onEdit={(item) => setModalItem(item)}
+          onDelete={async (item) => {
+            if (await deleteItem(item)) navigate("library");
+          }}
+        />
+      )}
 
       <footer className="site-footer">
         <div className="page-container">
@@ -770,6 +1117,498 @@ function App() {
   );
 }
 
+function ActivityPage(
+  { activities, loading, items, onOpen }: {
+    activities: ActivityEvent[];
+    loading: boolean;
+    items: Media[];
+    onOpen: (mediaId: number) => void;
+  },
+) {
+  return (
+    <main className="page-container standalone-page activity-page">
+      <header className="page-heading">
+        <span className="eyebrow">JOURNAL</span>
+        <h1>Activity</h1>
+        <p>A local history of the titles you add, finish, rate, and revisit.</p>
+      </header>
+      {loading
+        ? <div className="page-empty">Loading your journal…</div>
+        : activities.length === 0
+        ? (
+          <div className="page-empty">
+            <Clock3 size={24} />
+            <h2>No activity yet</h2>
+            <p>Your next library change will start the journal.</p>
+          </div>
+        )
+        : (
+          <div className="activity-page-list">
+            {activities.map((activity) => {
+              const media = items.find((item) => item.id === activity.mediaId);
+              const type = typeOptions.find((option) =>
+                option.value === activity.mediaType
+              );
+              const Icon = type?.icon || Clock3;
+              const canOpen = activity.action !== "deleted" && !!media;
+              return (
+                <button
+                  type="button"
+                  className={`activity-row ${activity.action}`}
+                  disabled={!canOpen}
+                  onClick={() => media && onOpen(media.id)}
+                  key={activity.id}
+                >
+                  <span className="activity-icon">
+                    <Icon size={16} />
+                  </span>
+                  <span className="activity-copy">
+                    <strong>{activity.title}</strong>
+                    <span>{activityDescription(activity)}</span>
+                  </span>
+                  <span className="activity-row-meta">
+                    <small>{type?.label || activity.mediaType}</small>
+                    <time dateTime={activity.occurredAt}>
+                      {relativeTime(activity.occurredAt)}
+                    </time>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+    </main>
+  );
+}
+
+function SettingsPage(
+  { status, onManageAniList, onImportAniList }: {
+    status: AniListIntegrationStatus | null;
+    onManageAniList: () => void;
+    onImportAniList: () => void;
+  },
+) {
+  return (
+    <main className="page-container standalone-page settings-page">
+      <header className="page-heading">
+        <span className="eyebrow">HONNE CONFIGURATION</span>
+        <h1>Settings</h1>
+        <p>
+          Manage integrations and the way this installation connects to your
+          accounts.
+        </p>
+      </header>
+      <section className="settings-card">
+        <div className="settings-card-icon">
+          <Link2 size={21} />
+        </div>
+        <div className="settings-card-copy">
+          <div className="settings-card-title">
+            <div>
+              <h2>AniList</h2>
+              <p>One-way synchronization for anime, manga, and light novels.</p>
+            </div>
+            <span
+              className={`connection-badge ${
+                status?.connected ? "connected" : ""
+              }`}
+            >
+              {status?.connected
+                ? (
+                  <>
+                    <Check size={12} /> Connected
+                  </>
+                )
+                : "Not connected"}
+            </span>
+          </div>
+          {status?.connected
+            ? (
+              <div className="settings-integration-summary">
+                {status.avatar && <img src={status.avatar} alt="" />}
+                <strong>@{status.username}</strong>
+                <span>{status.pending} pending</span>
+                <span>{status.errors} errors</span>
+                <span>
+                  Remote deletion {status.deleteOnLocalDelete ? "on" : "off"}
+                </span>
+              </div>
+            )
+            : (
+              <p className="settings-note">
+                {status?.configured
+                  ? "Connect the AniList account used by this Honne installation."
+                  : "Add the AniList OAuth credentials to .env, then recreate the containers to enable connection."}
+              </p>
+            )}
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={onManageAniList}
+            >
+              <Cog size={14} /> Manage connection
+            </button>
+            <button type="button" onClick={onImportAniList}>
+              Import AniList library
+            </button>
+          </div>
+        </div>
+      </section>
+      <section className="settings-card compact">
+        <div className="settings-card-icon">
+          <Library size={21} />
+        </div>
+        <div className="settings-card-copy">
+          <h2>Local-first data</h2>
+          <p className="settings-note">
+            Your collection and activity journal live in the persistent Docker
+            volume. Provider outages never block local edits.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function GlobalSearchPage(
+  {
+    query,
+    input,
+    onInput,
+    onSubmit,
+    localResults,
+    externalResults,
+    unavailableTypes,
+    loading,
+    error,
+    items,
+    onOpenLocal,
+    onOpenExternal,
+  }: {
+    query: string;
+    input: string;
+    onInput: (value: string) => void;
+    onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+    localResults: Media[];
+    externalResults: DiscoveryResult[];
+    unavailableTypes: MediaType[];
+    loading: boolean;
+    error: string;
+    items: Media[];
+    onOpenLocal: (mediaId: number) => void;
+    onOpenExternal: (result: DiscoveryResult) => void;
+  },
+) {
+  return (
+    <main className="page-container standalone-page search-page">
+      <header className="page-heading search-heading">
+        <span className="eyebrow">GLOBAL SEARCH</span>
+        <h1>{query ? `Results for “${query}”` : "Search everything"}</h1>
+        <form className="page-search" role="search" onSubmit={onSubmit}>
+          <Search size={19} />
+          <input
+            value={input}
+            onChange={(event) => onInput(event.target.value)}
+            placeholder="Search your library and metadata catalogs"
+            aria-label="Search library and metadata catalogs"
+            autoFocus
+          />
+          <button type="submit" disabled={input.trim().length < 2}>
+            Search
+          </button>
+        </form>
+      </header>
+
+      <section className="search-section">
+        <div className="search-section-title">
+          <div>
+            <span className="eyebrow">LOCAL</span>
+            <h2>In your library</h2>
+          </div>
+          <span>{localResults.length}</span>
+        </div>
+        {localResults.length
+          ? (
+            <div className="local-search-grid">
+              {localResults.map((item) => (
+                <button
+                  type="button"
+                  className="local-search-result"
+                  onClick={() => onOpenLocal(item.id)}
+                  key={item.id}
+                >
+                  <span
+                    className="search-result-cover"
+                    style={{
+                      backgroundImage: item.coverUrl
+                        ? `url("${item.coverUrl.replaceAll('"', "")}")`
+                        : undefined,
+                    }}
+                  />
+                  <span>
+                    <small>
+                      {typeOptions.find((type) => type.value === item.type)
+                        ?.label}
+                    </small>
+                    <strong>{item.title}</strong>
+                    <em>{statusLabel(item.status, item.type)}</em>
+                  </span>
+                  <Check size={15} />
+                </button>
+              ))}
+            </div>
+          )
+          : (
+            <p className="search-empty-line">
+              No matching titles in your library.
+            </p>
+          )}
+      </section>
+
+      <section className="search-section">
+        <div className="search-section-title">
+          <div>
+            <span className="eyebrow">DISCOVER</span>
+            <h2>From metadata catalogs</h2>
+          </div>
+          {loading && <span>Searching…</span>}
+        </div>
+        {!!unavailableTypes.length && (
+          <div className="partial-notice">
+            Unavailable right now:{" "}
+            {unavailableTypes.map((type) =>
+              typeOptions.find((option) => option.value === type)?.label
+            ).join(", ")}. Other results are still shown.
+          </div>
+        )}
+        {error && (
+          <div className="error-banner">
+            <span>{error}</span>
+          </div>
+        )}
+        {!loading && !error && externalResults.length === 0
+          ? <p className="search-empty-line">No catalog results found.</p>
+          : typeOptions.map((type) => {
+            const group = externalResults.filter((result) =>
+              result.type === type.value
+            );
+            if (!group.length) return null;
+            const TypeIcon = type.icon;
+            return (
+              <div className="catalog-group" key={type.value}>
+                <h3>
+                  <TypeIcon size={15} /> {type.label}
+                  <span>{group.length}</span>
+                </h3>
+                <div className="catalog-results">
+                  {group.map((result) => {
+                    const existing = items.find((item) =>
+                      item.provider === result.provider &&
+                      item.providerId === result.providerId
+                    );
+                    return (
+                      <button
+                        type="button"
+                        className="catalog-result"
+                        onClick={() =>
+                          existing
+                            ? onOpenLocal(existing.id)
+                            : onOpenExternal(result)}
+                        key={`${result.provider}-${result.providerId}`}
+                      >
+                        <span
+                          className="search-result-cover"
+                          style={{
+                            backgroundImage: result.coverUrl
+                              ? `url("${result.coverUrl.replaceAll('"', "")}")`
+                              : undefined,
+                          }}
+                        />
+                        <span className="catalog-result-copy">
+                          <small>{result.releaseYear || type.label}</small>
+                          <strong>{result.title}</strong>
+                          {result.subtitle && <em>{result.subtitle}</em>}
+                        </span>
+                        <span
+                          className={existing
+                            ? "already-added"
+                            : "review-result"}
+                        >
+                          {existing
+                            ? (
+                              <>
+                                <Check size={12} /> In library
+                              </>
+                            )
+                            : "View"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+      </section>
+    </main>
+  );
+}
+
+function MediaDetailPage(
+  {
+    selection,
+    loading,
+    media,
+    existing,
+    onBack,
+    onOpenExisting,
+    onAdd,
+    onEdit,
+    onDelete,
+  }: {
+    selection: DetailSelection | null;
+    loading: boolean;
+    media?: Media;
+    existing?: Media;
+    onBack: () => void;
+    onOpenExisting: (item: Media) => void;
+    onAdd: (result: DiscoveryResult) => void;
+    onEdit: (item: Media) => void;
+    onDelete: (item: Media) => void;
+  },
+) {
+  if (!selection || (selection.kind === "local" && !media)) {
+    const waitingForLibrary = loading && selection?.kind === "local";
+    return (
+      <main className="page-container standalone-page">
+        <div className="page-empty">
+          <h1>{waitingForLibrary ? "Loading title…" : "Title not found"}</h1>
+          <button type="button" className="primary-button" onClick={onBack}>
+            Back to library
+          </button>
+        </div>
+      </main>
+    );
+  }
+  const source = selection.kind === "local" ? media! : selection.result;
+  const type = typeOptions.find((option) => option.value === source.type);
+  const Icon = type?.icon || BookOpen;
+  const cover = source.coverUrl?.replaceAll('"', "") || "";
+  const description = source.description ||
+    (selection.kind === "local" ? media!.notes : "");
+  return (
+    <main className="page-container standalone-page detail-page">
+      <button type="button" className="back-button" onClick={onBack}>
+        <ArrowLeft size={15} /> Back
+      </button>
+      <article className="detail-card">
+        <div
+          className={`detail-cover ${cover ? "" : "fallback-cover"}`}
+          style={{ backgroundImage: cover ? `url("${cover}")` : undefined }}
+        >
+          {!cover && <Icon size={42} />}
+        </div>
+        <div className="detail-content">
+          <span className="eyebrow">
+            {type?.label} {source.releaseYear ? `· ${source.releaseYear}` : ""}
+          </span>
+          <h1>{source.title}</h1>
+          {source.originalTitle && source.originalTitle !== source.title && (
+            <p className="detail-original">{source.originalTitle}</p>
+          )}
+          <div className="detail-meta">
+            {selection.kind === "local"
+              ? (
+                <>
+                  <span>{statusLabel(media!.status, media!.type)}</span>
+                  <span>
+                    Progress {media!.total > 0
+                      ? `${media!.progress} / ${media!.total}`
+                      : media!.progress || "—"}
+                  </span>
+                  {media!.rating > 0 && (
+                    <span>
+                      <Star size={12} fill="currentColor" /> {media!.rating}/10
+                    </span>
+                  )}
+                </>
+              )
+              : (
+                <>
+                  {selection.result.subtitle && (
+                    <span>{selection.result.subtitle}</span>
+                  )}
+                  {selection.result.communityRating
+                    ? (
+                      <span>
+                        <Star size={12} fill="currentColor" />{" "}
+                        {selection.result.communityRating.toFixed(1)}/10
+                      </span>
+                    )
+                    : null}
+                  <span>{source.provider.replaceAll("_", " ")}</span>
+                </>
+              )}
+          </div>
+          {description && <p className="detail-description">{description}</p>}
+          {selection.kind === "local" && media!.notes && media!.description && (
+            <div className="detail-notes">
+              <span>Personal notes</span>
+              <p>{media!.notes}</p>
+            </div>
+          )}
+          <div className="detail-actions">
+            {selection.kind === "local"
+              ? (
+                <>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => onEdit(media!)}
+                  >
+                    <Pencil size={14} /> Update
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => onDelete(media!)}
+                  >
+                    <Trash2 size={14} /> Remove
+                  </button>
+                </>
+              )
+              : existing
+              ? (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => onOpenExisting(existing)}
+                >
+                  <Check size={14} /> Open in library
+                </button>
+              )
+              : (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => onAdd(selection.result)}
+                >
+                  <CirclePlus size={14} /> Add to library
+                </button>
+              )}
+            {source.providerUrl && (
+              <a href={source.providerUrl} target="_blank" rel="noreferrer">
+                Provider page <ExternalLink size={13} />
+              </a>
+            )}
+          </div>
+        </div>
+      </article>
+    </main>
+  );
+}
+
 function AniListIntegrationModal(
   { status, onClose, onRefresh }: {
     status: AniListIntegrationStatus | null;
@@ -790,7 +1629,9 @@ function AniListIntegrationModal(
     setError("");
     try {
       const suffix = discardPending ? "?discardPending=true" : "";
-      await request<null>(`/api/integrations/anilist${suffix}`, { method: "DELETE" });
+      await request<null>(`/api/integrations/anilist${suffix}`, {
+        method: "DELETE",
+      });
       await onRefresh();
     } catch (caught: unknown) {
       setError(errorMessage(caught));
@@ -815,14 +1656,28 @@ function AniListIntegrationModal(
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="integration-modal" role="dialog" aria-modal="true" aria-labelledby="integration-title">
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <section
+        className="integration-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="integration-title"
+      >
         <header className="discovery-header">
           <div>
             <span className="eyebrow">ANILIST SYNC</span>
             <h2 id="integration-title">AniList connection</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close integration"><X /></button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close integration"
+          >
+            <X />
+          </button>
         </header>
         <div className="integration-body">
           {!status
@@ -832,41 +1687,81 @@ function AniListIntegrationModal(
               <div className="integration-empty">
                 <Link2 size={28} />
                 <h3>OAuth is not configured</h3>
-                <p>Add the AniList client ID, secret, and redirect URL to the server <code>.env</code>, then restart the containers.</p>
+                <p>
+                  Add the AniList client ID, secret, and redirect URL to the
+                  server <code>.env</code>, then restart the containers.
+                </p>
               </div>
             )
             : status.connected
             ? (
               <>
                 <div className="integration-profile">
-                  {status.avatar ? <img src={status.avatar} alt="" /> : <span>A</span>}
-                  <div><small>CONNECTED AS</small><strong>@{status.username}</strong></div>
+                  {status.avatar
+                    ? <img src={status.avatar} alt="" />
+                    : <span>A</span>}
+                  <div>
+                    <small>CONNECTED AS</small>
+                    <strong>@{status.username}</strong>
+                  </div>
                   <b>Connected</b>
                 </div>
                 <div className="integration-stats">
-                  <span><strong>{status.pending}</strong> pending</span>
-                  <span><strong>{status.errors}</strong> with errors</span>
-                  <span><strong>{status.deleteOnLocalDelete ? "On" : "Off"}</strong> remote deletion</span>
+                  <span>
+                    <strong>{status.pending}</strong> pending
+                  </span>
+                  <span>
+                    <strong>{status.errors}</strong> with errors
+                  </span>
+                  <span>
+                    <strong>{status.deleteOnLocalDelete ? "On" : "Off"}</strong>
+                    {" "}
+                    remote deletion
+                  </span>
                 </div>
-                <p className="integration-note">AniList-linked anime, manga, and light novels sync automatically. Manual entries remain local until linked.</p>
+                <p className="integration-note">
+                  AniList-linked anime, manga, and light novels sync
+                  automatically. Manual entries remain local until linked.
+                </p>
               </>
             )
             : (
               <div className="integration-empty">
                 <Link2 size={28} />
                 <h3>Connect your AniList account</h3>
-                <p>Changes to linked titles will remain safely queued until you authorize this installation.</p>
+                <p>
+                  Changes to linked titles will remain safely queued until you
+                  authorize this installation.
+                </p>
               </div>
             )}
           {error && <p className="form-error">{error}</p>}
         </div>
         <footer className="integration-footer">
-          {(status?.connected || !!status?.pending) && <button type="button" className="danger-button" onClick={disconnect} disabled={working}>
-            {status?.pending ? "Discard queue & disconnect" : "Disconnect"}
-          </button>}
-          {!!status?.pending && <button type="button" onClick={retry} disabled={working}><RefreshCw size={14} />Retry now</button>}
+          {(status?.connected || !!status?.pending) && (
+            <button
+              type="button"
+              className="danger-button"
+              onClick={disconnect}
+              disabled={working}
+            >
+              {status?.pending ? "Discard queue & disconnect" : "Disconnect"}
+            </button>
+          )}
+          {!!status?.pending && (
+            <button type="button" onClick={retry} disabled={working}>
+              <RefreshCw size={14} />Retry now
+            </button>
+          )}
           {status?.configured && !status.connected && (
-            <button type="button" className="primary-button" onClick={() => globalThis.location.assign("/api/integrations/anilist/connect")}>Connect AniList</button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() =>
+                globalThis.location.assign("/api/integrations/anilist/connect")}
+            >
+              Connect AniList
+            </button>
           )}
         </footer>
       </section>
@@ -1323,8 +2218,9 @@ function DiscoveryModal(
 }
 
 function MediaCard(
-  { item, onEdit, onDelete }: {
+  { item, onOpen, onEdit, onDelete }: {
     item: Media;
+    onOpen: () => void;
     onEdit: () => void;
     onDelete: () => void;
   },
@@ -1340,27 +2236,35 @@ function MediaCard(
 
   return (
     <article className="media-card">
-      <div
+      <button
+        type="button"
         className={`cover ${item.coverUrl ? "" : "fallback-cover"}`}
         style={{
           backgroundImage: item.coverUrl
             ? `url("${item.coverUrl.replaceAll('"', "")}")`
             : undefined,
         }}
+        onClick={onOpen}
+        aria-label={`View details for ${item.title}`}
       >
         {!item.coverUrl && (
           <span className="fallback-label">
             <Icon size={18} /> {type?.label}
           </span>
         )}
-        <span className={`status ${item.status}`}>{status?.label}</span>
-      </div>
+        <span className={`status ${item.status}`}>
+          {status ? statusLabel(status.value, item.type) : ""}
+        </span>
+      </button>
       <div className="card-content">
         <div className="card-title">
           <div>
             <span className="media-type">{type?.label}</span>
             {item.syncStatus && (
-              <span className={`sync-state ${item.syncStatus}`} title={item.syncError || "AniList synchronization status"}>
+              <span
+                className={`sync-state ${item.syncStatus}`}
+                title={item.syncError || "AniList synchronization status"}
+              >
                 {item.syncStatus.replace("_", " ")}
               </span>
             )}
@@ -1521,7 +2425,7 @@ function MediaModal(
             <select name="status" value={form.status} onChange={change}>
               {statusOptions.map((status) => (
                 <option value={status.value} key={status.value}>
-                  {status.label}
+                  {statusLabel(status.value, form.type)}
                 </option>
               ))}
             </select>

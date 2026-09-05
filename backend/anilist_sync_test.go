@@ -337,7 +337,7 @@ func TestOAuthCallbackPersistsPrivateTokenAndViewer(t *testing.T) {
 	}
 	callbackResponse := httptest.NewRecorder()
 	syncer.callbackHandler(callbackResponse, callbackRequest)
-	if callbackResponse.Code != http.StatusFound || callbackResponse.Header().Get("Location") != "http://honne.test/?anilist=connected" {
+	if callbackResponse.Code != http.StatusFound || callbackResponse.Header().Get("Location") != "http://honne.test/?anilist=connected#settings" {
 		t.Fatalf("unexpected callback response: %d %q", callbackResponse.Code, callbackResponse.Header().Get("Location"))
 	}
 	username, connected := syncer.connectedUsername()

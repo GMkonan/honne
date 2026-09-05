@@ -158,6 +158,9 @@ func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
 	if strings.Contains(store.items[0].Description, "<br>") || store.items[0].Progress != 12 {
 		t.Fatalf("metadata was not normalized: %+v", store.items[0])
 	}
+	if len(store.activities) != 2 || store.activities[0].Action != "imported" || store.activities[1].Action != "imported" || store.nextActivityID != 3 {
+		t.Fatalf("import activity was not recorded: activities=%+v next=%d", store.activities, store.nextActivityID)
+	}
 }
 
 func testDiscoveryService(baseURL string) *discoveryService {

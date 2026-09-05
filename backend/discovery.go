@@ -44,6 +44,11 @@ type discoveryResponse struct {
 	HasMore bool              `json:"hasMore"`
 }
 
+type globalDiscoveryResponse struct {
+	Results          []discoveryResult `json:"results"`
+	UnavailableTypes []string          `json:"unavailableTypes"`
+}
+
 type providerName struct {
 	Name string `json:"name"`
 }
@@ -133,6 +138,64 @@ func (a *app) searchDiscovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (a *app) searchGlobalDiscovery(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if length := len([]rune(query)); length < 2 || length > 100 {
+		writeError(w, http.StatusBadRequest, "query must contain between 2 and 100 characters")
+		return
+	}
+
+	type searchOutcome struct {
+		index    int
+		response discoveryResponse
+		err      error
+	}
+	outcomes := make(chan searchOutcome, len(validTypes))
+	for index, mediaType := range validTypes {
+		go func() {
+			response, err := a.discovery.search(r.Context(), mediaType, query, 1)
+			outcomes <- searchOutcome{index: index, response: response, err: err}
+		}()
+	}
+
+	ordered := make([]searchOutcome, len(validTypes))
+	for range validTypes {
+		outcome := <-outcomes
+		ordered[outcome.index] = outcome
+	}
+
+	result := globalDiscoveryResponse{Results: []discoveryResult{}, UnavailableTypes: []string{}}
+	seen := make(map[string]bool)
+	successes := 0
+	for index, outcome := range ordered {
+		mediaType := validTypes[index]
+		if outcome.err != nil {
+			result.UnavailableTypes = append(result.UnavailableTypes, mediaType)
+			logProviderError(mediaType, outcome.err)
+			continue
+		}
+		successes++
+		addedForType := 0
+		for _, item := range outcome.response.Results {
+			key := item.Provider + "\x00" + item.ProviderID
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			result.Results = append(result.Results, item)
+			addedForType++
+			if addedForType == 6 {
+				break
+			}
+		}
+	}
+	if successes == 0 {
+		writeError(w, http.StatusBadGateway, "all metadata providers are temporarily unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *discoveryService) search(ctx context.Context, mediaType, query string, page int) (discoveryResponse, error) {

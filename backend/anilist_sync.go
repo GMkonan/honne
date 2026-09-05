@@ -727,7 +727,7 @@ func (s *aniListSync) callbackHandler(w http.ResponseWriter, r *http.Request) {
 	s.auth = &auth
 	s.mu.Unlock()
 	s.retryAll()
-	http.Redirect(w, r, strings.TrimRight(s.cfg.AllowedOrigin, "/")+"/?anilist=connected", http.StatusFound)
+	http.Redirect(w, r, strings.TrimRight(s.cfg.AllowedOrigin, "/")+"/?anilist=connected#settings", http.StatusFound)
 }
 
 func (s *aniListSync) exchangeCode(ctx context.Context, code string) (aniListAuth, error) {
