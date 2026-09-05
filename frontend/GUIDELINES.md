@@ -111,6 +111,7 @@
 
 - Divida a refatoração em uma sequência de PRs executáveis com no máximo 500 linhas de produção alteradas por PR.
 - Faça cada PR preservar build, comportamento e compatibilidade com os arquivos ainda não migrados.
-- Separe instalação/configuração de testes, services/types, Zustand/router, primitives, extração de páginas e migração Tailwind quando necessário para respeitar o orçamento.
+- Na issue #10, combine instalação/configuração de testes com `services/types` no mesmo PR, conforme a exceção aprovada pelo product owner; mantenha o orçamento de 500 linhas.
+- Fora dessa exceção, separe instalação/configuração de testes, `services/types`, Zustand/router, primitives, extração de páginas e migração Tailwind quando necessário para respeitar o orçamento.
 - Remova código e CSS legados somente no PR em que todos os consumidores correspondentes já tiverem migrado.
 - Documente em cada PR os fluxos automatizados e os tamanhos responsivos validados manualmente.

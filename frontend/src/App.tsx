@@ -4,338 +4,64 @@ import {
   BookOpen,
   Check,
   CirclePlus,
-  Clapperboard,
   Clock3,
   Cog,
   ExternalLink,
-  Film,
   Library,
   Link2,
-  type LucideIcon,
   Menu,
   Pencil,
   RefreshCw,
   RotateCcw,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Star,
   Trash2,
-  Tv,
   X,
 } from "lucide-react";
+import { emptyForm, statusOptions, typeOptions } from "./constants/media.tsx";
+import { listActivity } from "./services/activity.ts";
+import {
+  disconnectAniList,
+  getAniListStatus,
+  importAniListLibrary,
+  previewAniListImport,
+  retryAniList,
+} from "./services/anilist.ts";
+import { searchCatalog, searchGlobal } from "./services/discovery.ts";
+import { errorMessage, RequestError } from "./services/http.ts";
+import {
+  createMedia,
+  deleteMedia,
+  listMedia,
+  updateMedia,
+} from "./services/library.ts";
+import type { ActivityEvent } from "./types/activity.ts";
+import type {
+  AniListImportPreview,
+  AniListImportResult,
+  AniListIntegrationStatus,
+} from "./types/anilist.ts";
+import type { DiscoveryResult } from "./types/discovery.ts";
+import type {
+  LibrarySort,
+  Media,
+  MediaInput,
+  MediaStatus,
+  MediaType,
+} from "./types/media.ts";
+import { activityDescription, relativeTime } from "./utils/activity.ts";
+import {
+  mediaToInput,
+  plannedLabel,
+  previewCover,
+  statusLabel,
+} from "./utils/media.ts";
 
-type MediaType =
-  | "anime"
-  | "series"
-  | "movie"
-  | "book"
-  | "manga"
-  | "light_novel";
-type MediaStatus =
-  | "planned"
-  | "in_progress"
-  | "completed"
-  | "paused"
-  | "dropped";
-
-interface MediaInput {
-  title: string;
-  type: MediaType;
-  status: MediaStatus;
-  progress: number;
-  total: number;
-  rating: number;
-  notes: string;
-  coverUrl: string;
-  provider: string;
-  providerId: string;
-  providerUrl: string;
-  originalTitle: string;
-  description: string;
-  releaseYear: number;
-}
-
-interface Media extends MediaInput {
-  id: number;
-  providerListEntryId?: number;
-  syncStatus?: "local_only" | "waiting_auth" | "pending" | "synced" | "error";
-  syncError?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ActivityChanges {
-  fromStatus?: MediaStatus;
-  toStatus?: MediaStatus;
-  fromProgress?: number;
-  toProgress?: number;
-  fromRating?: number;
-  toRating?: number;
-}
-
-interface ActivityEvent {
-  id: number;
-  mediaId?: number;
-  title: string;
-  mediaType: MediaType;
-  action: "added" | "updated" | "deleted" | "imported";
-  changes: ActivityChanges;
-  occurredAt: string;
-}
-
-type LibrarySort = "recent" | "added" | "title" | "rating";
 type AppView = "library" | "activity" | "settings" | "search" | "detail";
 type DetailSelection =
   | { kind: "local"; mediaId: number }
   | { kind: "external"; result: DiscoveryResult };
-
-interface GlobalDiscoveryResponse {
-  results: DiscoveryResult[];
-  unavailableTypes: MediaType[];
-}
-
-interface AniListIntegrationStatus {
-  configured: boolean;
-  connected: boolean;
-  username?: string;
-  avatar?: string;
-  expiresAt?: string;
-  deleteOnLocalDelete: boolean;
-  pending: number;
-  errors: number;
-}
-
-interface DiscoveryResult {
-  provider: string;
-  providerId: string;
-  providerUrl: string;
-  type: MediaType;
-  title: string;
-  originalTitle?: string;
-  description?: string;
-  coverUrl?: string;
-  releaseYear?: number;
-  total?: number;
-  subtitle?: string;
-  communityRating?: number;
-}
-
-interface DiscoveryResponse {
-  results: DiscoveryResult[];
-  page: number;
-  hasMore: boolean;
-}
-
-interface AniListImportEntry extends MediaInput {
-  alreadyExists: boolean;
-}
-
-interface AniListImportPreview {
-  username: string;
-  avatar?: string;
-  entries: AniListImportEntry[];
-}
-
-interface AniListImportResult {
-  imported: number;
-  skipped: number;
-  items: Media[];
-}
-
-class RequestError extends Error {
-  existingId?: number;
-}
-
-interface TypeOption {
-  value: MediaType;
-  label: string;
-  jpLabel: string;
-  icon: LucideIcon;
-}
-
-const typeOptions: TypeOption[] = [
-  {
-    value: "anime",
-    label: "Anime",
-    jpLabel: "アニメ",
-    icon: Sparkles,
-  },
-  {
-    value: "series",
-    label: "Series",
-    jpLabel: "ドラマ",
-    icon: Tv,
-  },
-  {
-    value: "movie",
-    label: "Movies",
-    jpLabel: "映画",
-    icon: Film,
-  },
-  {
-    value: "book",
-    label: "Books",
-    jpLabel: "本",
-    icon: BookOpen,
-  },
-  {
-    value: "manga",
-    label: "Manga",
-    jpLabel: "漫画",
-    icon: Library,
-  },
-  {
-    value: "light_novel",
-    label: "Light novels",
-    jpLabel: "ライトノベル",
-    icon: Clapperboard,
-  },
-];
-
-const statusOptions: { value: MediaStatus; label: string }[] = [
-  { value: "planned", label: "Plan to read/watch" },
-  { value: "in_progress", label: "In progress" },
-  { value: "completed", label: "Completed" },
-  { value: "paused", label: "Paused" },
-  { value: "dropped", label: "Dropped" },
-];
-
-const emptyForm: MediaInput = {
-  title: "",
-  type: "anime",
-  status: "planned",
-  progress: 0,
-  total: 0,
-  rating: 0,
-  notes: "",
-  coverUrl: "",
-  provider: "",
-  providerId: "",
-  providerUrl: "",
-  originalTitle: "",
-  description: "",
-  releaseYear: 0,
-};
-
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as {
-      error?: string;
-      existingId?: number;
-    };
-    const error = new RequestError(
-      body.error || "Something went wrong. Please try again.",
-    );
-    error.existingId = body.existingId;
-    throw error;
-  }
-  return (response.status === 204 ? null : await response.json()) as T;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "Something went wrong. Please try again.";
-}
-
-function mediaToInput(item: Media): MediaInput {
-  return {
-    title: item.title,
-    type: item.type,
-    status: item.status,
-    progress: item.progress,
-    total: item.total,
-    rating: item.rating,
-    notes: item.notes,
-    coverUrl: item.coverUrl,
-    provider: item.provider,
-    providerId: item.providerId,
-    providerUrl: item.providerUrl,
-    originalTitle: item.originalTitle,
-    description: item.description,
-    releaseYear: item.releaseYear,
-  };
-}
-
-function previewCover(items: Media[], type?: MediaType): string {
-  return items.find((item) =>
-    (!type || item.type === type) && item.coverUrl.trim()
-  )?.coverUrl.replaceAll('"', "") || "";
-}
-
-function plannedLabel(type: MediaType | "all"): string {
-  if (["book", "manga", "light_novel"].includes(type)) return "Plan to read";
-  if (["anime", "series", "movie"].includes(type)) return "Plan to watch";
-  return "Plan to read/watch";
-}
-
-function statusLabel(
-  status?: MediaStatus,
-  type: MediaType | "all" = "all",
-): string {
-  if (status === "planned") return plannedLabel(type);
-  return statusOptions.find((option) => option.value === status)?.label ||
-    status?.replaceAll("_", " ") || "Unknown";
-}
-
-function activityDescription(activity: ActivityEvent): string {
-  if (activity.action === "added") {
-    return `Added to ${
-      statusLabel(activity.changes.toStatus, activity.mediaType)
-    }`;
-  }
-  if (activity.action === "imported") {
-    return `Imported as ${
-      statusLabel(activity.changes.toStatus, activity.mediaType)
-    }`;
-  }
-  if (activity.action === "deleted") return "Removed from the library";
-
-  const details: string[] = [];
-  if (activity.changes.toStatus) {
-    details.push(
-      `${statusLabel(activity.changes.fromStatus, activity.mediaType)} → ${
-        statusLabel(activity.changes.toStatus, activity.mediaType)
-      }`,
-    );
-  }
-  if (activity.changes.toProgress !== undefined) {
-    details.push(
-      `Progress ${
-        activity.changes.fromProgress ?? 0
-      } → ${activity.changes.toProgress}`,
-    );
-  }
-  if (activity.changes.toRating !== undefined) {
-    details.push(
-      activity.changes.toRating === 0
-        ? "Rating removed"
-        : `Rating ${
-          activity.changes.fromRating ?? 0
-        } → ${activity.changes.toRating}`,
-    );
-  }
-  return details.join(" · ") || "Updated details";
-}
-
-function relativeTime(value: string): string {
-  const elapsed = Date.now() - Date.parse(value);
-  if (!Number.isFinite(elapsed) || elapsed < 0) return "just now";
-  const minutes = Math.floor(elapsed / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" })
-    .format(new Date(value));
-}
 
 function searchFromHash(): string {
   const match = globalThis.location.hash.match(/^#search\/(.+)$/);
@@ -429,9 +155,9 @@ function App() {
     async function refresh(initial: boolean) {
       try {
         const [library, integration, recentActivity] = await Promise.all([
-          request<Media[]>("/api/media"),
-          request<AniListIntegrationStatus>("/api/integrations/anilist"),
-          request<ActivityEvent[]>("/api/activity?limit=100"),
+          listMedia(),
+          getAniListStatus(),
+          listActivity(),
         ]);
         if (active) {
           setItems(library);
@@ -486,10 +212,7 @@ function App() {
     setGlobalError("");
     setGlobalResults([]);
     setUnavailableTypes([]);
-    request<GlobalDiscoveryResponse>(
-      `/api/discovery/global?q=${encodeURIComponent(submittedQuery.trim())}`,
-      { signal: controller.signal },
-    ).then((response) => {
+    searchGlobal(submittedQuery.trim(), controller.signal).then((response) => {
       if (!active) return;
       setGlobalResults(response.results);
       setUnavailableTypes(response.unavailableTypes);
@@ -569,14 +292,12 @@ function App() {
   }
 
   async function refreshAniListStatus() {
-    const status = await request<AniListIntegrationStatus>(
-      "/api/integrations/anilist",
-    );
+    const status = await getAniListStatus();
     setAniListStatus(status);
   }
 
   async function refreshActivity() {
-    const recent = await request<ActivityEvent[]>("/api/activity?limit=100");
+    const recent = await listActivity();
     setActivities(recent);
   }
 
@@ -619,14 +340,8 @@ function App() {
     let saved: Media;
     try {
       saved = modalItem?.id
-        ? await request<Media>(`/api/media/${modalItem.id}`, {
-          method: "PATCH",
-          body: JSON.stringify(values),
-        })
-        : await request<Media>("/api/media", {
-          method: "POST",
-          body: JSON.stringify(values),
-        });
+        ? await updateMedia(modalItem.id, values)
+        : await createMedia(values);
     } catch (caught: unknown) {
       if (caught instanceof RequestError && caught.existingId) {
         const existing = items.find((item) => item.id === caught.existingId);
@@ -682,10 +397,7 @@ function App() {
     types: MediaType[],
     statuses: MediaStatus[],
   ) {
-    const result = await request<AniListImportResult>("/api/import/anilist", {
-      method: "POST",
-      body: JSON.stringify({ username, types, statuses }),
-    });
+    const result = await importAniListLibrary({ username, types, statuses });
     setItems((current) => [...result.items, ...current]);
     void refreshAniListStatus().catch(() => {});
     void refreshActivity().catch(() => {});
@@ -705,7 +417,7 @@ function App() {
       : `Remove “${item.title}” from your collection?`;
     if (!globalThis.confirm(message)) return false;
     try {
-      await request<null>(`/api/media/${item.id}`, { method: "DELETE" });
+      await deleteMedia(item.id);
       setItems((current) => current.filter(({ id }) => id !== item.id));
       void refreshAniListStatus().catch(() => {});
       void refreshActivity().catch(() => {});
@@ -1628,10 +1340,7 @@ function AniListIntegrationModal(
     setWorking(true);
     setError("");
     try {
-      const suffix = discardPending ? "?discardPending=true" : "";
-      await request<null>(`/api/integrations/anilist${suffix}`, {
-        method: "DELETE",
-      });
+      await disconnectAniList(discardPending);
       await onRefresh();
     } catch (caught: unknown) {
       setError(errorMessage(caught));
@@ -1644,9 +1353,7 @@ function AniListIntegrationModal(
     setWorking(true);
     setError("");
     try {
-      await request<{ queued: number }>("/api/integrations/anilist/retry", {
-        method: "POST",
-      });
+      await retryAniList();
       await onRefresh();
     } catch (caught: unknown) {
       setError(errorMessage(caught));
@@ -1795,9 +1502,7 @@ function AniListImportModal(
     setError("");
     setPreview(null);
     try {
-      const result = await request<AniListImportPreview>(
-        `/api/import/anilist?username=${encodeURIComponent(username.trim())}`,
-      );
+      const result = await previewAniListImport(username.trim());
       setPreview(result);
       setUsername(result.username);
       setSelectedTypes(
@@ -2029,14 +1734,7 @@ function DiscoveryModal(
     const timer = setTimeout(() => {
       setLoading(true);
       setError("");
-      const params = new URLSearchParams({
-        type: mediaType,
-        q: normalizedQuery,
-        page: String(page),
-      });
-      request<DiscoveryResponse>(`/api/discovery/search?${params}`, {
-        signal: controller.signal,
-      })
+      searchCatalog(mediaType, normalizedQuery, page, controller.signal)
         .then((response) => {
           setResults((current) =>
             page === 1 ? response.results : [...current, ...response.results]
