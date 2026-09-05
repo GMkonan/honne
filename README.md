@@ -8,7 +8,7 @@ Docker Compose is the recommended deployment method. Only Docker is required.
 
 ```bash
 cp .env.example .env
-# Edit .env if you want authentication or optional integrations.
+# Edit .env if you want authentication or optional integrations
 docker compose up -d --build
 ```
 
