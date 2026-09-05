@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.opencode/
+backend/data/*.json
+backend/data/*.tmp
+.env

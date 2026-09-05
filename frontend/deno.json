@@ -1,0 +1,11 @@
+{
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "dev": "deno run -A npm:vite",
+    "build": "deno run -A npm:vite build",
+    "preview": "deno run -A npm:vite preview",
+    "lint": "deno lint",
+    "typecheck": "deno run -A npm:typescript@7.0.2/tsc --noEmit",
+    "check": "deno task lint && deno task typecheck && deno task build"
+  }
+}
