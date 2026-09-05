@@ -109,8 +109,11 @@
 
 ## Entrega da refatoração
 
-- Divida a refatoração em uma sequência de PRs executáveis com no máximo 500 linhas de produção alteradas por PR.
+- Mantenha o orçamento de 500 linhas de produção para mudanças de comportamento, estado, services, requests, roteamento, configuração e contratos cross-stack.
+- Para a iniciativa de refatoração frontend da issue #9, aplique a exceção aprovada pelo product owner: não imponha teto numérico à card consolidada de extração de componentes e migração visual para Tailwind.
+- Limite essa exceção a transformações mecânicas da interface, sem mudanças de regra de produto, estado global, contratos HTTP ou navegação; qualquer mudança fora dessa fronteira continua sujeita ao orçamento de 500 linhas.
+- Registre no corpo de todo PR acima do orçamento a contagem exata, a natureza mecânica da mudança e a aprovação da exceção; execute self-review completo mesmo sem reviewer de escalação configurado.
 - Faça cada PR preservar build, comportamento e compatibilidade com os arquivos ainda não migrados.
-- Separe instalação/configuração de testes, services/types, Zustand/router, primitives, extração de páginas e migração Tailwind quando necessário para respeitar o orçamento.
+- Separe instalação/configuração de testes, services/types, Zustand/router e primitives em PRs próprios; combine extração de página e Tailwind somente quando a fatia continuar mecanicamente simples.
 - Remova código e CSS legados somente no PR em que todos os consumidores correspondentes já tiverem migrado.
 - Documente em cada PR os fluxos automatizados e os tamanhos responsivos validados manualmente.
