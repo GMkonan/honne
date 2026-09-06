@@ -1,5 +1,7 @@
 # Refatoração da fundação frontend
 
+> Status: adiada por decisão do product owner. A issue #9 e suas cards permanecem como plano para retomada futura e não bloqueiam o roadmap de funcionalidades enquanto estiverem adiadas.
+
 ## Problem
 
 O frontend cresceu com páginas, estado, navegação, integrações, formulários e estilos fortemente concentrados. Essa concentração aumenta o risco de regressões, dificulta testar comportamentos isoladamente e torna mudanças nas próximas iniciativas de Library, busca, detalhes, favoritos e discovery maiores do que deveriam ser.
@@ -68,7 +70,7 @@ O benefício direto é para mantenedores e contribuidores do Honne, que precisam
 - Coordenar um endpoint backend para recuperar detalhes externos por identidade estável.
 - Atualizar o retorno OAuth para uma rota real da área Settings.
 - Manter compatibilidade entre áreas migradas e legadas apenas durante a sequência de transição.
-- Não iniciar as funcionalidades planejadas nas issues #2–#7 antes da conclusão desta iniciativa.
+- Enquanto esta iniciativa estiver adiada, permitir que as funcionalidades das issues #2–#7 avancem em cards próprias sem incorporar a refatoração ampla ao seu escopo.
 
 ## Open questions
 
