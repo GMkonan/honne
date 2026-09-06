@@ -1,11 +1,11 @@
 > Precedence: module GUIDELINES.md > codebase GUIDELINES.md > defaults. Guidelines tighten the pipeline's guardrails — they can never loosen them.
 
-## Gate de refatoração
+## Estado da refatoração
 
-- Conclua a decomposição estrutural de `App.tsx` e a migração integral de `styles.css` antes de iniciar novas funcionalidades frontend planejadas.
-- Permita correções isoladas durante esse gate quando elas não adicionarem funcionalidade nem desorganizarem a sequência da refatoração.
-- Preserve comportamento, regras de produto, identidade visual e layouts responsivos durante a refatoração; entregue redesigns somente em cards próprias.
-- Remova a implementação antiga depois de alcançar paridade; não mantenha caminhos ou sistemas de estilo paralelos permanentemente.
+- A iniciativa frontend da issue #9 está adiada por decisão do product owner e não bloqueia as funcionalidades planejadas.
+- Durante o adiamento, implemente features em módulos próprios e limite mudanças em `App.tsx` e `styles.css` à menor integração necessária; não adicione novas páginas completas, modais, clients de provedores ou persistência a `App`.
+- As seções de Zustand, React Router e Tailwind abaixo descrevem o estado-alvo para quando a issue #9 for retomada; não introduza migrações parciais dentro de uma feature sem uma card explícita.
+- Preserve o plano e as cards da refatoração para retomada futura; não misture uma refatoração estrutural ampla em PRs de produto.
 
 ## Estrutura de arquivos
 
@@ -59,7 +59,7 @@
 ## Tailwind CSS
 
 - Use Tailwind como sistema único de estilos de componentes após a migração; não introduza CSS Modules nem CSS-in-JS em paralelo.
-- Converta todos os estilos legados durante o gate de refatoração e remova `styles.css` ao concluir a paridade.
+- Quando a issue #9 for retomada, converta todos os estilos legados e remova `styles.css` ao concluir a paridade.
 - Mantenha no CSS global somente imports de fontes, reset/base e animações que não sejam expressas adequadamente por utilities.
 - Defina no theme cores, tipografia, sombras e espaçamentos recorrentes que preservem a identidade visual atual.
 - Construa mobile-first e valide pelo menos 320 px, tablet, desktop e zoom de 200% sem scroll horizontal da página.
@@ -107,7 +107,7 @@
 - Adicione regressão para loading, vazio, erro, retry, cancelamento e resposta obsoleta quando alterar código assíncrono.
 - Mantenha testes de store independentes de React quando a regra puder ser exercitada pelas ações e selectors.
 
-## Entrega da refatoração
+## Entrega quando a refatoração for retomada
 
 - Mantenha o orçamento de 500 linhas de produção para mudanças de comportamento, estado, services, requests, roteamento, configuração e contratos cross-stack.
 - Para a iniciativa de refatoração frontend da issue #9, aplique a exceção aprovada pelo product owner: não imponha teto numérico à card consolidada de extração de componentes e migração visual para Tailwind.
