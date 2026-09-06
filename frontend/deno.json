@@ -6,6 +6,7 @@
     "preview": "deno run -A npm:vite preview",
     "lint": "deno lint",
     "typecheck": "deno run -A npm:typescript@7.0.2/tsc --noEmit",
-    "check": "deno task lint && deno task typecheck && deno task build"
+    "test": "deno run -A npm:vitest@5.0.0 run",
+    "check": "deno task lint && deno task typecheck && deno task test && deno task build"
   }
 }
