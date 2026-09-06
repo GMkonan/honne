@@ -193,6 +193,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", application.health)
 	mux.HandleFunc("GET /api/auth/check", application.authCheck)
+	mux.HandleFunc("GET /api/profile", application.getProfile)
 	mux.HandleFunc("GET /api/media", application.listMedia)
 	mux.HandleFunc("GET /api/activity", application.listActivity)
 	mux.HandleFunc("GET /api/discovery/search", application.searchDiscovery)

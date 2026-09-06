@@ -2,17 +2,22 @@ package main
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 )
 
 type config struct {
-	Port          string
-	DataPath      string
-	AllowedOrigin string
-	AppUsername   string
-	AppPassword   string
+	Port             string
+	DataPath         string
+	AllowedOrigin    string
+	AppUsername      string
+	AppPassword      string
+	ProfileName      string
+	ProfileAvatarURL string
 
 	AniListAPIURL     string
 	OpenLibraryAPIURL string
@@ -34,6 +39,14 @@ func loadConfig() (config, error) {
 	if err != nil {
 		return config{}, err
 	}
+	profileName, err := loadProfileName()
+	if err != nil {
+		return config{}, err
+	}
+	profileAvatarURL, err := validateProfileAvatarURL(os.Getenv("PROFILE_AVATAR_URL"))
+	if err != nil {
+		return config{}, err
+	}
 
 	dataPath := envOr("DATA_PATH", "data/media.json")
 	cfg := config{
@@ -42,6 +55,8 @@ func loadConfig() (config, error) {
 		AllowedOrigin:        envOr("APP_ORIGIN", "http://localhost:5173"),
 		AppUsername:          os.Getenv("APP_USERNAME"),
 		AppPassword:          os.Getenv("APP_PASSWORD"),
+		ProfileName:          profileName,
+		ProfileAvatarURL:     profileAvatarURL,
 		AniListAPIURL:        envOr("ANILIST_API_URL", "https://graphql.anilist.co"),
 		OpenLibraryAPIURL:    envOr("OPEN_LIBRARY_API_URL", "https://openlibrary.org"),
 		TMDBAPIURL:           envOr("TMDB_API_URL", "https://api.themoviedb.org/3"),
@@ -74,6 +89,30 @@ func loadConfig() (config, error) {
 
 func (c config) aniListConfigured() bool {
 	return c.AniListClientID != "" && c.AniListClientSecret != "" && c.AniListRedirectURL != ""
+}
+
+func loadProfileName() (string, error) {
+	value, configured := os.LookupEnv("PROFILE_NAME")
+	if !configured {
+		return "My Library", nil
+	}
+	value = strings.TrimSpace(value)
+	if value == "" || utf8.RuneCountInString(value) > 80 {
+		return "", errors.New("PROFILE_NAME must contain between 1 and 80 characters")
+	}
+	return value, nil
+}
+
+func validateProfileAvatarURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil {
+		return "", errors.New("PROFILE_AVATAR_URL must be an absolute HTTP or HTTPS URL without credentials")
+	}
+	return parsed.String(), nil
 }
 
 func envBool(key string, fallback bool) (bool, error) {

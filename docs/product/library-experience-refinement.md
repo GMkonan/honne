@@ -30,8 +30,8 @@ estados de mídia com legibilidade em desktop e mobile.
   ajustados.
 - O perfil mostra somente `Total titles` e `In progress`; não há tagline nem
   dashboard adicional.
-- Os filtros de tipo usam grid responsivo maior: quatro colunas no desktop, duas
-  em tablet/mobile e uma em telas estreitas.
+- Os filtros de tipo preservam os sete formatos em uma linha no desktop amplo;
+  passam para quatro, duas e uma coluna conforme o espaço diminui.
 - As tags sobre capas usam texto branco maior, fundo escuro consistente e
   indicador colorido por status.
 - Não existe ação persistente `Add title` na Library. O estado vazio mantém seu
@@ -46,12 +46,12 @@ estados de mídia com legibilidade em desktop e mobile.
 - Adicionar variáveis opcionais para nome e URL do avatar, com defaults seguros
   e documentação em `.env.example` e README.
 - Mostrar avatar, nome, `Total titles` e `In progress` no hero pessoal.
-- Usar fallback estável quando nome ou avatar não forem configurados ou quando a
+- Usar a marca padrão `本音` quando o avatar não for configurado ou quando a
   imagem não puder ser exibida.
 - Preservar o banner atual e ajustar sua composição para o novo conteúdo.
 - Aumentar área, labels, contagens e legibilidade dos sete filtros de tipo.
-- Usar quatro, duas ou uma coluna conforme o espaço disponível, sem rolagem
-  horizontal da página.
+- Usar sete colunas no desktop amplo e quatro, duas ou uma coluna conforme o
+  espaço disponível, sem rolagem horizontal da página.
 - Tornar seleção ativa perceptível sem depender apenas de cor.
 - Padronizar todas as tags de status sobre capas com fundo escuro, texto branco
   e indicador colorido acompanhado do label textual.
@@ -79,7 +79,7 @@ estados de mídia com legibilidade em desktop e mobile.
   `http` ou `https`; valor inválido ou com credenciais embutidas falha de forma
   explícita na inicialização.
 - A ausência de nome usa `My Library`; a ausência ou falha de carregamento do
-  avatar usa um monograma derivado desse label.
+  avatar usa a marca padrão `本音`.
 - A configuração pública não expõe outras variáveis de ambiente nem credenciais.
 - `Total titles` corresponde ao tamanho atual da coleção.
 - `In progress` corresponde aos itens cujo status local é `in_progress`.
@@ -94,8 +94,8 @@ estados de mídia com legibilidade em desktop e mobile.
   instância.
 - Nome, avatar e duas estatísticas continuam legíveis sobre o banner em todos os
   breakpoints suportados.
-- Os filtros de tipo deixam de comprimir sete opções em uma única linha e
-  apresentam label e contagem com tamanho essencial mínimo de 12 px.
+- Os filtros de tipo apresentam os sete formatos em uma linha no desktop amplo,
+  com label e contagem compactos, legíveis e sem truncamento essencial.
 - Os filtros permanecem operáveis por teclado, expõem seu estado pressionado e
   possuem alvos interativos de pelo menos 24×24 px.
 - Toda tag de status usa texto essencial de pelo menos 12 px, permanece legível
@@ -113,7 +113,7 @@ estados de mídia com legibilidade em desktop e mobile.
   então ambos aparecem no hero sem depender do AniList ou de storage do
   navegador.
 - Dada uma instância sem configuração de perfil, quando a Library é aberta,
-  então `My Library` e seu monograma são exibidos sem imagem quebrada.
+  então `My Library` e a marca `本音` são exibidos sem imagem quebrada.
 - Dada uma configuração com nome vazio, nome acima de 80 caracteres, URL sem
   `http`/`https` ou URL com credenciais embutidas, quando o backend inicia,
   então a configuração é rejeitada com erro explícito.
@@ -123,9 +123,9 @@ estados de mídia com legibilidade em desktop e mobile.
 - Dada qualquer opção de tipo, quando recebe foco, hover ou seleção, então
   label, contagem e estado ativo permanecem distinguíveis por mais de uma
   indicação visual.
-- Dada uma viewport desktop, quando os filtros são exibidos, então usam quatro
-  colunas; em espaços menores passam para duas e depois uma coluna sem truncar
-  informação essencial.
+- Dada uma viewport desktop ampla, quando os filtros são exibidos, então os sete
+  formatos ocupam uma linha; em espaços menores passam para quatro, duas e uma
+  coluna sem truncar informação essencial.
 - Dada qualquer capa clara, escura ou indisponível, quando a tag de status é
   renderizada, então o texto branco sobre fundo escuro continua legível e o
   indicador colorido não é a única informação do estado.
@@ -165,7 +165,7 @@ estados de mídia com legibilidade em desktop e mobile.
 | Quais estatísticas aparecem?                    | `Total titles` e `In progress`.                                             |
 | Onde fica a ação persistente de adição?         | Não existe; estado vazio e busca completa oferecem os caminhos contextuais. |
 | Como preservar adição manual?                   | A issue #3 entrega `Add manually` antes da remoção do botão da Library.     |
-| Como os filtros de tipo crescem?                | Grid responsivo de quatro, duas e uma coluna.                               |
+| Como os filtros de tipo crescem?                | Sete colunas no desktop amplo; quatro, duas e uma em espaços menores.       |
 | Como as tags de status ganham contraste?        | Texto branco e maior, fundo escuro e indicador colorido.                    |
 | Como nome e avatar são configurados?            | Por `.env`; edição em Settings fica para uma melhoria futura.               |
 | Qual fundo acompanha o perfil?                  | O banner atual do Honne.                                                    |

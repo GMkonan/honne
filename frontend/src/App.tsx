@@ -24,6 +24,7 @@ import {
   Tv,
   X,
 } from "lucide-react";
+import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 
 type MediaType =
   | "anime"
@@ -423,9 +424,22 @@ function App() {
   const [anilistStatus, setAniListStatus] = useState<
     AniListIntegrationStatus | null
   >(null);
+  const [profile, setProfile] = useState<PublicProfile>({
+    name: "My Library",
+    avatarUrl: "",
+  });
+  const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    void request<PublicProfile>("/api/profile").then((publicProfile) => {
+      if (active) setProfile(publicProfile);
+    }).catch((caught: unknown) => {
+      if (active) setError(`Profile: ${errorMessage(caught)}`);
+    }).finally(() => {
+      if (active) setProfileLoading(false);
+    });
+
     async function refresh(initial: boolean) {
       try {
         const [library, integration, recentActivity] = await Promise.all([
@@ -600,7 +614,6 @@ function App() {
 
   const inProgress =
     items.filter((item) => item.status === "in_progress").length;
-  const completed = items.filter((item) => item.status === "completed").length;
   const statusScope = activeType === "all"
     ? items
     : items.filter((item) => item.type === activeType);
@@ -791,21 +804,13 @@ function App() {
 
       {view === "library" && (
         <>
-          <section className="library-hero">
-            <div className="hero-overlay" />
-            <div className="page-container hero-content">
-              <span className="profile-mark">本音</span>
-              <div>
-                <span className="hero-kicker">HONNE / 本音</span>
-                <h1>What stays with you.</h1>
-                <p>
-                  {items.length} works kept · {inProgress} still unfolding ·
-                  {" "}
-                  {completed} finished
-                </p>
-              </div>
-            </div>
-          </section>
+          <LibraryHero
+            profile={profile}
+            profileLoading={profileLoading}
+            collectionLoading={loading}
+            totalTitles={items.length}
+            inProgress={inProgress}
+          />
 
           <main className="page-container content" id="filters">
             <section className="filter-section" aria-label="Media type filters">
@@ -824,6 +829,9 @@ function App() {
                         <strong>All media</strong>
                         <small>{items.length}</small>
                       </span>
+                      {activeType === "all" && (
+                        <Check className="format-check" size={15} />
+                      )}
                     </button>
                     {typeOptions.map(
                       ({ value, label, jpLabel, icon: Icon }) => {
@@ -850,6 +858,9 @@ function App() {
                                   .length}
                               </small>
                             </span>
+                            {activeType === value && (
+                              <Check className="format-check" size={15} />
+                            )}
                           </button>
                         );
                       },
@@ -901,13 +912,6 @@ function App() {
                       title="Reset library filters"
                     >
                       <RotateCcw size={13} /> Reset
-                    </button>
-                    <button
-                      type="button"
-                      className="collection-add"
-                      onClick={() => setDiscoveryType(null)}
-                    >
-                      <CirclePlus size={14} /> Add title
                     </button>
                   </div>
                 </div>
@@ -1047,6 +1051,7 @@ function App() {
           items={items}
           onOpenLocal={openLocalDetail}
           onOpenExternal={openExternalDetail}
+          onManual={openManualEntry}
         />
       )}
 
@@ -1285,6 +1290,7 @@ function GlobalSearchPage(
     items,
     onOpenLocal,
     onOpenExternal,
+    onManual,
   }: {
     query: string;
     input: string;
@@ -1298,6 +1304,7 @@ function GlobalSearchPage(
     items: Media[];
     onOpenLocal: (mediaId: number) => void;
     onOpenExternal: (result: DiscoveryResult) => void;
+    onManual: () => void;
   },
 ) {
   return (
@@ -1451,6 +1458,19 @@ function GlobalSearchPage(
             );
           })}
       </section>
+
+      {query && (
+        <aside className="search-manual" aria-label="Manual entry">
+          <div>
+            <span className="eyebrow">STILL MISSING?</span>
+            <h2>Add a title without catalog metadata</h2>
+            <p>Keep it local and fill in the details yourself.</p>
+          </div>
+          <button type="button" onClick={onManual}>
+            <CirclePlus size={15} /> Add manually
+          </button>
+        </aside>
+      )}
     </main>
   );
 }
@@ -2245,7 +2265,9 @@ function MediaCard(
             : undefined,
         }}
         onClick={onOpen}
-        aria-label={`View details for ${item.title}`}
+        aria-label={`View details for ${item.title}. Status: ${
+          statusLabel(item.status, item.type)
+        }`}
       >
         {!item.coverUrl && (
           <span className="fallback-label">
@@ -2268,7 +2290,7 @@ function MediaCard(
                 {item.syncStatus.replace("_", " ")}
               </span>
             )}
-            <h3>{item.title}</h3>
+            <h3 title={item.title}>{item.title}</h3>
           </div>
           {item.rating > 0 && (
             <span className="rating">
