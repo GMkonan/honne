@@ -112,7 +112,7 @@ When an AniList account is connected, imports are restricted to that same accoun
 
 The add-title flow uses:
 
-- AniList for anime, manga, and light novels;
+- AniList for anime, manga, and light novels, with Kitsu as an automatic public fallback;
 - Open Library for books;
 - TMDB for movies and series.
 
