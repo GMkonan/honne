@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.tsx";
@@ -162,6 +168,168 @@ describe("Library characterization", () => {
     ).toBe("true");
   });
 
+  it("keeps Library items out of catalog suggestions", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/discovery/global?q=Dun", {
+      results: [
+        {
+          provider: "openlibrary",
+          providerId: "dune",
+          providerUrl: "https://example.com/dune",
+          type: "book",
+          title: "Dune",
+        },
+        {
+          provider: "openlibrary",
+          providerId: "messiah",
+          providerUrl: "https://example.com/messiah",
+          type: "book",
+          title: "Dune Messiah",
+        },
+      ],
+      unavailableTypes: [],
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: /^View details for Dune/ });
+
+    await user.type(
+      screen.getByRole("combobox", { name: "Search catalogs" }),
+      "Dun",
+    );
+    expect(
+      await screen.findByRole("option", { name: /Dune Messiah.*Catalog/u }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("option", { name: /^Dune Book Catalog$/u }),
+    ).toBeNull();
+
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(
+      await screen.findByRole("heading", { name: "Dune Messiah" }),
+    ).not.toBeNull();
+  });
+
+  it("debounces catalog suggestions and limits the dropdown to five", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/discovery/global?q=Nar", {
+      results: [
+        ["anime", "Naruto"],
+        ["series", "Narcos"],
+        ["movie", "Narc"],
+        ["book", "Narrative Economics"],
+        ["manga", "Naruto Gaiden"],
+        ["light_novel", "Naruto: Innocent Heart"],
+      ].map(([type, title], index) => ({
+        provider: `provider-${index}`,
+        providerId: String(index),
+        providerUrl: `https://example.com/${index}`,
+        type,
+        title,
+      })),
+      unavailableTypes: [],
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: /^View details for Dune/ });
+
+    await user.type(
+      screen.getByRole("combobox", {
+        name: "Search catalogs",
+      }),
+      "Nar",
+    );
+    expect(screen.getByRole("status").textContent).toContain(
+      "Searching catalogs",
+    );
+
+    const suggestions = await screen.findByRole("listbox", {
+      name: "Catalog suggestions",
+    });
+    await waitFor(
+      () => expect(within(suggestions).getAllByRole("option")).toHaveLength(5),
+      { timeout: 1500 },
+    );
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/discovery/global?q=Nar",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("groups full search results, filters types, and retries partial catalogs", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    let catalogRequests = 0;
+    router.json("GET", "/api/discovery/global?q=Mix", () => {
+      catalogRequests++;
+      const results = [
+        {
+          provider: "anilist",
+          providerId: "anime-1",
+          providerUrl: "https://example.com/anime-1",
+          type: "anime",
+          title: "Mixed Anime",
+        },
+        ...(catalogRequests === 1
+          ? [{
+            provider: "openlibrary",
+            providerId: "book-1",
+            providerUrl: "https://example.com/book-1",
+            type: "book",
+            title: "Mixed Book",
+          }]
+          : []),
+      ];
+      return new Response(
+        JSON.stringify({
+          results,
+          unavailableTypes: catalogRequests === 1 ? ["series"] : [],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: /^View details for Dune/ });
+
+    await user.type(
+      screen.getByRole("combobox", {
+        name: "Search catalogs",
+      }),
+      "Mix",
+    );
+    await user.keyboard("{Enter}");
+
+    expect(
+      await screen.findByRole("heading", { name: "Results for “Mix”" }),
+    ).not.toBeNull();
+    expect(
+      await screen.findByRole("button", {
+        name: "Review Mixed Anime from Anime",
+      }),
+    ).not.toBeNull();
+    expect(screen.getByText(/Some catalogs could not respond/u)).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Books1" }));
+    expect(
+      screen.queryByRole("button", { name: "Review Mixed Anime from Anime" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Review Mixed Book from Books" }),
+    ).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(catalogRequests).toBe(2));
+    expect(
+      await screen.findByRole("button", {
+        name: "Review Mixed Anime from Anime",
+      }),
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Books1" })).toBeNull();
+  });
+
   it("moves persistent manual entry from the Library to full search", async () => {
     const router = createFetchRouter();
     bootstrap(router);
@@ -176,7 +344,7 @@ describe("Library characterization", () => {
 
     expect(screen.queryByRole("button", { name: "Add title" })).toBeNull();
     await user.type(
-      screen.getByLabelText("Search library and catalogs"),
+      screen.getByLabelText("Search catalogs"),
       "Missing{Enter}",
     );
 

@@ -24,6 +24,11 @@ import {
   Tv,
   X,
 } from "lucide-react";
+import {
+  GlobalSearchBox,
+  type SearchCatalogResult,
+} from "./components/GlobalSearchBox.tsx";
+import { GlobalSearchPage } from "./components/GlobalSearchPage.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 
 type MediaType =
@@ -107,20 +112,7 @@ interface AniListIntegrationStatus {
   errors: number;
 }
 
-interface DiscoveryResult {
-  provider: string;
-  providerId: string;
-  providerUrl: string;
-  type: MediaType;
-  title: string;
-  originalTitle?: string;
-  description?: string;
-  coverUrl?: string;
-  releaseYear?: number;
-  total?: number;
-  subtitle?: string;
-  communityRating?: number;
-}
+type DiscoveryResult = SearchCatalogResult;
 
 interface DiscoveryResponse {
   results: DiscoveryResult[];
@@ -242,6 +234,25 @@ function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Something went wrong. Please try again.";
+}
+
+function isAlreadyInLibrary(result: DiscoveryResult, items: Media[]) {
+  if (
+    result.provider && result.providerId &&
+    items.some((item) =>
+      item.provider === result.provider && item.providerId === result.providerId
+    )
+  ) return true;
+
+  const resultTitles = [result.title, result.originalTitle]
+    .filter((title): title is string => Boolean(title))
+    .map((title) => title.trim().toLocaleLowerCase("en"));
+  return items.some((item) =>
+    item.type === result.type &&
+    [item.title, item.originalTitle].some((title) =>
+      resultTitles.includes((title || "").trim().toLocaleLowerCase("en"))
+    )
+  );
 }
 
 function mediaToInput(item: Media): MediaInput {
@@ -402,6 +413,16 @@ function App() {
   const [globalLoading, setGlobalLoading] = useState(false);
   const [globalError, setGlobalError] = useState("");
   const [searchGeneration, setSearchGeneration] = useState(0);
+  const [suggestionQuery, setSuggestionQuery] = useState("");
+  const [suggestionResults, setSuggestionResults] = useState<
+    DiscoveryResult[]
+  >([]);
+  const [suggestionResultQuery, setSuggestionResultQuery] = useState("");
+  const [suggestionUnavailableTypes, setSuggestionUnavailableTypes] = useState<
+    MediaType[]
+  >([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState("");
   const [items, setItems] = useState<Media[]>([]);
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -493,7 +514,45 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (submittedQuery.trim().length < 2) return;
+    const query = suggestionQuery.trim();
+    const queryLength = Array.from(query).length;
+    setSuggestionResults([]);
+    setSuggestionUnavailableTypes([]);
+    setSuggestionsError("");
+    setSuggestionsLoading(queryLength >= 3);
+    if (queryLength < 3) return;
+
+    const controller = new AbortController();
+    let active = true;
+    const timer = setTimeout(() => {
+      request<GlobalDiscoveryResponse>(
+        `/api/discovery/global?q=${encodeURIComponent(query)}`,
+        { signal: controller.signal },
+      ).then((response) => {
+        if (!active) return;
+        setSuggestionResults(response.results);
+        setSuggestionResultQuery(query);
+        setSuggestionUnavailableTypes(response.unavailableTypes);
+      }).catch((caught: unknown) => {
+        if (
+          !active ||
+          (caught instanceof DOMException && caught.name === "AbortError")
+        ) return;
+        setSuggestionsError(errorMessage(caught));
+      }).finally(() => {
+        if (active) setSuggestionsLoading(false);
+      });
+    }, 350);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [suggestionQuery]);
+
+  useEffect(() => {
+    if (Array.from(submittedQuery.trim()).length < 2) return;
     const controller = new AbortController();
     let active = true;
     setGlobalLoading(true);
@@ -563,9 +622,10 @@ function App() {
   function submitGlobalSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = globalQuery.trim();
-    if (query.length < 2) return;
+    if (Array.from(query).length < 2) return;
     setSubmittedQuery(query);
     setSearchGeneration((current) => current + 1);
+    setSuggestionQuery("");
     setMenuOpen(false);
     const hash = `#search/${encodeURIComponent(query)}`;
     if (globalThis.location.hash === hash) setView("search");
@@ -617,16 +677,12 @@ function App() {
   const statusScope = activeType === "all"
     ? items
     : items.filter((item) => item.type === activeType);
-  const localSearchResults = submittedQuery.trim().length < 2
-    ? []
-    : items.filter((item) =>
-      item.title.toLocaleLowerCase("en").includes(
-        submittedQuery.toLocaleLowerCase("en"),
-      ) ||
-      (item.originalTitle || "").toLocaleLowerCase("en").includes(
-        submittedQuery.toLocaleLowerCase("en"),
-      )
-    );
+  const catalogSearchResults = globalResults.filter((result) =>
+    !isAlreadyInLibrary(result, items)
+  );
+  const catalogSuggestionResults = suggestionResultQuery === globalQuery.trim()
+    ? suggestionResults.filter((result) => !isAlreadyInLibrary(result, items))
+    : [];
 
   async function saveItem(values: MediaInput) {
     let saved: Media;
@@ -765,32 +821,50 @@ function App() {
                 <span className="nav-count">{anilistStatus.pending}</span>
               )}
             </a>
-            <form
+            <GlobalSearchBox
+              id="mobile-global-search"
               className="mobile-global-search"
+              label="Catalog search"
+              placeholder="Search catalogs"
+              query={globalQuery}
+              catalogResults={catalogSuggestionResults}
+              unavailableCatalogs={suggestionResultQuery === globalQuery.trim()
+                ? suggestionUnavailableTypes.length
+                : 0}
+              catalogLoading={suggestionsLoading}
+              catalogError={suggestionsError}
+              onQueryChange={setGlobalQuery}
+              onActivate={setSuggestionQuery}
+              onDeactivate={() => setSuggestionQuery("")}
               onSubmit={submitGlobalSearch}
-            >
-              <Search size={15} />
-              <input
-                value={globalQuery}
-                onChange={(event) => setGlobalQuery(event.target.value)}
-                placeholder="Search library and catalogs"
-                aria-label="Global search"
-              />
-            </form>
-          </nav>
-          <form
-            className="nav-search"
-            role="search"
-            onSubmit={submitGlobalSearch}
-          >
-            <Search size={15} />
-            <input
-              value={globalQuery}
-              onChange={(event) => setGlobalQuery(event.target.value)}
-              placeholder="Search everything"
-              aria-label="Search library and catalogs"
+              onOpenCatalog={(result) => {
+                setMenuOpen(false);
+                setSuggestionQuery("");
+                openExternalDetail(result);
+              }}
             />
-          </form>
+          </nav>
+          <GlobalSearchBox
+            id="desktop-global-search"
+            className="nav-search"
+            label="Search catalogs"
+            placeholder="Search catalogs"
+            query={globalQuery}
+            catalogResults={catalogSuggestionResults}
+            unavailableCatalogs={suggestionResultQuery === globalQuery.trim()
+              ? suggestionUnavailableTypes.length
+              : 0}
+            catalogLoading={suggestionsLoading}
+            catalogError={suggestionsError}
+            onQueryChange={setGlobalQuery}
+            onActivate={setSuggestionQuery}
+            onDeactivate={() => setSuggestionQuery("")}
+            onSubmit={submitGlobalSearch}
+            onOpenCatalog={(result) => {
+              setSuggestionQuery("");
+              openExternalDetail(result);
+            }}
+          />
           <button
             type="button"
             className="menu-button"
@@ -1041,17 +1115,16 @@ function App() {
         <GlobalSearchPage
           query={submittedQuery}
           input={globalQuery}
-          onInput={setGlobalQuery}
-          onSubmit={submitGlobalSearch}
-          localResults={localSearchResults}
-          externalResults={globalResults}
+          catalogResults={catalogSearchResults}
           unavailableTypes={unavailableTypes}
           loading={globalLoading}
           error={globalError}
-          items={items}
-          onOpenLocal={openLocalDetail}
-          onOpenExternal={openExternalDetail}
-          onManual={openManualEntry}
+          onInput={setGlobalQuery}
+          onSubmit={submitGlobalSearch}
+          onBack={() => navigate("library")}
+          onRetry={() => setSearchGeneration((current) => current + 1)}
+          onOpenCatalog={openExternalDetail}
+          onAddManually={openManualEntry}
         />
       )}
 
@@ -1272,205 +1345,6 @@ function SettingsPage(
           </p>
         </div>
       </section>
-    </main>
-  );
-}
-
-function GlobalSearchPage(
-  {
-    query,
-    input,
-    onInput,
-    onSubmit,
-    localResults,
-    externalResults,
-    unavailableTypes,
-    loading,
-    error,
-    items,
-    onOpenLocal,
-    onOpenExternal,
-    onManual,
-  }: {
-    query: string;
-    input: string;
-    onInput: (value: string) => void;
-    onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-    localResults: Media[];
-    externalResults: DiscoveryResult[];
-    unavailableTypes: MediaType[];
-    loading: boolean;
-    error: string;
-    items: Media[];
-    onOpenLocal: (mediaId: number) => void;
-    onOpenExternal: (result: DiscoveryResult) => void;
-    onManual: () => void;
-  },
-) {
-  return (
-    <main className="page-container standalone-page search-page">
-      <header className="page-heading search-heading">
-        <span className="eyebrow">GLOBAL SEARCH</span>
-        <h1>{query ? `Results for “${query}”` : "Search everything"}</h1>
-        <form className="page-search" role="search" onSubmit={onSubmit}>
-          <Search size={19} />
-          <input
-            value={input}
-            onChange={(event) => onInput(event.target.value)}
-            placeholder="Search your library and metadata catalogs"
-            aria-label="Search library and metadata catalogs"
-            autoFocus
-          />
-          <button type="submit" disabled={input.trim().length < 2}>
-            Search
-          </button>
-        </form>
-      </header>
-
-      <section className="search-section">
-        <div className="search-section-title">
-          <div>
-            <span className="eyebrow">LOCAL</span>
-            <h2>In your library</h2>
-          </div>
-          <span>{localResults.length}</span>
-        </div>
-        {localResults.length
-          ? (
-            <div className="local-search-grid">
-              {localResults.map((item) => (
-                <button
-                  type="button"
-                  className="local-search-result"
-                  onClick={() => onOpenLocal(item.id)}
-                  key={item.id}
-                >
-                  <span
-                    className="search-result-cover"
-                    style={{
-                      backgroundImage: item.coverUrl
-                        ? `url("${item.coverUrl.replaceAll('"', "")}")`
-                        : undefined,
-                    }}
-                  />
-                  <span>
-                    <small>
-                      {typeOptions.find((type) => type.value === item.type)
-                        ?.label}
-                    </small>
-                    <strong>{item.title}</strong>
-                    <em>{statusLabel(item.status, item.type)}</em>
-                  </span>
-                  <Check size={15} />
-                </button>
-              ))}
-            </div>
-          )
-          : (
-            <p className="search-empty-line">
-              No matching titles in your library.
-            </p>
-          )}
-      </section>
-
-      <section className="search-section">
-        <div className="search-section-title">
-          <div>
-            <span className="eyebrow">DISCOVER</span>
-            <h2>From metadata catalogs</h2>
-          </div>
-          {loading && <span>Searching…</span>}
-        </div>
-        {!!unavailableTypes.length && (
-          <div className="partial-notice">
-            Unavailable right now:{" "}
-            {unavailableTypes.map((type) =>
-              typeOptions.find((option) => option.value === type)?.label
-            ).join(", ")}. Other results are still shown.
-          </div>
-        )}
-        {error && (
-          <div className="error-banner">
-            <span>{error}</span>
-          </div>
-        )}
-        {!loading && !error && externalResults.length === 0
-          ? <p className="search-empty-line">No catalog results found.</p>
-          : typeOptions.map((type) => {
-            const group = externalResults.filter((result) =>
-              result.type === type.value
-            );
-            if (!group.length) return null;
-            const TypeIcon = type.icon;
-            return (
-              <div className="catalog-group" key={type.value}>
-                <h3>
-                  <TypeIcon size={15} /> {type.label}
-                  <span>{group.length}</span>
-                </h3>
-                <div className="catalog-results">
-                  {group.map((result) => {
-                    const existing = items.find((item) =>
-                      item.provider === result.provider &&
-                      item.providerId === result.providerId
-                    );
-                    return (
-                      <button
-                        type="button"
-                        className="catalog-result"
-                        onClick={() =>
-                          existing
-                            ? onOpenLocal(existing.id)
-                            : onOpenExternal(result)}
-                        key={`${result.provider}-${result.providerId}`}
-                      >
-                        <span
-                          className="search-result-cover"
-                          style={{
-                            backgroundImage: result.coverUrl
-                              ? `url("${result.coverUrl.replaceAll('"', "")}")`
-                              : undefined,
-                          }}
-                        />
-                        <span className="catalog-result-copy">
-                          <small>{result.releaseYear || type.label}</small>
-                          <strong>{result.title}</strong>
-                          {result.subtitle && <em>{result.subtitle}</em>}
-                        </span>
-                        <span
-                          className={existing
-                            ? "already-added"
-                            : "review-result"}
-                        >
-                          {existing
-                            ? (
-                              <>
-                                <Check size={12} /> In library
-                              </>
-                            )
-                            : "View"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-      </section>
-
-      {query && (
-        <aside className="search-manual" aria-label="Manual entry">
-          <div>
-            <span className="eyebrow">STILL MISSING?</span>
-            <h2>Add a title without catalog metadata</h2>
-            <p>Keep it local and fill in the details yourself.</p>
-          </div>
-          <button type="button" onClick={onManual}>
-            <CirclePlus size={15} /> Add manually
-          </button>
-        </aside>
-      )}
     </main>
   );
 }
