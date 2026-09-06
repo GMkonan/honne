@@ -14,6 +14,15 @@ docker compose up -d --build
 
 Open `http://localhost:8080`. The collection, activity journal, and pending synchronization jobs are stored in the `honne-data` Docker volume and survive container replacement.
 
+Personalize the Library profile in `.env` with an optional name and avatar:
+
+```dotenv
+PROFILE_NAME=My Library
+PROFILE_AVATAR_URL=https://images.example.com/avatar.png
+```
+
+The avatar must use an absolute HTTP or HTTPS URL without embedded credentials. Invalid profile values make the backend stop at startup with a configuration error.
+
 Useful commands:
 
 ```bash
@@ -156,6 +165,7 @@ docker compose build
 
 - `GET /api/health`: health check
 - `GET /api/auth/check`: reverse-proxy authentication check
+- `GET /api/profile`: public Library profile name and avatar
 - `GET /api/media`: list the collection
 - `GET /api/activity`: list recent library activity (`?limit=30`, maximum 100)
 - `POST /api/media`: add media

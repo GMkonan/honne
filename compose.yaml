@@ -8,6 +8,8 @@ services:
       PORT: "8080"
       DATA_PATH: /data/media.json
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+      PROFILE_NAME: ${PROFILE_NAME-My Library}
+      PROFILE_AVATAR_URL: ${PROFILE_AVATAR_URL:-}
       APP_USERNAME: ${APP_USERNAME:-}
       APP_PASSWORD: ${APP_PASSWORD:-}
       APP_CONTACT_EMAIL: ${APP_CONTACT_EMAIL:-}
