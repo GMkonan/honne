@@ -17,7 +17,10 @@ import (
 	"time"
 )
 
-const discoveryPageSize = 20
+const (
+	discoveryPageSize = 20
+	kitsuPageSize     = 10
+)
 
 var errProviderUnavailable = errors.New("provider is not configured")
 
@@ -85,6 +88,7 @@ type cachedDiscovery struct {
 type discoveryService struct {
 	client       *http.Client
 	anilistBase  string
+	kitsuBase    string
 	booksBase    string
 	tmdbBase     string
 	tmdbToken    string
@@ -96,8 +100,9 @@ type discoveryService struct {
 
 func newDiscoveryService(cfg config) *discoveryService {
 	return &discoveryService{
-		client:       &http.Client{Timeout: 8 * time.Second},
+		client:       &http.Client{Timeout: 15 * time.Second},
 		anilistBase:  cfg.AniListAPIURL,
+		kitsuBase:    cfg.KitsuAPIURL,
 		booksBase:    cfg.OpenLibraryAPIURL,
 		tmdbBase:     cfg.TMDBAPIURL,
 		tmdbToken:    cfg.TMDBAPIToken,
@@ -212,6 +217,13 @@ func (s *discoveryService) search(ctx context.Context, mediaType, query string, 
 	switch mediaType {
 	case "anime", "manga", "light_novel":
 		response, err = s.searchAniList(ctx, mediaType, query, page)
+		if err != nil && s.kitsuBase != "" {
+			anilistErr := err
+			response, err = s.searchKitsu(ctx, mediaType, query, page)
+			if err != nil {
+				err = fmt.Errorf("AniList failed: %v; Kitsu failed: %w", anilistErr, err)
+			}
+		}
 	case "book":
 		response, err = s.searchBooks(ctx, query, page)
 	case "movie", "series":
@@ -369,6 +381,14 @@ func (s *discoveryService) searchTMDB(ctx context.Context, mediaType, query stri
 }
 
 func (s *discoveryService) getJSON(ctx context.Context, endpoint, token string, target any) error {
+	return s.getJSONRequest(ctx, endpoint, token, "application/json", target)
+}
+
+func (s *discoveryService) getJSONAccept(ctx context.Context, endpoint, accept string, target any) error {
+	return s.getJSONRequest(ctx, endpoint, "", accept, target)
+}
+
+func (s *discoveryService) getJSONRequest(ctx context.Context, endpoint, token, accept string, target any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
@@ -378,7 +398,7 @@ func (s *discoveryService) getJSON(ctx context.Context, endpoint, token string, 
 		userAgent += " (" + s.contactEmail + ")"
 	}
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

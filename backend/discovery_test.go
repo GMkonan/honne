@@ -49,6 +49,32 @@ func TestSearchAniListNormalizesAndCaches(t *testing.T) {
 	}
 }
 
+func TestSearchFallsBackToKitsuWhenAniListIsUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/anilist" {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.URL.Path != "/api/edge/anime" || r.Header.Get("Accept") != "application/vnd.api+json" || r.URL.Query().Get("filter[text]") != "frieren" {
+			t.Fatalf("unexpected Kitsu request: %s", r.URL.String())
+		}
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"46474","attributes":{"canonicalTitle":"Sousou no Frieren","titles":{"en":"Frieren: Beyond Journey's End","ja_jp":"葬送のフリーレン"},"synopsis":"An elven mage.","startDate":"2023-09-29","averageRating":"88.81","episodeCount":28,"subtype":"TV","posterImage":{"large":"https://example.com/frieren.jpg"}}}],"links":{"next":"https://example.com/next"}}`))
+	}))
+	defer server.Close()
+
+	service := testDiscoveryService(server.URL)
+	service.anilistBase = server.URL + "/anilist"
+	service.kitsuBase = server.URL + "/api/edge"
+	response, err := service.search(context.Background(), "anime", "frieren", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results) != 1 || response.Results[0].Provider != "kitsu" || response.Results[0].Total != 28 || response.Results[0].ReleaseYear != 2023 || response.Results[0].CommunityRating != 8.881 || !response.HasMore {
+		t.Fatalf("unexpected Kitsu fallback response: %+v", response)
+	}
+}
+
 func TestSearchBooksNormalizesCover(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

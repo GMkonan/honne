@@ -20,6 +20,7 @@ type config struct {
 	ProfileAvatarURL string
 
 	AniListAPIURL     string
+	KitsuAPIURL       string
 	OpenLibraryAPIURL string
 	TMDBAPIURL        string
 	TMDBAPIToken      string
@@ -58,6 +59,7 @@ func loadConfig() (config, error) {
 		ProfileName:          profileName,
 		ProfileAvatarURL:     profileAvatarURL,
 		AniListAPIURL:        envOr("ANILIST_API_URL", "https://graphql.anilist.co"),
+		KitsuAPIURL:          envOr("KITSU_API_URL", "https://kitsu.io/api/edge"),
 		OpenLibraryAPIURL:    envOr("OPEN_LIBRARY_API_URL", "https://openlibrary.org"),
 		TMDBAPIURL:           envOr("TMDB_API_URL", "https://api.themoviedb.org/3"),
 		TMDBAPIToken:         os.Getenv("TMDB_API_TOKEN"),
