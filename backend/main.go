@@ -173,14 +173,18 @@ func newStore(path string) (*store, error) {
 	return s, nil
 }
 
+func (s *store) marshalSnapshotLocked() ([]byte, error) {
+	return json.MarshalIndent(persistedStore{
+		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
+		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
+	}, "", "  ")
+}
+
 func (s *store) persistLocked() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(persistedStore{
-		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
-		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
-	}, "", "  ")
+	data, err := s.marshalSnapshotLocked()
 	if err != nil {
 		return err
 	}
@@ -221,6 +225,7 @@ func main() {
 	mux.HandleFunc("GET /api/profile", application.getProfile)
 	mux.HandleFunc("GET /api/media", application.listMedia)
 	mux.HandleFunc("GET /api/activity", application.listActivity)
+	mux.HandleFunc("GET /api/backup", application.downloadBackup)
 	mux.HandleFunc("GET /api/discovery/search", application.searchDiscovery)
 	mux.HandleFunc("GET /api/discovery/global", application.searchGlobalDiscovery)
 	mux.HandleFunc("GET /api/import/anilist", application.previewAniListImport)
