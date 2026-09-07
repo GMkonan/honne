@@ -18,49 +18,74 @@ import (
 	"time"
 )
 
+const persistedStoreVersion = 2
+
 var (
 	validTypes    = []string{"anime", "series", "movie", "book", "manga", "light_novel"}
 	validStatuses = []string{"planned", "in_progress", "completed", "paused", "dropped"}
 )
 
+type mediaCredit struct {
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
 type Media struct {
-	ID                  int       `json:"id"`
-	Title               string    `json:"title"`
-	Type                string    `json:"type"`
-	Status              string    `json:"status"`
-	Progress            int       `json:"progress"`
-	Total               int       `json:"total"`
-	Rating              int       `json:"rating"`
-	Notes               string    `json:"notes"`
-	CoverURL            string    `json:"coverUrl"`
-	Provider            string    `json:"provider,omitempty"`
-	ProviderID          string    `json:"providerId,omitempty"`
-	ProviderURL         string    `json:"providerUrl,omitempty"`
-	OriginalTitle       string    `json:"originalTitle,omitempty"`
-	Description         string    `json:"description,omitempty"`
-	ReleaseYear         int       `json:"releaseYear,omitempty"`
-	ProviderListEntryID int       `json:"providerListEntryId,omitempty"`
-	SyncStatus          string    `json:"syncStatus,omitempty"`
-	SyncError           string    `json:"syncError,omitempty"`
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedAt           time.Time `json:"updatedAt"`
+	ID                  int           `json:"id"`
+	Title               string        `json:"title"`
+	Type                string        `json:"type"`
+	Status              string        `json:"status"`
+	Progress            int           `json:"progress"`
+	Total               int           `json:"total"`
+	Rating              int           `json:"rating"`
+	Notes               string        `json:"notes"`
+	CoverURL            string        `json:"coverUrl"`
+	Provider            string        `json:"provider,omitempty"`
+	ProviderID          string        `json:"providerId,omitempty"`
+	ProviderURL         string        `json:"providerUrl,omitempty"`
+	OriginalTitle       string        `json:"originalTitle,omitempty"`
+	Description         string        `json:"description,omitempty"`
+	ReleaseYear         int           `json:"releaseYear,omitempty"`
+	Format              string        `json:"format,omitempty"`
+	Genres              []string      `json:"genres,omitempty"`
+	Credits             []mediaCredit `json:"credits,omitempty"`
+	ReleaseStatus       string        `json:"releaseStatus,omitempty"`
+	StartDate           string        `json:"startDate,omitempty"`
+	EndDate             string        `json:"endDate,omitempty"`
+	DurationMinutes     int           `json:"durationMinutes,omitempty"`
+	CatalogTotal        int           `json:"catalogTotal,omitempty"`
+	CommunityRating     float64       `json:"communityRating,omitempty"`
+	ProviderListEntryID int           `json:"providerListEntryId,omitempty"`
+	SyncStatus          string        `json:"syncStatus,omitempty"`
+	SyncError           string        `json:"syncError,omitempty"`
+	CreatedAt           time.Time     `json:"createdAt"`
+	UpdatedAt           time.Time     `json:"updatedAt"`
 }
 
 type mediaInput struct {
-	Title         string `json:"title"`
-	Type          string `json:"type"`
-	Status        string `json:"status"`
-	Progress      int    `json:"progress"`
-	Total         int    `json:"total"`
-	Rating        int    `json:"rating"`
-	Notes         string `json:"notes"`
-	CoverURL      string `json:"coverUrl"`
-	Provider      string `json:"provider"`
-	ProviderID    string `json:"providerId"`
-	ProviderURL   string `json:"providerUrl"`
-	OriginalTitle string `json:"originalTitle"`
-	Description   string `json:"description"`
-	ReleaseYear   int    `json:"releaseYear"`
+	Title           string        `json:"title"`
+	Type            string        `json:"type"`
+	Status          string        `json:"status"`
+	Progress        int           `json:"progress"`
+	Total           int           `json:"total"`
+	Rating          int           `json:"rating"`
+	Notes           string        `json:"notes"`
+	CoverURL        string        `json:"coverUrl"`
+	Provider        string        `json:"provider"`
+	ProviderID      string        `json:"providerId"`
+	ProviderURL     string        `json:"providerUrl"`
+	OriginalTitle   string        `json:"originalTitle"`
+	Description     string        `json:"description"`
+	ReleaseYear     int           `json:"releaseYear"`
+	Format          string        `json:"format,omitempty"`
+	Genres          []string      `json:"genres,omitempty"`
+	Credits         []mediaCredit `json:"credits,omitempty"`
+	ReleaseStatus   string        `json:"releaseStatus,omitempty"`
+	StartDate       string        `json:"startDate,omitempty"`
+	EndDate         string        `json:"endDate,omitempty"`
+	DurationMinutes int           `json:"durationMinutes,omitempty"`
+	CatalogTotal    int           `json:"catalogTotal,omitempty"`
+	CommunityRating float64       `json:"communityRating,omitempty"`
 }
 
 type persistedStore struct {
@@ -106,7 +131,7 @@ func newStore(path string) (*store, error) {
 		if err := json.Unmarshal(trimmed, &persisted); err != nil {
 			return nil, fmt.Errorf("decode data file: %w", err)
 		}
-		if persisted.Version != 1 {
+		if persisted.Version != 1 && persisted.Version != persistedStoreVersion {
 			return nil, fmt.Errorf("unsupported data file version %d", persisted.Version)
 		}
 		s.items = persisted.Items
@@ -153,7 +178,7 @@ func (s *store) persistLocked() error {
 		return err
 	}
 	data, err := json.MarshalIndent(persistedStore{
-		Version: 1, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
+		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
 		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
 	}, "", "  ")
 	if err != nil {
@@ -207,6 +232,7 @@ func main() {
 	mux.HandleFunc("POST /api/integrations/anilist/retry", application.anilist.retryHandler)
 	mux.HandleFunc("POST /api/media", application.createMedia)
 	mux.HandleFunc("PATCH /api/media/{id}", application.updateMedia)
+	mux.HandleFunc("POST /api/media/{id}/refresh-metadata", application.refreshMediaMetadata)
 	mux.HandleFunc("DELETE /api/media/{id}", application.deleteMedia)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -262,7 +288,7 @@ func (a *app) createMedia(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	item := Media{ID: a.store.nextID, Title: strings.TrimSpace(input.Title), Type: input.Type, Status: input.Status, Progress: input.Progress, Total: input.Total, Rating: input.Rating, Notes: strings.TrimSpace(input.Notes), CoverURL: strings.TrimSpace(input.CoverURL), Provider: input.Provider, ProviderID: input.ProviderID, ProviderURL: strings.TrimSpace(input.ProviderURL), OriginalTitle: strings.TrimSpace(input.OriginalTitle), Description: strings.TrimSpace(input.Description), ReleaseYear: input.ReleaseYear, CreatedAt: now, UpdatedAt: now}
+	item := mediaFromInput(a.store.nextID, input, now)
 	originalNextID := a.store.nextID
 	originalNextJobID := a.store.nextJobID
 	originalNextActivityID := a.store.nextActivityID
@@ -321,9 +347,9 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	item := &a.store.items[index]
 	original := *item
-	if original.Provider == "anilist" && (input.Provider != original.Provider || input.ProviderID != original.ProviderID || input.Type != original.Type) {
+	if original.Provider != "" && (input.Provider != original.Provider || input.ProviderID != original.ProviderID || input.Type != original.Type) {
 		a.store.mu.Unlock()
-		writeError(w, http.StatusUnprocessableEntity, "AniList-linked media identity cannot be changed")
+		writeError(w, http.StatusUnprocessableEntity, "provider-linked media identity cannot be changed")
 		return
 	}
 	originalJobs := slices.Clone(a.store.syncJobs)
@@ -344,6 +370,9 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 	item.OriginalTitle = strings.TrimSpace(input.OriginalTitle)
 	item.Description = strings.TrimSpace(input.Description)
 	item.ReleaseYear = input.ReleaseYear
+	// Catalog metadata is provider-owned and intentionally preserved on regular
+	// updates. This also prevents older clients from clearing fields they do not
+	// know about when sending their complete legacy payload.
 	item.UpdatedAt = time.Now().UTC()
 	if a.anilist != nil {
 		a.anilist.queueUpsertLocked(index)
@@ -447,7 +476,140 @@ func validateInput(input mediaInput) error {
 	if input.ReleaseYear < 0 || input.ReleaseYear > 9999 {
 		return errors.New("invalid release year")
 	}
+	if len([]rune(strings.TrimSpace(input.Format))) > 50 {
+		return errors.New("format cannot contain more than 50 characters")
+	}
+	if len(input.Genres) > 12 {
+		return errors.New("genres cannot contain more than 12 entries")
+	}
+	for _, genre := range input.Genres {
+		if length := len([]rune(strings.TrimSpace(genre))); length < 1 || length > 100 {
+			return errors.New("genres must contain between 1 and 100 characters")
+		}
+	}
+	if len(input.Credits) > 12 {
+		return errors.New("credits cannot contain more than 12 entries")
+	}
+	for _, credit := range input.Credits {
+		nameLength := len([]rune(strings.TrimSpace(credit.Name)))
+		roleLength := len([]rune(strings.TrimSpace(credit.Role)))
+		if nameLength < 1 || nameLength > 100 || roleLength < 1 || roleLength > 100 {
+			return errors.New("credit names and roles must contain between 1 and 100 characters")
+		}
+	}
+	if input.ReleaseStatus != "" && !slices.Contains([]string{"announced", "upcoming", "releasing", "finished", "cancelled", "hiatus"}, input.ReleaseStatus) {
+		return errors.New("invalid release status")
+	}
+	if !validPartialDate(input.StartDate) || !validPartialDate(input.EndDate) {
+		return errors.New("dates must use YYYY, YYYY-MM, or YYYY-MM-DD")
+	}
+	if input.StartDate != "" && input.EndDate != "" && partialDateDefinitelyAfter(input.StartDate, input.EndDate) {
+		return errors.New("end date cannot be before start date")
+	}
+	if input.ReleaseYear > 0 && len(input.StartDate) >= 4 {
+		startYear, _ := strconv.Atoi(input.StartDate[:4])
+		if startYear != input.ReleaseYear {
+			return errors.New("release year must match start date")
+		}
+	}
+	if input.DurationMinutes < 0 || input.DurationMinutes > 10080 {
+		return errors.New("duration must be between 0 and 10080 minutes")
+	}
+	if input.CatalogTotal < 0 {
+		return errors.New("catalog total cannot be negative")
+	}
+	if input.CommunityRating < 0 || input.CommunityRating > 10 {
+		return errors.New("community rating must be between 0 and 10")
+	}
 	return nil
+}
+
+func validPartialDate(value string) bool {
+	if value == "" {
+		return true
+	}
+	layout := ""
+	switch len(value) {
+	case 4:
+		layout = "2006"
+	case 7:
+		layout = "2006-01"
+	case 10:
+		layout = "2006-01-02"
+	default:
+		return false
+	}
+	_, err := time.Parse(layout, value)
+	return err == nil
+}
+
+func partialDateDefinitelyAfter(start, end string) bool {
+	startEarliest, _ := partialDateRange(start)
+	_, endLatest := partialDateRange(end)
+	return startEarliest.After(endLatest)
+}
+
+func partialDateRange(value string) (time.Time, time.Time) {
+	parts := strings.Split(value, "-")
+	year, _ := strconv.Atoi(parts[0])
+	startMonth, endMonth := time.January, time.December
+	if len(parts) >= 2 {
+		month, _ := strconv.Atoi(parts[1])
+		startMonth, endMonth = time.Month(month), time.Month(month)
+	}
+	startDay := 1
+	endDay := time.Date(year, endMonth+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	if len(parts) == 3 {
+		day, _ := strconv.Atoi(parts[2])
+		startDay, endDay = day, day
+	}
+	return time.Date(year, startMonth, startDay, 0, 0, 0, 0, time.UTC),
+		time.Date(year, endMonth, endDay, 0, 0, 0, 0, time.UTC)
+}
+
+func normalizedMetadataStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		key := strings.ToLower(value)
+		if length := len([]rune(value)); length < 1 || length > 100 || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, value)
+		if len(result) == 12 {
+			break
+		}
+	}
+	return result
+}
+
+func normalizedMediaCredits(values []mediaCredit) []mediaCredit {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]mediaCredit, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		value.Name = strings.TrimSpace(value.Name)
+		value.Role = strings.TrimSpace(value.Role)
+		key := strings.ToLower(value.Name) + "\x00" + strings.ToLower(value.Role)
+		nameLength := len([]rune(value.Name))
+		roleLength := len([]rune(value.Role))
+		if nameLength < 1 || nameLength > 100 || roleLength < 1 || roleLength > 100 || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, value)
+		if len(result) == 12 {
+			break
+		}
+	}
+	return result
 }
 
 func basicAuth(next http.Handler, cfg config) http.Handler {
