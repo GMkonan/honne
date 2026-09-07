@@ -37,6 +37,7 @@ function visibleMediaTitles(): string[] {
 describe("Library characterization", () => {
   beforeEach(() => {
     globalThis.history.replaceState(null, "", "/#library");
+    globalThis.sessionStorage.clear();
   });
 
   it("renders the current Library after successful bootstrap responses", async () => {
@@ -390,5 +391,368 @@ describe("Library characterization", () => {
 
     expect(await screen.findByRole("heading", { name: "Cowboy Bebop" })).not
       .toBeNull();
+    expect(
+      screen.getByRole("region", { name: "About this title" }),
+    ).not.toBeNull();
+    const personal = screen.getByRole("region", { name: "Your Library" });
+    expect(within(personal).getByText("In progress")).not.toBeNull();
+    expect(within(personal).getByText("8 of 26")).not.toBeNull();
+    expect(within(personal).getByText("9/10")).not.toBeNull();
+
+    const manageTrigger = screen.getByRole("button", { name: "Manage title" });
+    await user.click(manageTrigger);
+    await user.click(
+      screen.getByRole("button", { name: "Edit title details" }),
+    );
+    const editor = screen.getByRole("dialog", { name: "Update media" });
+    const titleInput = within(editor).getByRole("textbox", { name: "Title" });
+    expect((titleInput as HTMLInputElement).value).toBe("Cowboy Bebop");
+    expect(document.activeElement).toBe(titleInput);
+    expect(
+      (within(editor).getByRole("combobox", {
+        name: /Type/,
+      }) as HTMLSelectElement)
+        .disabled,
+    ).toBe(false);
+    const closeEditor = within(editor).getByRole("button", { name: "Close" });
+    closeEditor.focus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(
+      within(editor).getByRole("button", { name: "Save changes" }),
+    );
+    await user.tab();
+    expect(document.activeElement).toBe(closeEditor);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Update media" })).toBeNull();
+    expect(document.activeElement).toBe(manageTrigger);
+  });
+
+  it("automatically enriches an existing provider title on first detail view", async () => {
+    const router = createFetchRouter();
+    const linkedItem = {
+      ...mediaItems[0],
+      provider: "anilist",
+      providerId: "1",
+      providerUrl: "https://anilist.co/anime/1",
+    };
+    bootstrap(router, [linkedItem]);
+    router.json("POST", "/api/media/1/refresh-metadata", {
+      ...linkedItem,
+      format: "TV",
+      genres: ["Action", "Sci-Fi"],
+      credits: [{ name: "Sunrise", role: "Studio" }],
+      releaseStatus: "finished",
+      startDate: "1998-04-03",
+      endDate: "1999-04-24",
+      durationMinutes: 25,
+      catalogTotal: 26,
+      communityRating: 8.2,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+
+    expect(await screen.findByText("Sci-Fi")).not.toBeNull();
+    expect(screen.getByText("Sunrise")).not.toBeNull();
+    expect(screen.getByText("25 min / episode")).not.toBeNull();
+    expect(screen.getByText("8.2/10 community")).not.toBeNull();
+    expect(screen.getByText("8 of 26")).not.toBeNull();
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/media/1/refresh-metadata",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("updates personal tracking without losing catalog metadata", async () => {
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    const enrichedItem = {
+      ...mediaItems[0],
+      format: "TV",
+      genres: ["Action", "Sci-Fi"],
+      credits: [{ name: "Sunrise", role: "Studio" }],
+      releaseStatus: "finished",
+      startDate: "1998-04-03",
+      endDate: "1999-04-24",
+      durationMinutes: 25,
+      catalogTotal: 26,
+      communityRating: 8.2,
+    };
+    bootstrap(router, [enrichedItem, ...mediaItems.slice(1)]);
+    router.json("PATCH", "/api/media/1", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json({
+        ...enrichedItem,
+        ...submitted,
+        updatedAt: "2026-01-05T00:00:00Z",
+      });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    const trigger = screen.getByRole("button", { name: "Manage title" });
+    await user.click(trigger);
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Manage Cowboy Bebop",
+    });
+    expect(document.activeElement).toBe(
+      screen.getByRole("combobox", { name: "Status" }),
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Status" }),
+      "completed",
+    );
+    const progress = screen.getByRole("spinbutton", {
+      name: "Current progress 26 total",
+    });
+    await user.clear(progress);
+    await user.type(progress, "26");
+    const rating = screen.getByRole("spinbutton", {
+      name: "Personal rating Use 0 to leave this title unrated.",
+    });
+    await user.clear(rating);
+    await user.type(rating, "10");
+    await user.type(
+      screen.getByRole("textbox", { name: "Review / notes" }),
+      "A timeless finale.",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({
+      title: "Cowboy Bebop",
+      type: "anime",
+      status: "completed",
+      progress: 26,
+      rating: 10,
+      notes: "A timeless finale.",
+      description: "Synthetic fixture",
+      format: "TV",
+      genres: ["Action", "Sci-Fi"],
+      credits: [{ name: "Sunrise", role: "Studio" }],
+      releaseStatus: "finished",
+      startDate: "1998-04-03",
+      endDate: "1999-04-24",
+      durationMinutes: 25,
+      catalogTotal: 26,
+      communityRating: 8.2,
+    });
+    expect(await screen.findByText("Completed")).not.toBeNull();
+    expect(screen.getByText("26 of 26")).not.toBeNull();
+    expect(screen.getByText("A timeless finale.")).not.toBeNull();
+  });
+
+  it("preserves management values after a failed save and restores focus on Escape", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json(
+      "PATCH",
+      "/api/media/1",
+      { error: "Could not save personal tracking" },
+      500,
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    const trigger = screen.getByRole("button", { name: "Manage title" });
+    await user.click(trigger);
+    const notes = screen.getByRole("textbox", { name: "Review / notes" });
+    await user.type(notes, "Keep this draft");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Could not save personal tracking",
+    );
+    expect((notes as HTMLTextAreaElement).value).toBe("Keep this draft");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Manage Cowboy Bebop" }))
+      .toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("sanitizes malformed optional metadata restored from session storage", async () => {
+    globalThis.sessionStorage.setItem(
+      "honne:catalog:kitsu:anime:broken",
+      JSON.stringify({
+        provider: "kitsu",
+        providerId: "broken",
+        providerUrl: "https://kitsu.io/anime/broken",
+        type: "anime",
+        title: "Safe title",
+        genres: ["Drama", 42],
+        credits: [null, { name: "Safe Studio", role: "Studio" }],
+        format: 42,
+        startDate: { year: 2020 },
+        durationMinutes: "25",
+        communityRating: "8.2",
+      }),
+    );
+    globalThis.history.replaceState(
+      null,
+      "",
+      "/#catalog/kitsu/anime/broken",
+    );
+    const router = createFetchRouter();
+    bootstrap(router, []);
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Safe title" }),
+    ).not.toBeNull();
+    expect(screen.getByText("Drama")).not.toBeNull();
+    expect(screen.getByText("Safe Studio")).not.toBeNull();
+    expect(screen.queryByText(/community/u)).toBeNull();
+  });
+
+  it("opens quick management when a catalog title already exists by title", async () => {
+    const result = {
+      provider: "kitsu",
+      providerId: "46474",
+      providerUrl: "https://kitsu.io/anime/46474",
+      type: "anime",
+      title: "Cowboy Bebop",
+      description: "Catalog synopsis",
+      subtitle: "TV",
+      genres: ["Action", "Sci-Fi"],
+      credits: [
+        { name: "Sunrise", role: "Studio" },
+        { name: "Shinichirō Watanabe", role: "Director" },
+      ],
+      releaseStatus: "finished",
+      startDate: "1998-04-03",
+      endDate: "1999-04-24",
+      durationMinutes: 25,
+      catalogTotal: 26,
+      communityRating: 8.2,
+    };
+    globalThis.sessionStorage.setItem(
+      "honne:catalog:kitsu:anime:46474",
+      JSON.stringify(result),
+    );
+    globalThis.history.replaceState(
+      null,
+      "",
+      "/#catalog/kitsu/anime/46474",
+    );
+    const router = createFetchRouter();
+    bootstrap(router);
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("Finished")).not.toBeNull();
+    expect(screen.getByText("Apr 3, 1998 – Apr 24, 1999")).not.toBeNull();
+    expect(screen.getByText("26 episodes")).not.toBeNull();
+    expect(screen.getByText("25 min / episode")).not.toBeNull();
+    expect(screen.getByText("8.2/10 community")).not.toBeNull();
+    const genres = screen.getByRole("region", { name: "Genres" });
+    expect(within(genres).getByText("Action")).not.toBeNull();
+    expect(within(genres).getByText("Sci-Fi")).not.toBeNull();
+    const credits = screen.getByRole("region", { name: "Credits" });
+    expect(within(credits).getByText("Sunrise")).not.toBeNull();
+    expect(within(credits).getByText("Director")).not.toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: "Manage in Library" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Manage Cowboy Bebop" }),
+    ).not.toBeNull();
+    expect(globalThis.location.hash).toBe("#catalog/kitsu/anime/46474");
+  });
+
+  it("offers an add flow and explicit fallbacks for incomplete catalog metadata", async () => {
+    const result = {
+      provider: "kitsu",
+      providerId: "99",
+      providerUrl: "https://kitsu.io/anime/99",
+      type: "anime",
+      title: "Unknown Journey",
+      coverUrl: "https://images.example.com/missing.jpg",
+      genres: ["Mystery"],
+      credits: [{ name: "Example Studio", role: "Studio" }],
+      releaseStatus: "upcoming",
+      startDate: "2027",
+      durationMinutes: 24,
+      catalogTotal: 12,
+      communityRating: 7.5,
+    };
+    globalThis.sessionStorage.setItem(
+      "honne:catalog:kitsu:anime:99",
+      JSON.stringify(result),
+    );
+    globalThis.history.replaceState(null, "", "/#catalog/kitsu/anime/99");
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router, []);
+    router.json("POST", "/api/media", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json({
+        ...submitted,
+        id: 4,
+        createdAt: "2026-01-05T00:00:00Z",
+        updatedAt: "2026-01-05T00:00:00Z",
+      }, { status: 201 });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const cover = await screen.findByRole("img", {
+      name: "Unknown Journey cover",
+    });
+    fireEvent.error(cover);
+    expect(
+      screen.getByRole("img", {
+        name: "No cover available for Unknown Journey",
+      }),
+    ).not.toBeNull();
+    expect(
+      screen.getByText("No synopsis is available from this provider."),
+    ).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add to Library" }));
+    const dialog = screen.getByRole("dialog", { name: "Add media" });
+    expect(
+      (within(dialog).getByRole("textbox", {
+        name: "Title",
+      }) as HTMLInputElement)
+        .value,
+    ).toBe("Unknown Journey");
+    expect(
+      (within(dialog).getByRole("combobox", {
+        name: /Type/,
+      }) as HTMLSelectElement)
+        .disabled,
+    ).toBe(true);
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({
+      title: "Unknown Journey",
+      genres: ["Mystery"],
+      credits: [{ name: "Example Studio", role: "Studio" }],
+      releaseStatus: "upcoming",
+      startDate: "2027",
+      durationMinutes: 24,
+      catalogTotal: 12,
+      communityRating: 7.5,
+    });
   });
 });

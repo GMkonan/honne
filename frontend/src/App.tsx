@@ -1,13 +1,17 @@
-import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import {
-  ArrowLeft,
+  type ChangeEvent,
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
   BookOpen,
   Check,
   CirclePlus,
   Clapperboard,
   Clock3,
   Cog,
-  ExternalLink,
   Film,
   Library,
   Link2,
@@ -27,8 +31,14 @@ import {
 import {
   GlobalSearchBox,
   type SearchCatalogResult,
+  type SearchMediaCredit,
 } from "./components/GlobalSearchBox.tsx";
 import { GlobalSearchPage } from "./components/GlobalSearchPage.tsx";
+import {
+  type ManagedMediaValues,
+  ManageMediaModal,
+} from "./components/ManageMediaModal.tsx";
+import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 
 type MediaType =
@@ -60,6 +70,15 @@ interface MediaInput {
   originalTitle: string;
   description: string;
   releaseYear: number;
+  format: string;
+  genres: string[];
+  credits: SearchMediaCredit[];
+  releaseStatus: string;
+  startDate: string;
+  endDate: string;
+  durationMinutes: number;
+  catalogTotal: number;
+  communityRating: number;
 }
 
 interface Media extends MediaInput {
@@ -209,6 +228,15 @@ const emptyForm: MediaInput = {
   originalTitle: "",
   description: "",
   releaseYear: 0,
+  format: "",
+  genres: [],
+  credits: [],
+  releaseStatus: "",
+  startDate: "",
+  endDate: "",
+  durationMinutes: 0,
+  catalogTotal: 0,
+  communityRating: 0,
 };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -236,22 +264,37 @@ function errorMessage(error: unknown): string {
     : "Something went wrong. Please try again.";
 }
 
-function isAlreadyInLibrary(result: DiscoveryResult, items: Media[]) {
-  if (
-    result.provider && result.providerId &&
-    items.some((item) =>
+function findExistingLibraryItem(
+  result: DiscoveryResult,
+  items: Media[],
+): Media | undefined {
+  if (result.provider && result.providerId) {
+    const providerMatch = items.find((item) =>
       item.provider === result.provider && item.providerId === result.providerId
-    )
-  ) return true;
+    );
+    if (providerMatch) return providerMatch;
+  }
 
   const resultTitles = [result.title, result.originalTitle]
     .filter((title): title is string => Boolean(title))
     .map((title) => title.trim().toLocaleLowerCase("en"));
-  return items.some((item) =>
+  return items.find((item) =>
     item.type === result.type &&
     [item.title, item.originalTitle].some((title) =>
       resultTitles.includes((title || "").trim().toLocaleLowerCase("en"))
     )
+  );
+}
+
+function isAlreadyInLibrary(result: DiscoveryResult, items: Media[]) {
+  return Boolean(findExistingLibraryItem(result, items));
+}
+
+function hasExpandedMetadata(item: Media): boolean {
+  return Boolean(
+    item.format || item.releaseStatus || item.startDate || item.endDate ||
+      item.durationMinutes || item.catalogTotal || item.communityRating ||
+      item.genres?.length || item.credits?.length,
   );
 }
 
@@ -271,6 +314,15 @@ function mediaToInput(item: Media): MediaInput {
     originalTitle: item.originalTitle,
     description: item.description,
     releaseYear: item.releaseYear,
+    format: item.format || "",
+    genres: Array.isArray(item.genres) ? item.genres : [],
+    credits: Array.isArray(item.credits) ? item.credits : [],
+    releaseStatus: item.releaseStatus || "",
+    startDate: item.startDate || "",
+    endDate: item.endDate || "",
+    durationMinutes: item.durationMinutes || 0,
+    catalogTotal: item.catalogTotal || 0,
+    communityRating: item.communityRating || 0,
   };
 }
 
@@ -370,6 +422,102 @@ function routeFromHash(): AppView {
   return "library";
 }
 
+function safeHTTPURL(value?: string): string {
+  if (!value) return "";
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.href
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+function safeStoredText(
+  value: unknown,
+  maxLength = 10_000,
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed && Array.from(trimmed).length <= maxLength
+    ? trimmed
+    : undefined;
+}
+
+function safeStoredNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) &&
+      value >= minimum && value <= maximum
+    ? value
+    : undefined;
+}
+
+function safeStoredDate(value: unknown): string | undefined {
+  const date = safeStoredText(value, 10);
+  return date && /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/u.test(date) ? date : undefined;
+}
+
+function sanitizeStoredResult(result: DiscoveryResult): DiscoveryResult {
+  const genres = Array.isArray(result.genres)
+    ? result.genres.map((genre) => safeStoredText(genre, 100)).filter(
+      (genre): genre is string => Boolean(genre),
+    ).slice(0, 12)
+    : [];
+  const credits = Array.isArray(result.credits)
+    ? result.credits.filter((credit) =>
+      Boolean(
+        credit && safeStoredText(credit.name, 100) &&
+          safeStoredText(credit.role, 100),
+      )
+    ).slice(0, 12).map((credit) => ({
+      name: credit.name.trim(),
+      role: credit.role.trim(),
+    }))
+    : [];
+  const releaseStatus = safeStoredText(result.releaseStatus, 20);
+  const allowedReleaseStatuses = [
+    "announced",
+    "upcoming",
+    "releasing",
+    "finished",
+    "cancelled",
+    "hiatus",
+  ];
+  return {
+    provider: result.provider,
+    providerId: result.providerId,
+    providerUrl: safeStoredText(result.providerUrl) || "",
+    type: result.type,
+    title: safeStoredText(result.title, 200) || "Untitled",
+    originalTitle: safeStoredText(result.originalTitle),
+    description: safeStoredText(result.description),
+    coverUrl: safeStoredText(result.coverUrl),
+    releaseYear: safeStoredNumber(result.releaseYear, 0, 9999),
+    total: safeStoredNumber(result.total, 0, Number.MAX_SAFE_INTEGER),
+    subtitle: safeStoredText(result.subtitle, 100),
+    format: safeStoredText(result.format, 50),
+    genres,
+    credits,
+    releaseStatus:
+      releaseStatus && allowedReleaseStatuses.includes(releaseStatus)
+        ? releaseStatus
+        : undefined,
+    startDate: safeStoredDate(result.startDate),
+    endDate: safeStoredDate(result.endDate),
+    durationMinutes: safeStoredNumber(result.durationMinutes, 0, 10_080),
+    catalogTotal: safeStoredNumber(
+      result.catalogTotal,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    ),
+    communityRating: safeStoredNumber(result.communityRating, 0, 10),
+  };
+}
+
 function storedExternalDetail(): DetailSelection | null {
   const match = globalThis.location.hash.match(
     /^#catalog\/([^/]+)\/([^/]+)\/([^/]+)$/,
@@ -385,9 +533,10 @@ function storedExternalDetail(): DetailSelection | null {
     ) as DiscoveryResult | null;
     if (
       result && result.provider === provider && result.type === type &&
-      result.providerId === providerId
+      result.providerId === providerId && safeStoredText(result.title, 200) &&
+      typeOptions.some((option) => option.value === result.type)
     ) {
-      return { kind: "external", result };
+      return { kind: "external", result: sanitizeStoredResult(result) };
     }
   } catch {
     // A missing or malformed session entry is handled by the not-found page.
@@ -435,6 +584,17 @@ function App() {
   const [modalItem, setModalItem] = useState<Media | null | undefined>(
     undefined,
   );
+  const [managedItem, setManagedItem] = useState<Media | undefined>(undefined);
+  const [metadataRefreshingId, setMetadataRefreshingId] = useState<
+    number | undefined
+  >(undefined);
+  const [metadataRefreshError, setMetadataRefreshError] = useState<
+    {
+      id: number;
+      message: string;
+    } | null
+  >(null);
+  const metadataRefreshAttempted = useRef(new Set<number>());
   const [draftItem, setDraftItem] = useState<MediaInput | undefined>(undefined);
   const [discoveryType, setDiscoveryType] = useState<
     MediaType | null | undefined
@@ -512,6 +672,19 @@ function App() {
     globalThis.addEventListener("hashchange", syncRoute);
     return () => globalThis.removeEventListener("hashchange", syncRoute);
   }, []);
+
+  useEffect(() => {
+    if (detail?.kind !== "local") {
+      setMetadataRefreshError(null);
+      return;
+    }
+    const item = items.find((entry) => entry.id === detail.mediaId);
+    if (
+      !item?.provider || hasExpandedMetadata(item) ||
+      metadataRefreshAttempted.current.has(item.id)
+    ) return;
+    void refreshMediaMetadata(item);
+  }, [detail, items]);
 
   useEffect(() => {
     const query = suggestionQuery.trim();
@@ -701,7 +874,8 @@ function App() {
         const existing = items.find((item) => item.id === caught.existingId);
         if (existing) {
           setDraftItem(undefined);
-          setModalItem(existing);
+          setModalItem(undefined);
+          setManagedItem(existing);
           return;
         }
       }
@@ -722,6 +896,43 @@ function App() {
     setDraftItem(undefined);
   }
 
+  async function refreshMediaMetadata(item: Media) {
+    metadataRefreshAttempted.current.add(item.id);
+    setMetadataRefreshingId(item.id);
+    setMetadataRefreshError(null);
+    try {
+      const refreshed = await request<Media>(
+        `/api/media/${item.id}/refresh-metadata`,
+        { method: "POST" },
+      );
+      setItems((current) =>
+        current.map((entry) => entry.id === refreshed.id ? refreshed : entry)
+      );
+    } catch (caught: unknown) {
+      setMetadataRefreshError({ id: item.id, message: errorMessage(caught) });
+    } finally {
+      setMetadataRefreshingId((current) =>
+        current === item.id ? undefined : current
+      );
+    }
+  }
+
+  async function saveManagedItem(
+    item: Media,
+    values: ManagedMediaValues,
+  ) {
+    const saved = await request<Media>(`/api/media/${item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ ...mediaToInput(item), ...values }),
+    });
+    setItems((current) =>
+      current.map((entry) => entry.id === saved.id ? saved : entry)
+    );
+    void refreshAniListStatus().catch(() => {});
+    void refreshActivity().catch(() => {});
+    setManagedItem(undefined);
+  }
+
   function reviewDiscovery(result: DiscoveryResult) {
     setDraftItem({
       ...emptyForm,
@@ -735,6 +946,15 @@ function App() {
       originalTitle: result.originalTitle || "",
       description: result.description || "",
       releaseYear: result.releaseYear || 0,
+      format: result.format || result.subtitle || "",
+      genres: Array.isArray(result.genres) ? result.genres : [],
+      credits: Array.isArray(result.credits) ? result.credits : [],
+      releaseStatus: result.releaseStatus || "",
+      startDate: result.startDate || "",
+      endDate: result.endDate || "",
+      durationMinutes: result.durationMinutes || 0,
+      catalogTotal: result.catalogTotal || result.total || 0,
+      communityRating: result.communityRating || 0,
     });
     setDiscoveryType(undefined);
     setModalItem(null);
@@ -1041,7 +1261,7 @@ function App() {
                         <MediaCard
                           item={item}
                           onOpen={() => openLocalDetail(item.id)}
-                          onEdit={() => setModalItem(item)}
+                          onEdit={() => setManagedItem(item)}
                           onDelete={() => deleteItem(item)}
                           key={item.id}
                         />
@@ -1136,15 +1356,18 @@ function App() {
             ? items.find((item) => item.id === detail.mediaId)
             : undefined}
           existing={detail?.kind === "external"
-            ? items.find((item) =>
-              item.provider === detail.result.provider &&
-              item.providerId === detail.result.providerId
-            )
+            ? findExistingLibraryItem(detail.result, items)
             : undefined}
+          metadataRefreshing={detail?.kind === "local" &&
+            metadataRefreshingId === detail.mediaId}
+          metadataError={detail?.kind === "local" &&
+              metadataRefreshError?.id === detail.mediaId
+            ? metadataRefreshError.message
+            : ""}
           onBack={leaveDetail}
-          onOpenExisting={(item) => openLocalDetail(item.id)}
           onAdd={reviewDiscovery}
-          onEdit={(item) => setModalItem(item)}
+          onRefreshMetadata={refreshMediaMetadata}
+          onManage={(item) => setManagedItem(item)}
           onDelete={async (item) => {
             if (await deleteItem(item)) navigate("library");
           }}
@@ -1177,6 +1400,18 @@ function App() {
           onClose={() => setDiscoveryType(undefined)}
           onSelect={reviewDiscovery}
           onManual={openManualEntry}
+        />
+      )}
+      {managedItem && (
+        <ManageMediaModal
+          key={managedItem.id}
+          item={managedItem}
+          onClose={() => setManagedItem(undefined)}
+          onEditDetails={() => {
+            setModalItem(managedItem);
+            setManagedItem(undefined);
+          }}
+          onSave={(values) => saveManagedItem(managedItem, values)}
         />
       )}
       {modalItem !== undefined && (
@@ -1345,160 +1580,6 @@ function SettingsPage(
           </p>
         </div>
       </section>
-    </main>
-  );
-}
-
-function MediaDetailPage(
-  {
-    selection,
-    loading,
-    media,
-    existing,
-    onBack,
-    onOpenExisting,
-    onAdd,
-    onEdit,
-    onDelete,
-  }: {
-    selection: DetailSelection | null;
-    loading: boolean;
-    media?: Media;
-    existing?: Media;
-    onBack: () => void;
-    onOpenExisting: (item: Media) => void;
-    onAdd: (result: DiscoveryResult) => void;
-    onEdit: (item: Media) => void;
-    onDelete: (item: Media) => void;
-  },
-) {
-  if (!selection || (selection.kind === "local" && !media)) {
-    const waitingForLibrary = loading && selection?.kind === "local";
-    return (
-      <main className="page-container standalone-page">
-        <div className="page-empty">
-          <h1>{waitingForLibrary ? "Loading title…" : "Title not found"}</h1>
-          <button type="button" className="primary-button" onClick={onBack}>
-            Back to library
-          </button>
-        </div>
-      </main>
-    );
-  }
-  const source = selection.kind === "local" ? media! : selection.result;
-  const type = typeOptions.find((option) => option.value === source.type);
-  const Icon = type?.icon || BookOpen;
-  const cover = source.coverUrl?.replaceAll('"', "") || "";
-  const description = source.description ||
-    (selection.kind === "local" ? media!.notes : "");
-  return (
-    <main className="page-container standalone-page detail-page">
-      <button type="button" className="back-button" onClick={onBack}>
-        <ArrowLeft size={15} /> Back
-      </button>
-      <article className="detail-card">
-        <div
-          className={`detail-cover ${cover ? "" : "fallback-cover"}`}
-          style={{ backgroundImage: cover ? `url("${cover}")` : undefined }}
-        >
-          {!cover && <Icon size={42} />}
-        </div>
-        <div className="detail-content">
-          <span className="eyebrow">
-            {type?.label} {source.releaseYear ? `· ${source.releaseYear}` : ""}
-          </span>
-          <h1>{source.title}</h1>
-          {source.originalTitle && source.originalTitle !== source.title && (
-            <p className="detail-original">{source.originalTitle}</p>
-          )}
-          <div className="detail-meta">
-            {selection.kind === "local"
-              ? (
-                <>
-                  <span>{statusLabel(media!.status, media!.type)}</span>
-                  <span>
-                    Progress {media!.total > 0
-                      ? `${media!.progress} / ${media!.total}`
-                      : media!.progress || "—"}
-                  </span>
-                  {media!.rating > 0 && (
-                    <span>
-                      <Star size={12} fill="currentColor" /> {media!.rating}/10
-                    </span>
-                  )}
-                </>
-              )
-              : (
-                <>
-                  {selection.result.subtitle && (
-                    <span>{selection.result.subtitle}</span>
-                  )}
-                  {selection.result.communityRating
-                    ? (
-                      <span>
-                        <Star size={12} fill="currentColor" />{" "}
-                        {selection.result.communityRating.toFixed(1)}/10
-                      </span>
-                    )
-                    : null}
-                  <span>{source.provider.replaceAll("_", " ")}</span>
-                </>
-              )}
-          </div>
-          {description && <p className="detail-description">{description}</p>}
-          {selection.kind === "local" && media!.notes && media!.description && (
-            <div className="detail-notes">
-              <span>Personal notes</span>
-              <p>{media!.notes}</p>
-            </div>
-          )}
-          <div className="detail-actions">
-            {selection.kind === "local"
-              ? (
-                <>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => onEdit(media!)}
-                  >
-                    <Pencil size={14} /> Update
-                  </button>
-                  <button
-                    type="button"
-                    className="danger-button"
-                    onClick={() => onDelete(media!)}
-                  >
-                    <Trash2 size={14} /> Remove
-                  </button>
-                </>
-              )
-              : existing
-              ? (
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => onOpenExisting(existing)}
-                >
-                  <Check size={14} /> Open in library
-                </button>
-              )
-              : (
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => onAdd(selection.result)}
-                >
-                  <CirclePlus size={14} /> Add to library
-                </button>
-              )}
-            {source.providerUrl && (
-              <a href={source.providerUrl} target="_blank" rel="noreferrer">
-                Provider page <ExternalLink size={13} />
-              </a>
-            )}
-          </div>
-        </div>
-      </article>
     </main>
   );
 }
@@ -2221,6 +2302,47 @@ function MediaModal(
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const previewCover = safeHTTPURL(initial?.coverUrl || item?.coverUrl || "");
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    titleRef.current?.focus();
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]",
+        ) || [],
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      triggerRef.current?.focus();
+    };
+  }, []);
 
   function change(
     event: ChangeEvent<
@@ -2236,6 +2358,7 @@ function MediaModal(
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     setSaving(true);
     setError("");
     try {
@@ -2252,10 +2375,12 @@ function MediaModal(
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <div
+        ref={dialogRef}
         className="modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        aria-busy={saving}
       >
         <div className="modal-header">
           <div>
@@ -2268,14 +2393,10 @@ function MediaModal(
         </div>
         {(initial?.provider || item?.provider) && (
           <div className="metadata-preview">
-            {(initial?.coverUrl || item?.coverUrl) && (
+            {previewCover && (
               <span
                 className="metadata-cover"
-                style={{
-                  backgroundImage: `url("${
-                    initial?.coverUrl || item?.coverUrl || ""
-                  }")`,
-                }}
+                style={{ backgroundImage: `url("${previewCover}")` }}
               />
             )}
             <div>
@@ -2298,23 +2419,31 @@ function MediaModal(
           <label className="wide">
             Title{" "}
             <input
+              ref={titleRef}
               name="title"
               value={form.title}
               onChange={change}
               required
-              autoFocus
               placeholder="e.g. The Lord of the Rings"
             />
           </label>
           <label>
             Type{" "}
-            <select name="type" value={form.type} onChange={change}>
+            <select
+              name="type"
+              value={form.type}
+              onChange={change}
+              disabled={Boolean(item?.provider || initial?.provider)}
+            >
               {typeOptions.map((type) => (
                 <option value={type.value} key={type.value}>
                   {type.label}
                 </option>
               ))}
             </select>
+            {(item?.provider || initial?.provider) && (
+              <small>Type is fixed by the catalog provider.</small>
+            )}
           </label>
           <label>
             Status{" "}
@@ -2379,10 +2508,14 @@ function MediaModal(
               placeholder="What do you think so far?"
             />
           </label>
-          {error && <p className="form-error">{error}</p>}
+          {error && <p className="form-error" role="alert">{error}</p>}
           <div className="form-actions">
             <button type="button" onClick={onClose}>Cancel</button>
-            <button type="submit" className="primary-button" disabled={saving}>
+            <button
+              type="submit"
+              className="primary-button"
+              aria-disabled={saving}
+            >
               {saving
                 ? "Saving..."
                 : item
