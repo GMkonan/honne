@@ -177,11 +177,13 @@ func (s *discoveryService) fetchAniListList(ctx context.Context, username string
   }
 }
 fragment mediaFields on Media {
-  id siteUrl format description(asHtml: false) episodes chapters averageScore
+  id siteUrl format status description(asHtml: false) episodes chapters duration genres averageScore
   title { romaji english native }
   coverImage { extraLarge }
-  startDate { year }
+  startDate { year month day }
+  endDate { year month day }
   studios(isMain: true) { nodes { name } }
+  staff(perPage: 6, sort: RELEVANCE) { edges { role node { name { full } } } }
 }`
 	request := map[string]any{"query": graphQL, "variables": map[string]any{"username": username}}
 	var payload struct {
@@ -219,11 +221,16 @@ fragment mediaFields on Media {
 				if entry.Media.Format == "NOVEL" {
 					mediaType = "light_novel"
 				}
-				total := entry.Media.Episodes
-				if mediaType != "anime" {
-					total = entry.Media.Chapters
-				}
-				entries = append(entries, anilistImportEntry{mediaInput: mediaInput{Title: preferredAniListTitle(entry.Media), Type: mediaType, Status: mapAniListStatus(entry.Status), Progress: entry.Progress, Total: total, Rating: normalizedAniListRating(entry.Score), Notes: entry.Notes, CoverURL: entry.Media.CoverImage.ExtraLarge, Provider: "anilist", ProviderID: id, ProviderURL: entry.Media.SiteURL, OriginalTitle: entry.Media.Title.Native, Description: cleanDescription(entry.Media.Description), ReleaseYear: entry.Media.StartDate.Year}, ProviderListEntryID: entry.ID})
+				catalog := anilistDiscoveryResult(entry.Media, mediaType)
+				entries = append(entries, anilistImportEntry{mediaInput: mediaInput{
+					Title: catalog.Title, Type: mediaType, Status: mapAniListStatus(entry.Status),
+					Progress: entry.Progress, Total: catalog.Total, Rating: normalizedAniListRating(entry.Score), Notes: entry.Notes,
+					CoverURL: catalog.CoverURL, Provider: catalog.Provider, ProviderID: id, ProviderURL: catalog.ProviderURL,
+					OriginalTitle: catalog.OriginalTitle, Description: catalog.Description, ReleaseYear: catalog.ReleaseYear,
+					Format: catalog.Format, Genres: catalog.Genres, Credits: catalog.Credits, ReleaseStatus: catalog.ReleaseStatus,
+					StartDate: catalog.StartDate, EndDate: catalog.EndDate, DurationMinutes: catalog.DurationMinutes,
+					CatalogTotal: catalog.CatalogTotal, CommunityRating: catalog.CommunityRating,
+				}, ProviderListEntryID: entry.ID})
 			}
 		}
 	}
@@ -264,7 +271,17 @@ func normalizedAniListRating(score float64) int {
 }
 
 func mediaFromInput(id int, input mediaInput, now time.Time) Media {
-	return Media{ID: id, Title: strings.TrimSpace(input.Title), Type: input.Type, Status: input.Status, Progress: input.Progress, Total: input.Total, Rating: input.Rating, Notes: strings.TrimSpace(input.Notes), CoverURL: strings.TrimSpace(input.CoverURL), Provider: input.Provider, ProviderID: input.ProviderID, ProviderURL: strings.TrimSpace(input.ProviderURL), OriginalTitle: strings.TrimSpace(input.OriginalTitle), Description: strings.TrimSpace(input.Description), ReleaseYear: input.ReleaseYear, CreatedAt: now, UpdatedAt: now}
+	return Media{
+		ID: id, Title: strings.TrimSpace(input.Title), Type: input.Type, Status: input.Status,
+		Progress: input.Progress, Total: input.Total, Rating: input.Rating, Notes: strings.TrimSpace(input.Notes),
+		CoverURL: strings.TrimSpace(input.CoverURL), Provider: input.Provider, ProviderID: input.ProviderID,
+		ProviderURL: strings.TrimSpace(input.ProviderURL), OriginalTitle: strings.TrimSpace(input.OriginalTitle),
+		Description: strings.TrimSpace(input.Description), ReleaseYear: input.ReleaseYear,
+		Format: strings.TrimSpace(input.Format), Genres: normalizedMetadataStrings(input.Genres), Credits: normalizedMediaCredits(input.Credits),
+		ReleaseStatus: input.ReleaseStatus, StartDate: input.StartDate, EndDate: input.EndDate,
+		DurationMinutes: input.DurationMinutes, CatalogTotal: input.CatalogTotal,
+		CommunityRating: input.CommunityRating, CreatedAt: now, UpdatedAt: now,
+	}
 }
 
 func stringSet(values []string) map[string]bool {

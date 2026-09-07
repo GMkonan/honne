@@ -5,11 +5,17 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestValidateInput(t *testing.T) {
-	valid := mediaInput{Title: "Duna", Type: "book", Status: "in_progress", Progress: 120, Total: 600, Rating: 8}
+	valid := mediaInput{
+		Title: "Duna", Type: "book", Status: "in_progress", Progress: 120, Total: 600, Rating: 8,
+		Genres: []string{"Science Fiction"}, Credits: []mediaCredit{{Name: "Frank Herbert", Role: "Author"}},
+		ReleaseYear: 1965, Format: "Hardcover", ReleaseStatus: "finished", StartDate: "1965", EndDate: "1965-08",
+		DurationMinutes: 120, CatalogTotal: 412, CommunityRating: 8.7,
+	}
 	if err := validateInput(valid); err != nil {
 		t.Fatalf("valid input rejected: %v", err)
 	}
@@ -21,10 +27,169 @@ func TestValidateInput(t *testing.T) {
 		{Title: "Duna", Type: "book", Status: "in_progress", Progress: 2, Total: 1},
 		{Title: "Duna", Type: "book", Status: "completed", Rating: 11},
 	}
+	tooManyGenres := valid
+	tooManyGenres.Genres = make([]string, 13)
+	for index := range tooManyGenres.Genres {
+		tooManyGenres.Genres[index] = "Genre"
+	}
+	tooManyCredits := valid
+	tooManyCredits.Credits = make([]mediaCredit, 13)
+	for index := range tooManyCredits.Credits {
+		tooManyCredits.Credits[index] = mediaCredit{Name: "Person", Role: "Author"}
+	}
+	invalidGenre := valid
+	invalidGenre.Genres = []string{strings.Repeat("x", 101)}
+	invalidCredit := valid
+	invalidCredit.Credits = []mediaCredit{{Name: "", Role: "Author"}}
+	invalidReleaseStatus := valid
+	invalidReleaseStatus.ReleaseStatus = "unknown"
+	invalidDate := valid
+	invalidDate.StartDate = "2024-02-30"
+	invalidDuration := valid
+	invalidDuration.DurationMinutes = 10081
+	invalidCatalogTotal := valid
+	invalidCatalogTotal.CatalogTotal = -1
+	invalidCommunityRating := valid
+	invalidCommunityRating.CommunityRating = 10.1
+	invalidFormat := valid
+	invalidFormat.Format = strings.Repeat("x", 51)
+	reversedDates := valid
+	reversedDates.StartDate = "1966"
+	reversedDates.EndDate = "1965-12-31"
+	mismatchedReleaseYear := valid
+	mismatchedReleaseYear.ReleaseYear = 1964
+	cases = append(cases, tooManyGenres, tooManyCredits, invalidGenre, invalidCredit, invalidReleaseStatus, invalidDate, invalidDuration, invalidCatalogTotal, invalidCommunityRating, invalidFormat, reversedDates, mismatchedReleaseYear)
+
 	for i, input := range cases {
 		if err := validateInput(input); err == nil {
 			t.Errorf("case %d: invalid input accepted", i)
 		}
+	}
+}
+
+func TestExpandedMediaMetadataPersistsAcrossCreateAndUpdate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	store, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store}
+	input := mediaInput{
+		Title: "Dune", Type: "book", Status: "planned", Total: 412,
+		Provider: "open_library", ProviderID: "OL123W", ProviderURL: "https://openlibrary.org/works/OL123W",
+		Genres:      []string{"Science Fiction", " science fiction ", "Politics"},
+		Credits:     []mediaCredit{{Name: " Frank Herbert ", Role: " Author "}},
+		ReleaseYear: 1965, Format: "Hardcover", ReleaseStatus: "finished", StartDate: "1965",
+		DurationMinutes: 120, CatalogTotal: 412, CommunityRating: 8.7,
+	}
+	created := httptest.NewRecorder()
+	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", input))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
+	}
+	if len(store.items) != 1 || strings.Join(store.items[0].Genres, ",") != "Science Fiction,Politics" || store.items[0].Credits[0] != (mediaCredit{Name: "Frank Herbert", Role: "Author"}) {
+		t.Fatalf("create did not normalize metadata: %+v", store.items)
+	}
+
+	input.Status = "completed"
+	input.Format = "Paperback"
+	input.Genres = nil
+	input.Credits = nil
+	input.ReleaseStatus = ""
+	input.StartDate = ""
+	input.DurationMinutes = 155
+	input.CatalogTotal = 0
+	input.CommunityRating = 0
+	updated := httptest.NewRecorder()
+	request := jsonRequest(http.MethodPatch, "/api/media/1", input)
+	request.SetPathValue("id", "1")
+	application.updateMedia(updated, request)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("update = %d: %s", updated.Code, updated.Body.String())
+	}
+
+	reopened, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := reopened.items[0]
+	if item.Format != "Hardcover" || item.ReleaseStatus != "finished" || item.StartDate != "1965" || item.DurationMinutes != 120 || item.CatalogTotal != 412 || item.CommunityRating != 8.7 || len(item.Genres) != 2 || len(item.Credits) != 1 {
+		t.Fatalf("expanded metadata did not survive legacy update/reopen: %+v", item)
+	}
+
+	identityChange := mediaInput{Title: item.Title, Type: "movie", Status: item.Status, Progress: item.Progress, Total: item.Total, Rating: item.Rating, Notes: item.Notes, CoverURL: item.CoverURL, Provider: item.Provider, ProviderID: item.ProviderID, ProviderURL: item.ProviderURL, OriginalTitle: item.OriginalTitle, Description: item.Description, ReleaseYear: item.ReleaseYear}
+	identityResponse := httptest.NewRecorder()
+	identityRequest := jsonRequest(http.MethodPatch, "/api/media/1", identityChange)
+	identityRequest.SetPathValue("id", "1")
+	application.updateMedia(identityResponse, identityRequest)
+	if identityResponse.Code != http.StatusUnprocessableEntity || store.items[0].Type != "book" {
+		t.Fatalf("provider identity change = %d, item=%+v", identityResponse.Code, store.items[0])
+	}
+}
+
+func TestManualMediaIdentityRemainsEditable(t *testing.T) {
+	store, err := newStore(filepath.Join(t.TempDir(), "media.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store}
+	created := httptest.NewRecorder()
+	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", mediaInput{
+		Title: "Manual title", Type: "anime", Status: "planned",
+	}))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
+	}
+
+	updated := httptest.NewRecorder()
+	request := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Manual movie", Type: "movie", Status: "completed", Progress: 1, Total: 1,
+	})
+	request.SetPathValue("id", "1")
+	application.updateMedia(updated, request)
+	if updated.Code != http.StatusOK || store.items[0].Type != "movie" || store.items[0].Title != "Manual movie" {
+		t.Fatalf("manual identity update = %d, item=%+v", updated.Code, store.items[0])
+	}
+}
+
+func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	legacy := `{"version":1,"items":[{"id":1,"title":"Legacy","type":"anime","status":"planned","progress":0,"total":12,"rating":0,"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(store.items) != 1 || store.items[0].Title != "Legacy" || len(store.items[0].Genres) != 0 || len(store.items[0].Credits) != 0 || store.items[0].CatalogTotal != 0 {
+		t.Fatalf("legacy snapshot did not load with metadata defaults: %+v", store.items)
+	}
+	store.mu.Lock()
+	err = store.persistLocked()
+	store.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(persisted), `"version": 2`) {
+		t.Fatalf("v1 snapshot was not upgraded on write: %s", persisted)
+	}
+	if _, err := newStore(path); err != nil {
+		t.Fatalf("v2 snapshot did not reopen: %v", err)
+	}
+}
+
+func TestNewStoreRejectsUnknownSnapshotVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	if err := os.WriteFile(path, []byte(`{"version":3,"items":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 3") {
+		t.Fatalf("expected unsupported version error, got %v", err)
 	}
 }
 

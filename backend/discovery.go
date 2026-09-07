@@ -27,18 +27,26 @@ var errProviderUnavailable = errors.New("provider is not configured")
 var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
 
 type discoveryResult struct {
-	Provider        string  `json:"provider"`
-	ProviderID      string  `json:"providerId"`
-	ProviderURL     string  `json:"providerUrl"`
-	Type            string  `json:"type"`
-	Title           string  `json:"title"`
-	OriginalTitle   string  `json:"originalTitle,omitempty"`
-	Description     string  `json:"description,omitempty"`
-	CoverURL        string  `json:"coverUrl,omitempty"`
-	ReleaseYear     int     `json:"releaseYear,omitempty"`
-	Total           int     `json:"total,omitempty"`
-	Subtitle        string  `json:"subtitle,omitempty"`
-	CommunityRating float64 `json:"communityRating,omitempty"`
+	Provider        string        `json:"provider"`
+	ProviderID      string        `json:"providerId"`
+	ProviderURL     string        `json:"providerUrl"`
+	Type            string        `json:"type"`
+	Title           string        `json:"title"`
+	OriginalTitle   string        `json:"originalTitle,omitempty"`
+	Description     string        `json:"description,omitempty"`
+	CoverURL        string        `json:"coverUrl,omitempty"`
+	ReleaseYear     int           `json:"releaseYear,omitempty"`
+	Format          string        `json:"format,omitempty"`
+	Total           int           `json:"total,omitempty"`
+	Subtitle        string        `json:"subtitle,omitempty"`
+	Genres          []string      `json:"genres,omitempty"`
+	Credits         []mediaCredit `json:"credits,omitempty"`
+	ReleaseStatus   string        `json:"releaseStatus,omitempty"`
+	StartDate       string        `json:"startDate,omitempty"`
+	EndDate         string        `json:"endDate,omitempty"`
+	DurationMinutes int           `json:"durationMinutes,omitempty"`
+	CatalogTotal    int           `json:"catalogTotal,omitempty"`
+	CommunityRating float64       `json:"communityRating,omitempty"`
 }
 
 type discoveryResponse struct {
@@ -56,14 +64,23 @@ type providerName struct {
 	Name string `json:"name"`
 }
 
+type providerDate struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+	Day   int `json:"day"`
+}
+
 type anilistMedia struct {
-	ID           int    `json:"id"`
-	SiteURL      string `json:"siteUrl"`
-	Description  string `json:"description"`
-	Episodes     int    `json:"episodes"`
-	Chapters     int    `json:"chapters"`
-	Format       string `json:"format"`
-	AverageScore int    `json:"averageScore"`
+	ID           int      `json:"id"`
+	SiteURL      string   `json:"siteUrl"`
+	Description  string   `json:"description"`
+	Episodes     int      `json:"episodes"`
+	Chapters     int      `json:"chapters"`
+	Format       string   `json:"format"`
+	Status       string   `json:"status"`
+	Duration     int      `json:"duration"`
+	Genres       []string `json:"genres"`
+	AverageScore int      `json:"averageScore"`
 	Title        struct {
 		Romaji  string `json:"romaji"`
 		English string `json:"english"`
@@ -72,12 +89,21 @@ type anilistMedia struct {
 	CoverImage struct {
 		ExtraLarge string `json:"extraLarge"`
 	} `json:"coverImage"`
-	StartDate struct {
-		Year int `json:"year"`
-	} `json:"startDate"`
-	Studios struct {
+	StartDate providerDate `json:"startDate"`
+	EndDate   providerDate `json:"endDate"`
+	Studios   struct {
 		Nodes []providerName `json:"nodes"`
 	} `json:"studios"`
+	Staff struct {
+		Edges []struct {
+			Role string `json:"role"`
+			Node struct {
+				Name struct {
+					Full string `json:"full"`
+				} `json:"name"`
+			} `json:"node"`
+		} `json:"edges"`
+	} `json:"staff"`
 }
 
 type cachedDiscovery struct {
@@ -244,11 +270,13 @@ func (s *discoveryService) searchAniList(ctx context.Context, mediaType, query s
   Page(page: $page, perPage: 20) {
     pageInfo { hasNextPage }
     media(search: $search, type: $type, isAdult: false) {
-      id siteUrl format description(asHtml: false) episodes chapters averageScore
+      id siteUrl format status description(asHtml: false) episodes chapters duration genres averageScore
       title { romaji english native }
       coverImage { extraLarge }
-      startDate { year }
+      startDate { year month day }
+      endDate { year month day }
       studios(isMain: true) { nodes { name } }
+      staff(perPage: 6, sort: RELEVANCE) { edges { role node { name { full } } } }
     }
   }
 }`
@@ -256,11 +284,13 @@ func (s *discoveryService) searchAniList(ctx context.Context, mediaType, query s
   Page(page: $page, perPage: 20) {
     pageInfo { hasNextPage }
     media(search: $search, type: $type, format: NOVEL, isAdult: false) {
-      id siteUrl format description(asHtml: false) episodes chapters averageScore
+      id siteUrl format status description(asHtml: false) episodes chapters duration genres averageScore
       title { romaji english native }
       coverImage { extraLarge }
-      startDate { year }
+      startDate { year month day }
+      endDate { year month day }
       studios(isMain: true) { nodes { name } }
+      staff(perPage: 6, sort: RELEVANCE) { edges { role node { name { full } } } }
     }
   }
 }`
@@ -301,17 +331,83 @@ func (s *discoveryService) searchAniList(ctx context.Context, mediaType, query s
 		if item.Format == "NOVEL" {
 			resultType = "light_novel"
 		}
-		total := item.Episodes
-		if resultType != "anime" {
-			total = item.Chapters
-		}
-		results = append(results, discoveryResult{Provider: "anilist", ProviderID: strconv.Itoa(item.ID), ProviderURL: item.SiteURL, Type: resultType, Title: preferredAniListTitle(item), OriginalTitle: item.Title.Native, Description: cleanDescription(item.Description), CoverURL: item.CoverImage.ExtraLarge, ReleaseYear: item.StartDate.Year, Total: total, Subtitle: firstName(item.Studios.Nodes), CommunityRating: float64(item.AverageScore) / 10})
+		results = append(results, anilistDiscoveryResult(item, resultType))
 	}
 	return discoveryResponse{Results: results, Page: page, HasMore: payload.Data.Page.PageInfo.HasNext}, nil
 }
 
+func anilistDiscoveryResult(item anilistMedia, mediaType string) discoveryResult {
+	total := item.Episodes
+	if mediaType != "anime" {
+		total = item.Chapters
+	}
+	credits := make([]mediaCredit, 0, len(item.Studios.Nodes)+len(item.Staff.Edges))
+	for _, studio := range item.Studios.Nodes {
+		credits = append(credits, mediaCredit{Name: studio.Name, Role: "Studio"})
+	}
+	for _, staff := range item.Staff.Edges {
+		credits = append(credits, mediaCredit{Name: staff.Node.Name.Full, Role: staff.Role})
+	}
+	return discoveryResult{
+		Provider: "anilist", ProviderID: strconv.Itoa(item.ID), ProviderURL: item.SiteURL,
+		Type: mediaType, Title: preferredAniListTitle(item), OriginalTitle: item.Title.Native,
+		Description: cleanDescription(item.Description), CoverURL: item.CoverImage.ExtraLarge,
+		ReleaseYear: item.StartDate.Year, Format: strings.TrimSpace(item.Format), Total: total,
+		Subtitle: firstName(item.Studios.Nodes), Genres: normalizedMetadataStrings(item.Genres),
+		Credits:       normalizedMediaCredits(credits),
+		ReleaseStatus: normalizedReleaseStatus(item.Status), StartDate: formatProviderDate(item.StartDate),
+		EndDate: formatProviderDate(item.EndDate), DurationMinutes: item.Duration, CatalogTotal: total,
+		CommunityRating: float64(item.AverageScore) / 10,
+	}
+}
+
+func formatProviderDate(value providerDate) string {
+	if value.Year <= 0 {
+		return ""
+	}
+	if value.Month <= 0 {
+		return fmt.Sprintf("%04d", value.Year)
+	}
+	if value.Day <= 0 {
+		return fmt.Sprintf("%04d-%02d", value.Year, value.Month)
+	}
+	return fmt.Sprintf("%04d-%02d-%02d", value.Year, value.Month, value.Day)
+}
+
+func normalizedReleaseStatus(value string) string {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "ANNOUNCED":
+		return "announced"
+	case "NOT_YET_RELEASED", "UPCOMING", "UNRELEASED", "TBA":
+		return "upcoming"
+	case "RELEASING", "CURRENT":
+		return "releasing"
+	case "FINISHED":
+		return "finished"
+	case "CANCELLED":
+		return "cancelled"
+	case "HIATUS":
+		return "hiatus"
+	default:
+		return ""
+	}
+}
+
+func normalizedBookSubjects(subjects []string) []string {
+	filtered := make([]string, 0, len(subjects))
+	for _, subject := range subjects {
+		trimmed := strings.TrimSpace(subject)
+		lower := strings.ToLower(trimmed)
+		if strings.HasPrefix(lower, "nyt:") || strings.HasPrefix(lower, "award:") || strings.HasSuffix(lower, " reviewed") {
+			continue
+		}
+		filtered = append(filtered, trimmed)
+	}
+	return normalizedMetadataStrings(filtered)
+}
+
 func (s *discoveryService) searchBooks(ctx context.Context, query string, page int) (discoveryResponse, error) {
-	values := url.Values{"q": {query}, "page": {strconv.Itoa(page)}, "limit": {strconv.Itoa(discoveryPageSize)}, "fields": {"key,title,author_name,first_publish_year,cover_i,number_of_pages_median"}}
+	values := url.Values{"q": {query}, "page": {strconv.Itoa(page)}, "limit": {strconv.Itoa(discoveryPageSize)}, "fields": {"key,title,author_name,first_publish_year,cover_i,number_of_pages_median,subject"}}
 	var payload struct {
 		NumFound int `json:"numFound"`
 		Docs     []struct {
@@ -321,6 +417,7 @@ func (s *discoveryService) searchBooks(ctx context.Context, query string, page i
 			Year      int      `json:"first_publish_year"`
 			CoverID   int      `json:"cover_i"`
 			PageCount int      `json:"number_of_pages_median"`
+			Subjects  []string `json:"subject"`
 		} `json:"docs"`
 	}
 	if err := s.getJSON(ctx, s.booksBase+"/search.json?"+values.Encode(), "", &payload); err != nil {
@@ -333,7 +430,16 @@ func (s *discoveryService) searchBooks(ctx context.Context, query string, page i
 		if item.CoverID > 0 {
 			cover = fmt.Sprintf("https://covers.openlibrary.org/b/id/%d-L.jpg", item.CoverID)
 		}
-		results = append(results, discoveryResult{Provider: "open_library", ProviderID: id, ProviderURL: "https://openlibrary.org" + item.Key, Type: "book", Title: item.Title, CoverURL: cover, ReleaseYear: item.Year, Total: item.PageCount, Subtitle: strings.Join(item.Authors, ", ")})
+		credits := make([]mediaCredit, 0, len(item.Authors))
+		for _, author := range item.Authors {
+			credits = append(credits, mediaCredit{Name: author, Role: "Author"})
+		}
+		results = append(results, discoveryResult{
+			Provider: "open_library", ProviderID: id, ProviderURL: "https://openlibrary.org" + item.Key,
+			Type: "book", Title: item.Title, ReleaseYear: item.Year, StartDate: formatProviderDate(providerDate{Year: item.Year}),
+			CoverURL: cover, Total: item.PageCount, CatalogTotal: item.PageCount, Subtitle: strings.Join(item.Authors, ", "),
+			Genres: normalizedBookSubjects(item.Subjects), Credits: normalizedMediaCredits(credits),
+		})
 	}
 	return discoveryResponse{Results: results, Page: page, HasMore: page*discoveryPageSize < payload.NumFound}, nil
 }
@@ -360,6 +466,7 @@ func (s *discoveryService) searchTMDB(ctx context.Context, mediaType, query stri
 			ReleaseDate  string  `json:"release_date"`
 			FirstAirDate string  `json:"first_air_date"`
 			Rating       float64 `json:"vote_average"`
+			GenreIDs     []int   `json:"genre_ids"`
 		} `json:"results"`
 	}
 	if err := s.getJSON(ctx, s.tmdbBase+"/search/"+resource+"?"+values.Encode(), s.tmdbToken, &payload); err != nil {
@@ -375,9 +482,39 @@ func (s *discoveryService) searchTMDB(ctx context.Context, mediaType, query stri
 		if item.Poster != "" {
 			cover = "https://image.tmdb.org/t/p/w500" + item.Poster
 		}
-		results = append(results, discoveryResult{Provider: "tmdb", ProviderID: strconv.Itoa(item.ID), ProviderURL: fmt.Sprintf("https://www.themoviedb.org/%s/%d", resource, item.ID), Type: mediaType, Title: title, OriginalTitle: original, Description: item.Overview, CoverURL: cover, ReleaseYear: yearFromDate(date), CommunityRating: item.Rating})
+		results = append(results, discoveryResult{
+			Provider: "tmdb", ProviderID: strconv.Itoa(item.ID), ProviderURL: fmt.Sprintf("https://www.themoviedb.org/%s/%d", resource, item.ID),
+			Type: mediaType, Title: title, OriginalTitle: original, Description: item.Overview, CoverURL: cover,
+			ReleaseYear: yearFromDate(date), StartDate: date, Genres: tmdbGenres(mediaType, item.GenreIDs), CommunityRating: item.Rating,
+		})
 	}
 	return discoveryResponse{Results: results, Page: page, HasMore: page < payload.TotalPages}, nil
+}
+
+func tmdbGenres(mediaType string, ids []int) []string {
+	movieGenres := map[int]string{
+		28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+		99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History",
+		27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance", 878: "Science Fiction",
+		10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+	}
+	seriesGenres := map[int]string{
+		10759: "Action & Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+		99: "Documentary", 18: "Drama", 10751: "Family", 10762: "Kids", 9648: "Mystery",
+		10763: "News", 10764: "Reality", 10765: "Sci-Fi & Fantasy", 10766: "Soap",
+		10767: "Talk", 10768: "War & Politics", 37: "Western",
+	}
+	lookup := movieGenres
+	if mediaType == "series" {
+		lookup = seriesGenres
+	}
+	genres := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if name := lookup[id]; name != "" {
+			genres = append(genres, name)
+		}
+	}
+	return normalizedMetadataStrings(genres)
 }
 
 func (s *discoveryService) getJSON(ctx context.Context, endpoint, token string, target any) error {
