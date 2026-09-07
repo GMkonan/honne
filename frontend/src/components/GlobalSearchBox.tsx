@@ -17,6 +17,11 @@ export type SearchMediaType =
   | "manga"
   | "light_novel";
 
+export interface SearchMediaCredit {
+  name: string;
+  role: string;
+}
+
 export interface SearchCatalogResult {
   provider: string;
   providerId: string;
@@ -29,6 +34,14 @@ export interface SearchCatalogResult {
   releaseYear?: number;
   total?: number;
   subtitle?: string;
+  format?: string;
+  genres?: string[];
+  credits?: SearchMediaCredit[];
+  releaseStatus?: string;
+  startDate?: string;
+  endDate?: string;
+  durationMinutes?: number;
+  catalogTotal?: number;
   communityRating?: number;
 }
 
