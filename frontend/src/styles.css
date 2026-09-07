@@ -1254,7 +1254,7 @@ button {
 .settings-card p {
   margin: 0;
   color: var(--overlay);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.55;
 }
 .connection-badge {
@@ -1266,7 +1266,7 @@ button {
   border-radius: 2px;
   color: var(--overlay);
   background: var(--surface);
-  font-size: 7px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 .connection-badge.connected {
@@ -1282,7 +1282,7 @@ button {
   padding: 10px;
   border: 1px solid var(--surface);
   background: var(--base);
-  font-size: 8px;
+  font-size: 12px;
 }
 .settings-integration-summary img {
   width: 30px;
@@ -1292,7 +1292,7 @@ button {
 }
 .settings-integration-summary strong {
   margin-right: auto;
-  font-size: 10px;
+  font-size: 12px;
 }
 .settings-integration-summary span {
   color: var(--overlay);
@@ -1310,8 +1310,18 @@ button {
   border: 1px solid var(--surface-2);
   color: var(--muted);
   background: transparent;
-  font-size: 9px;
+  font-size: 12px;
   cursor: pointer;
+}
+.settings-actions .primary-button {
+  font-size: 12px;
+}
+.settings-feedback {
+  margin-top: 12px !important;
+  color: var(--green) !important;
+}
+.settings-feedback.error {
+  color: var(--red) !important;
 }
 
 .search-page {

@@ -28,6 +28,7 @@ import {
   Tv,
   X,
 } from "lucide-react";
+import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
 import {
   GlobalSearchBox,
   type SearchCatalogResult,
@@ -1507,8 +1508,8 @@ function SettingsPage(
         <span className="eyebrow">HONNE CONFIGURATION</span>
         <h1>Settings</h1>
         <p>
-          Manage integrations and the way this installation connects to your
-          accounts.
+          Manage integrations, backups, and the way this installation handles
+          your data.
         </p>
       </header>
       <section className="settings-card">
@@ -1568,18 +1569,7 @@ function SettingsPage(
           </div>
         </div>
       </section>
-      <section className="settings-card compact">
-        <div className="settings-card-icon">
-          <Library size={21} />
-        </div>
-        <div className="settings-card-copy">
-          <h2>Local-first data</h2>
-          <p className="settings-note">
-            Your collection and activity journal live in the persistent Docker
-            volume. Provider outages never block local edits.
-          </p>
-        </div>
-      </section>
+      <BackupSettingsCard />
     </main>
   );
 }

@@ -2,17 +2,25 @@
 
 A self-hostable, local-first library for anime, series, movies, books, manga, and light novels. Track status, progress, ratings, and notes; optionally use metadata providers and synchronize AniList-linked titles back to AniList.
 
-## Run with Docker Compose
+## Install a release
 
-Docker Compose is the recommended deployment method. Only Docker is required.
+Docker Compose is the recommended deployment method. A release installation needs only Docker, `compose.yaml`, and `.env`; Git and the source code are not required.
 
 ```bash
-cp .env.example .env
-# Edit .env if you want authentication or optional integrations.
-docker compose up -d --build
+mkdir -p ~/honne && cd ~/honne
+curl -fLO https://github.com/GMkonan/honne/releases/latest/download/compose.yaml
+curl -fLO https://github.com/GMkonan/honne/releases/latest/download/env.example
+curl -fLO https://github.com/GMkonan/honne/releases/latest/download/checksums.txt
+sha256sum --check checksums.txt
+mv env.example .env
+chmod 600 .env
+# Edit .env to personalize the profile and configure optional providers.
+docker compose config --quiet
+docker compose pull
+docker compose up -d
 ```
 
-Open `http://localhost:8080`. The collection, activity journal, and pending synchronization jobs are stored in the `honne-data` Docker volume and survive container replacement.
+Open `http://localhost:8080`. The collection, activity journal, and pending synchronization jobs are stored in the named `honne-data` Docker volume and survive container replacement.
 
 Personalize the Library profile in `.env` with an optional name and avatar:
 
@@ -27,16 +35,72 @@ Useful commands:
 
 ```bash
 docker compose logs -f
-docker compose up -d --build
+docker compose pull && docker compose up -d
 docker compose down                 # keeps data
 docker compose down --volumes       # permanently deletes data
 ```
 
-Back up the persistent directory, including the AniList authorization. The backup contains a usable OAuth token, so store it as a secret:
+### Update or roll back
+
+Download the current release Compose file, set both images to the desired immutable tag through `HONNE_VERSION` in `.env`, and recreate the services:
+
+```bash
+curl -fL https://github.com/GMkonan/honne/releases/latest/download/compose.yaml -o compose.yaml
+# Edit HONNE_VERSION in .env, for example v0.2.0 or v0.1.0 for rollback.
+docker compose pull
+docker compose up -d
+```
+
+Back up before updating. Rolling back containers does not reverse a data migration; restore the matching pre-update backup when a release documents an incompatible persistence change.
+
+### Backup and restore
+
+Use **Settings → Download backup** for a safe JSON snapshot containing the collection, catalog metadata, activity journal, pending sync changes, and ID counters. The download intentionally excludes the AniList OAuth token; reconnect AniList after restoring it.
+
+Restore a downloaded snapshot only into the same or a newer Honne version. Preserve the current private data directory first so the operation can be reversed:
+
+```bash
+docker compose stop backend
+mkdir -p ./pre-restore-data
+docker compose cp backend:/data/. ./pre-restore-data/
+docker compose cp ./honne-backup-YYYYMMDDTHHMMSSZ.json backend:/data/media.json
+docker compose run --rm --no-deps --user root --entrypoint sh backend \
+  -c 'chown honne:honne /data/media.json && chmod 600 /data/media.json'
+docker compose start backend
+docker compose logs backend
+```
+
+On a fresh installation, reconnect the same AniList account after restoring. When restoring over an existing installation, its separate AniList authorization remains in `/data/anilist-auth.json`; pending jobs are account-bound and pause rather than run against a different account.
+
+For an operational backup of the complete private data directory, including AniList authorization, stop the backend and copy `/data`. This backup contains a usable OAuth token and must be stored as a secret:
 
 ```bash
 mkdir -p backup
+docker compose stop backend
 docker compose cp backend:/data/. ./backup/
+docker compose start backend
+```
+
+Existing source-based installations may use a Compose-prefixed volume such as `lists_honne-data`. Never run the source and release backends against that volume at the same time: their in-process locks do not coordinate with each other. Migrate it explicitly:
+
+```bash
+# In the old source checkout: make a backup, then stop without deleting volumes.
+docker compose down
+# In the standalone release directory:
+# set HONNE_DATA_VOLUME=lists_honne-data in .env
+docker compose up -d
+```
+
+Confirm the old backend is stopped before starting the release installation. Alternatively, leave `HONNE_DATA_VOLUME=honne-data` and restore a downloaded backup into the new volume.
+
+## Build from source
+
+Developers can keep using the repository Compose file:
+
+```bash
+cp .env.example .env
+# Edit .env if you want authentication or optional integrations.
+docker compose up -d --build
 ```
 
 ### Public deployment
@@ -168,8 +232,10 @@ docker compose build
 - `GET /api/profile`: public Library profile name and avatar
 - `GET /api/media`: list the collection
 - `GET /api/activity`: list recent library activity (`?limit=30`, maximum 100)
+- `GET /api/backup`: download a restorable JSON snapshot without AniList credentials
 - `POST /api/media`: add media
 - `PATCH /api/media/{id}`: update media
+- `POST /api/media/{id}/refresh-metadata`: refresh provider metadata for a linked title
 - `DELETE /api/media/{id}`: delete media
 - `GET /api/discovery/search?type=anime&q=bebop&page=1`: search one metadata catalog
 - `GET /api/discovery/global?q=bebop`: search all available metadata catalogs
