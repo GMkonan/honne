@@ -6,10 +6,29 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.tsx";
 import { disconnectedAniList, mediaItems } from "./test/fixtures.ts";
 import { createFetchRouter, type FetchRouter } from "./test/fetch-router.ts";
+
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  if (originalCreateObjectURL) {
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: originalCreateObjectURL,
+    });
+  } else delete (URL as { createObjectURL?: unknown }).createObjectURL;
+  if (originalRevokeObjectURL) {
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: originalRevokeObjectURL,
+    });
+  } else delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL;
+});
 
 function bootstrap(
   router: FetchRouter,
@@ -167,6 +186,91 @@ describe("Library characterization", () => {
         "aria-pressed",
       ),
     ).toBe("true");
+  });
+
+  it("downloads a restorable backup from Settings", async () => {
+    globalThis.history.replaceState(null, "", "/#settings");
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json(
+      "GET",
+      "/api/backup",
+      () =>
+        new Response('{"version":2,"items":[]}', {
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Disposition":
+              'attachment; filename="honne-backup-20260906T230000Z.json"',
+          },
+        }),
+    );
+    const createdURLs: string[] = [];
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => {
+        createdURLs.push("blob:honne-backup");
+        return "blob:honne-backup";
+      }),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    let downloadedAs = "";
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloadedAs = this.download;
+      });
+    const user = userEvent.setup();
+
+    render(<App />);
+    await user.click(
+      await screen.findByRole("button", { name: "Download backup" }),
+    );
+
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "Backup download started.",
+    );
+    expect(downloadedAs).toBe("honne-backup-20260906T230000Z.json");
+    expect(createdURLs).toEqual(["blob:honne-backup"]);
+    await waitFor(() =>
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:honne-backup")
+    );
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/backup",
+      expect.objectContaining({
+        headers: { Accept: "application/json" },
+        signal: expect.any(AbortSignal),
+      }),
+    );
+
+    click.mockRestore();
+  });
+
+  it("shows an accessible backup error and allows retry", async () => {
+    globalThis.history.replaceState(null, "", "/#settings");
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json(
+      "GET",
+      "/api/backup",
+      { error: "could not prepare backup" },
+      500,
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    const button = await screen.findByRole("button", {
+      name: "Download backup",
+    });
+    await user.click(button);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "could not prepare backup",
+    );
+    expect(button.hasAttribute("disabled")).toBe(false);
+    await user.click(button);
+    expect(router.fetch).toHaveBeenCalledTimes(6);
   });
 
   it("keeps Library items out of catalog suggestions", async () => {

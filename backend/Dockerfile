@@ -7,6 +7,9 @@ COPY backend/*.go ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /honne-api .
 
 FROM alpine:3.23
+LABEL org.opencontainers.image.source="https://github.com/GMkonan/honne" \
+    org.opencontainers.image.title="Honne backend" \
+    org.opencontainers.image.description="Local-first media library API"
 RUN addgroup -S honne && adduser -S -G honne honne \
     && mkdir -p /data \
     && chown honne:honne /data

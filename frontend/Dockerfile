@@ -9,6 +9,9 @@ COPY frontend/src ./src
 RUN deno task build
 
 FROM nginx:1.29-alpine
+LABEL org.opencontainers.image.source="https://github.com/GMkonan/honne" \
+    org.opencontainers.image.title="Honne frontend" \
+    org.opencontainers.image.description="Web interface for the Honne media library"
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
