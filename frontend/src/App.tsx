@@ -41,20 +41,16 @@ import {
 } from "./components/ManageMediaModal.tsx";
 import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
+import {
+  mediaStatusLabel,
+  mediaTracking,
+  optionalNumberInputValue,
+  type TrackingMediaStatus,
+  type TrackingMediaType,
+} from "./mediaTracking.ts";
 
-type MediaType =
-  | "anime"
-  | "series"
-  | "movie"
-  | "book"
-  | "manga"
-  | "light_novel";
-type MediaStatus =
-  | "planned"
-  | "in_progress"
-  | "completed"
-  | "paused"
-  | "dropped";
+type MediaType = TrackingMediaType;
+type MediaStatus = TrackingMediaStatus;
 
 interface MediaInput {
   title: string;
@@ -63,6 +59,7 @@ interface MediaInput {
   progress: number;
   total: number;
   rating: number;
+  repeatCount: number;
   notes: string;
   coverUrl: string;
   provider: string;
@@ -98,6 +95,8 @@ interface ActivityChanges {
   toProgress?: number;
   fromRating?: number;
   toRating?: number;
+  fromRepeatCount?: number;
+  toRepeatCount?: number;
 }
 
 interface ActivityEvent {
@@ -221,6 +220,7 @@ const emptyForm: MediaInput = {
   progress: 0,
   total: 0,
   rating: 0,
+  repeatCount: 0,
   notes: "",
   coverUrl: "",
   provider: "",
@@ -307,6 +307,7 @@ function mediaToInput(item: Media): MediaInput {
     progress: item.progress,
     total: item.total,
     rating: item.rating,
+    repeatCount: item.repeatCount || 0,
     notes: item.notes,
     coverUrl: item.coverUrl,
     provider: item.provider,
@@ -333,30 +334,15 @@ function previewCover(items: Media[], type?: MediaType): string {
   )?.coverUrl.replaceAll('"', "") || "";
 }
 
-function plannedLabel(type: MediaType | "all"): string {
-  if (["book", "manga", "light_novel"].includes(type)) return "Plan to read";
-  if (["anime", "series", "movie"].includes(type)) return "Plan to watch";
-  return "Plan to read/watch";
-}
-
-function statusLabel(
-  status?: MediaStatus,
-  type: MediaType | "all" = "all",
-): string {
-  if (status === "planned") return plannedLabel(type);
-  return statusOptions.find((option) => option.value === status)?.label ||
-    status?.replaceAll("_", " ") || "Unknown";
-}
-
 function activityDescription(activity: ActivityEvent): string {
   if (activity.action === "added") {
-    return `Added to ${
-      statusLabel(activity.changes.toStatus, activity.mediaType)
+    return `Added as ${
+      mediaStatusLabel(activity.changes.toStatus, activity.mediaType)
     }`;
   }
   if (activity.action === "imported") {
     return `Imported as ${
-      statusLabel(activity.changes.toStatus, activity.mediaType)
+      mediaStatusLabel(activity.changes.toStatus, activity.mediaType)
     }`;
   }
   if (activity.action === "deleted") return "Removed from the library";
@@ -364,14 +350,15 @@ function activityDescription(activity: ActivityEvent): string {
   const details: string[] = [];
   if (activity.changes.toStatus) {
     details.push(
-      `${statusLabel(activity.changes.fromStatus, activity.mediaType)} → ${
-        statusLabel(activity.changes.toStatus, activity.mediaType)
+      `${mediaStatusLabel(activity.changes.fromStatus, activity.mediaType)} → ${
+        mediaStatusLabel(activity.changes.toStatus, activity.mediaType)
       }`,
     );
   }
   if (activity.changes.toProgress !== undefined) {
+    const tracking = mediaTracking(activity.mediaType);
     details.push(
-      `Progress ${
+      `${tracking.tracksProgress ? tracking.unitLabel : "Progress"} ${
         activity.changes.fromProgress ?? 0
       } → ${activity.changes.toProgress}`,
     );
@@ -383,6 +370,13 @@ function activityDescription(activity: ActivityEvent): string {
         : `Rating ${
           activity.changes.fromRating ?? 0
         } → ${activity.changes.toRating}`,
+    );
+  }
+  if (activity.changes.toRepeatCount !== undefined) {
+    details.push(
+      `${mediaTracking(activity.mediaType).repeatLabel} ${
+        activity.changes.fromRepeatCount ?? 0
+      } → ${activity.changes.toRepeatCount}`,
     );
   }
   return details.join(" · ") || "Updated details";
@@ -939,7 +933,7 @@ function App() {
       ...emptyForm,
       title: result.title,
       type: result.type,
-      total: result.total || 0,
+      total: mediaTracking(result.type).tracksProgress ? result.total || 0 : 0,
       coverUrl: result.coverUrl || "",
       provider: result.provider,
       providerId: result.providerId,
@@ -1297,9 +1291,7 @@ function App() {
                       key={status.value}
                     >
                       <span>
-                        {status.value === "planned"
-                          ? plannedLabel(activeType)
-                          : status.label}
+                        {mediaStatusLabel(status.value, activeType)}
                       </span>
                       <strong>
                         {statusScope.filter((item) =>
@@ -1857,14 +1849,19 @@ function AniListImportModal(
             </label>
           </form>
 
-          {error && <div className="discovery-error import-error">{error}</div>}
+          {error && (
+            <div className="discovery-error import-error" role="alert">
+              {error}
+            </div>
+          )}
           {!preview && !loading && !error && (
             <div className="import-intro">
               <span className="profile-mark">A</span>
               <h3>Import a public AniList profile</h3>
               <p>
                 Anime, manga, and light novels will keep their list status,
-                progress, score, notes, covers, and metadata.
+                progress, score, rewatch or reread count, notes, covers, and
+                metadata.
               </p>
             </div>
           )}
@@ -2193,6 +2190,7 @@ function MediaCard(
   const type = typeOptions.find(({ value }) => value === item.type);
   const status = statusOptions.find(({ value }) => value === item.status);
   const Icon = type?.icon || BookOpen;
+  const tracking = mediaTracking(item.type);
   const percentage = item.total > 0
     ? Math.min(100, Math.round((item.progress / item.total) * 100))
     : item.status === "completed"
@@ -2211,7 +2209,7 @@ function MediaCard(
         }}
         onClick={onOpen}
         aria-label={`View details for ${item.title}. Status: ${
-          statusLabel(item.status, item.type)
+          mediaStatusLabel(item.status, item.type)
         }`}
       >
         {!item.coverUrl && (
@@ -2220,7 +2218,7 @@ function MediaCard(
           </span>
         )}
         <span className={`status ${item.status}`}>
-          {status ? statusLabel(status.value, item.type) : ""}
+          {status ? mediaStatusLabel(status.value, item.type) : ""}
         </span>
       </button>
       <div className="card-content">
@@ -2243,23 +2241,33 @@ function MediaCard(
             </span>
           )}
         </div>
-        <div className="progress-label">
-          <span>
-            {item.status === "planned"
-              ? "Not started"
-              : item.status === "completed"
-              ? "Completed"
-              : "Progress"}
-          </span>
-          <strong>
-            {item.total > 0
-              ? `${item.progress} / ${item.total}`
-              : item.progress || "—"}
-          </strong>
-        </div>
-        <div className="progress-track">
-          <span style={{ width: `${percentage}%` }} />
-        </div>
+        {tracking.tracksProgress
+          ? (
+            <>
+              <div className="progress-label">
+                <span>{tracking.unitLabel}</span>
+                <strong>
+                  {item.total > 0
+                    ? `${item.progress} / ${item.total}`
+                    : item.progress || "—"}
+                </strong>
+              </div>
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-label={`${tracking.progressLabel} for ${item.title}`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percentage}
+                aria-valuetext={item.total > 0
+                  ? `${item.progress} of ${item.total} ${tracking.unitPlural}`
+                  : `${item.progress} ${tracking.unitPlural}; total not set`}
+              >
+                <span style={{ width: `${percentage}%` }} />
+              </div>
+            </>
+          )
+          : <div className="progress-placeholder" aria-hidden="true" />}
         {item.notes && <p className="notes">{item.notes}</p>}
         <div className="card-actions">
           <button type="button" onClick={onEdit}>
@@ -2296,6 +2304,7 @@ function MediaModal(
   const titleRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const previewCover = safeHTTPURL(initial?.coverUrl || item?.coverUrl || "");
+  const tracking = mediaTracking(form.type);
 
   useEffect(() => {
     triggerRef.current = document.activeElement instanceof HTMLElement
@@ -2440,32 +2449,53 @@ function MediaModal(
             <select name="status" value={form.status} onChange={change}>
               {statusOptions.map((status) => (
                 <option value={status.value} key={status.value}>
-                  {statusLabel(status.value, form.type)}
+                  {mediaStatusLabel(status.value, form.type)}
                 </option>
               ))}
             </select>
           </label>
-          <label>
-            Current progress{" "}
+          <label className="wide">
+            {tracking.repeatLabel}{" "}
             <input
               type="number"
-              name="progress"
+              name="repeatCount"
               min="0"
-              value={form.progress}
+              max="1000"
+              step="1"
+              value={optionalNumberInputValue(form.repeatCount)}
               onChange={change}
+              placeholder="0"
             />
+            <small>{tracking.repeatHelp}</small>
           </label>
-          <label>
-            Total{" "}
-            <input
-              type="number"
-              name="total"
-              min="0"
-              value={form.total}
-              onChange={change}
-            />
-            <small>Episodes, pages, or chapters</small>
-          </label>
+          {tracking.tracksProgress && (
+            <>
+              <label>
+                {tracking.progressLabel}{" "}
+                <input
+                  type="number"
+                  name="progress"
+                  min="0"
+                  max={form.total > 0 ? form.total : undefined}
+                  value={optionalNumberInputValue(form.progress)}
+                  onChange={change}
+                  placeholder="0"
+                />
+              </label>
+              <label>
+                {tracking.totalLabel}{" "}
+                <input
+                  type="number"
+                  name="total"
+                  min="0"
+                  value={optionalNumberInputValue(form.total)}
+                  onChange={change}
+                  placeholder="0"
+                />
+                <small>Measured in {tracking.unitPlural}.</small>
+              </label>
+            </>
+          )}
           <label>
             Rating{" "}
             <input
@@ -2473,10 +2503,11 @@ function MediaModal(
               name="rating"
               min="0"
               max="10"
-              value={form.rating}
+              value={optionalNumberInputValue(form.rating)}
               onChange={change}
+              placeholder="0"
             />
-            <small>From 0 to 10</small>
+            <small>Leave blank to keep this title unrated.</small>
           </label>
           <label>
             Cover URL{" "}

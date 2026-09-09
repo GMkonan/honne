@@ -16,6 +16,7 @@ type anilistListEntry struct {
 	Status   string       `json:"status"`
 	Score    float64      `json:"score"`
 	Progress int          `json:"progress"`
+	Repeat   int          `json:"repeat"`
 	Notes    string       `json:"notes"`
 	Media    anilistMedia `json:"media"`
 }
@@ -84,11 +85,13 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "AniList username is required")
 		return
 	}
+	connectedAuth := aniListAuth{}
 	connected := false
 	if a.anilist != nil {
-		if connectedUsername, ok := a.anilist.connectedUsername(); ok {
+		if auth, ok := a.anilist.authSnapshot(); ok {
+			connectedAuth = auth
 			connected = true
-			if !strings.EqualFold(input.Username, connectedUsername) {
+			if !strings.EqualFold(input.Username, auth.Username) {
 				writeError(w, http.StatusUnprocessableEntity, "imports must use the connected AniList account")
 				return
 			}
@@ -137,9 +140,11 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 		}
 		item := mediaFromInput(a.store.nextID, entry.mediaInput, now)
 		if connected {
-			// A list-entry ID belongs to a specific AniList account. Keep it only
-			// after the import username has been verified against OAuth Viewer.
+			// A list-entry ID and repeat count belong to a specific AniList
+			// account. Keep them only after matching the import to OAuth Viewer.
 			item.ProviderListEntryID = entry.ProviderListEntryID
+			item.AniListUserID = connectedAuth.UserID
+			item.AniListRepeatKnown = true
 			item.SyncStatus = "synced"
 		} else {
 			item.SyncStatus = "local_only"
@@ -170,10 +175,10 @@ func (s *discoveryService) fetchAniListList(ctx context.Context, username string
 	const graphQL = `query ($username: String!) {
   User(name: $username) { name avatar { large } }
   anime: MediaListCollection(userName: $username, type: ANIME) {
-    lists { entries { id status score(format: POINT_10) progress notes media { ...mediaFields } } }
+    lists { entries { id status score(format: POINT_10) progress repeat notes media { ...mediaFields } } }
   }
   manga: MediaListCollection(userName: $username, type: MANGA) {
-    lists { entries { id status score(format: POINT_10) progress notes media { ...mediaFields } } }
+    lists { entries { id status score(format: POINT_10) progress repeat notes media { ...mediaFields } } }
   }
 }
 fragment mediaFields on Media {
@@ -222,9 +227,10 @@ fragment mediaFields on Media {
 					mediaType = "light_novel"
 				}
 				catalog := anilistDiscoveryResult(entry.Media, mediaType)
+				repeatCount := min(max(entry.Repeat, 0), maxRepeatCount)
 				entries = append(entries, anilistImportEntry{mediaInput: mediaInput{
 					Title: catalog.Title, Type: mediaType, Status: mapAniListStatus(entry.Status),
-					Progress: entry.Progress, Total: catalog.Total, Rating: normalizedAniListRating(entry.Score), Notes: entry.Notes,
+					Progress: entry.Progress, Total: catalog.Total, Rating: normalizedAniListRating(entry.Score), RepeatCount: &repeatCount, Notes: entry.Notes,
 					CoverURL: catalog.CoverURL, Provider: catalog.Provider, ProviderID: id, ProviderURL: catalog.ProviderURL,
 					OriginalTitle: catalog.OriginalTitle, Description: catalog.Description, ReleaseYear: catalog.ReleaseYear,
 					Format: catalog.Format, Genres: catalog.Genres, Credits: catalog.Credits, ReleaseStatus: catalog.ReleaseStatus,
@@ -273,7 +279,7 @@ func normalizedAniListRating(score float64) int {
 func mediaFromInput(id int, input mediaInput, now time.Time) Media {
 	return Media{
 		ID: id, Title: strings.TrimSpace(input.Title), Type: input.Type, Status: input.Status,
-		Progress: input.Progress, Total: input.Total, Rating: input.Rating, Notes: strings.TrimSpace(input.Notes),
+		Progress: input.Progress, Total: input.Total, Rating: input.Rating, RepeatCount: repeatCountValue(input.RepeatCount), Notes: strings.TrimSpace(input.Notes),
 		CoverURL: strings.TrimSpace(input.CoverURL), Provider: input.Provider, ProviderID: input.ProviderID,
 		ProviderURL: strings.TrimSpace(input.ProviderURL), OriginalTitle: strings.TrimSpace(input.OriginalTitle),
 		Description: strings.TrimSpace(input.Description), ReleaseYear: input.ReleaseYear,

@@ -183,7 +183,7 @@ func TestDiscoveryValidation(t *testing.T) {
 func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"User":{"name":"konan","avatar":{"large":"https://example.com/avatar.jpg"}},"anime":{"lists":[{"entries":[{"id":700,"status":"CURRENT","score":8,"progress":12,"notes":"great","media":{"id":20,"siteUrl":"https://anilist.co/anime/20","format":"TV","status":"FINISHED","description":"Ninjas.<br>More ninjas.","episodes":220,"duration":23,"genres":["Action"],"averageScore":79,"title":{"romaji":"NARUTO","english":"Naruto","native":"NARUTO -ナルト-"},"coverImage":{"extraLarge":"https://example.com/naruto.jpg"},"startDate":{"year":2002,"month":10,"day":3},"endDate":{"year":2007,"month":2,"day":8},"studios":{"nodes":[{"name":"Pierrot"}]},"staff":{"edges":[{"role":"Original Creator","node":{"name":{"full":"Masashi Kishimoto"}}}]}}}]}]},"manga":{"lists":[{"entries":[{"id":701,"status":"PLANNING","score":0,"progress":0,"notes":"","media":{"id":123,"siteUrl":"https://anilist.co/manga/123","format":"NOVEL","description":"A novel.","chapters":10,"title":{"romaji":"Novel","english":"A Novel","native":"小説"},"coverImage":{"extraLarge":"https://example.com/novel.jpg"},"startDate":{"year":2020},"studios":{"nodes":[]}}}]}]}}}`))
+		_, _ = w.Write([]byte(`{"data":{"User":{"name":"konan","avatar":{"large":"https://example.com/avatar.jpg"}},"anime":{"lists":[{"entries":[{"id":700,"status":"CURRENT","score":8,"progress":12,"repeat":2,"notes":"great","media":{"id":20,"siteUrl":"https://anilist.co/anime/20","format":"TV","status":"FINISHED","description":"Ninjas.<br>More ninjas.","episodes":220,"duration":23,"genres":["Action"],"averageScore":79,"title":{"romaji":"NARUTO","english":"Naruto","native":"NARUTO -ナルト-"},"coverImage":{"extraLarge":"https://example.com/naruto.jpg"},"startDate":{"year":2002,"month":10,"day":3},"endDate":{"year":2007,"month":2,"day":8},"studios":{"nodes":[{"name":"Pierrot"}]},"staff":{"edges":[{"role":"Original Creator","node":{"name":{"full":"Masashi Kishimoto"}}}]}}}]}]},"manga":{"lists":[{"entries":[{"id":701,"status":"PLANNING","score":0,"progress":0,"repeat":1,"notes":"","media":{"id":123,"siteUrl":"https://anilist.co/manga/123","format":"NOVEL","description":"A novel.","chapters":10,"title":{"romaji":"Novel","english":"A Novel","native":"小説"},"coverImage":{"extraLarge":"https://example.com/novel.jpg"},"startDate":{"year":2020},"studios":{"nodes":[]}}}]}]}}}`))
 	}))
 	defer server.Close()
 
@@ -195,7 +195,7 @@ func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	syncer.auth = &aniListAuth{AccessToken: "token", Username: "konan", ExpiresAt: time.Now().Add(time.Hour)}
+	syncer.auth = &aniListAuth{AccessToken: "token", UserID: 7, Username: "konan", ExpiresAt: time.Now().Add(time.Hour)}
 	application := &app{store: store, discovery: testDiscoveryService(server.URL), anilist: syncer}
 	body, _ := json.Marshal(anilistImportRequest{Username: "konan", Types: []string{"anime", "light_novel"}, Statuses: []string{"in_progress", "planned"}})
 	request := httptest.NewRequest(http.MethodPost, "/api/import/anilist", bytes.NewReader(body))
@@ -207,10 +207,10 @@ func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
 	if len(store.items) != 2 || store.items[0].Provider != "anilist" || store.items[1].Type != "light_novel" {
 		t.Fatalf("unexpected imported items: %+v", store.items)
 	}
-	if store.items[0].ProviderListEntryID != 700 || store.items[1].ProviderListEntryID != 701 || store.items[0].SyncStatus != "synced" {
+	if store.items[0].ProviderListEntryID != 700 || store.items[1].ProviderListEntryID != 701 || store.items[0].SyncStatus != "synced" || !store.items[0].AniListRepeatKnown || store.items[0].AniListUserID != 7 {
 		t.Fatalf("connected import did not retain owned list-entry IDs: %+v", store.items)
 	}
-	if strings.Contains(store.items[0].Description, "<br>") || store.items[0].Progress != 12 {
+	if strings.Contains(store.items[0].Description, "<br>") || store.items[0].Progress != 12 || store.items[0].RepeatCount != 2 || store.items[1].RepeatCount != 1 {
 		t.Fatalf("metadata was not normalized: %+v", store.items[0])
 	}
 	metadata := store.items[0]

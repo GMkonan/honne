@@ -108,7 +108,7 @@ describe("Library characterization", () => {
     const router = createFetchRouter();
     const statuses = [
       ["planned", "Plan to watch"],
-      ["in_progress", "In progress"],
+      ["in_progress", "Watching"],
       ["completed", "Completed"],
       ["paused", "Paused"],
       ["dropped", "Dropped"],
@@ -150,6 +150,9 @@ describe("Library characterization", () => {
     const statusFilters = screen.getByRole("complementary", {
       name: "Status filters",
     });
+    expect(
+      within(statusFilters).getByRole("button", { name: /^Reading/u }),
+    ).not.toBeNull();
     const planned = within(statusFilters).getByRole("button", {
       name: /^Plan to read/,
     });
@@ -196,7 +199,7 @@ describe("Library characterization", () => {
       "GET",
       "/api/backup",
       () =>
-        new Response('{"version":2,"items":[]}', {
+        new Response('{"version":3,"items":[]}', {
           headers: {
             "Content-Type": "application/json",
             "Content-Disposition":
@@ -481,6 +484,157 @@ describe("Library characterization", () => {
     expect(screen.getByRole("dialog", { name: "Add media" })).not.toBeNull();
   });
 
+  it("creates movies without numeric progress fields", async () => {
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router, []);
+    router.json("POST", "/api/media", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json(
+        {
+          ...mediaItems[2],
+          ...submitted,
+          id: 1,
+          createdAt: "2026-01-05T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        },
+        { status: 201 },
+      );
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Add manually" }));
+    const dialog = screen.getByRole("dialog", { name: "Add media" });
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Title" }),
+      "Arrival",
+    );
+    const typeSelect = within(dialog).getByRole("combobox", { name: "Type" });
+    for (
+      const [type, progressLabel] of [
+        ["anime", "Episodes watched"],
+        ["series", "Episodes watched"],
+        ["book", "Pages read"],
+        ["manga", "Chapters read"],
+        ["light_novel", "Chapters read"],
+      ] as const
+    ) {
+      await user.selectOptions(typeSelect, type);
+      expect(
+        within(dialog).getByRole("spinbutton", { name: progressLabel }),
+      ).not.toBeNull();
+    }
+    await user.selectOptions(typeSelect, "book");
+    expect(within(dialog).getByRole("option", { name: "Reading" })).not
+      .toBeNull();
+    expect(
+      within(dialog).getByRole("spinbutton", {
+        name: /Rereads Additional completed readings/u,
+      }),
+    ).not.toBeNull();
+    await user.selectOptions(typeSelect, "movie");
+
+    const repeatCount = within(dialog).getByRole("spinbutton", {
+      name: /Rewatches Additional completed viewings/u,
+    });
+    const rating = within(dialog).getByRole("spinbutton", {
+      name: "Rating Leave blank to keep this title unrated.",
+    });
+    expect((repeatCount as HTMLInputElement).value).toBe("");
+    expect((rating as HTMLInputElement).value).toBe("");
+    await user.type(rating, "10");
+    expect((rating as HTMLInputElement).value).toBe("10");
+    expect(
+      within(dialog).queryByRole("spinbutton", {
+        name: /Progress|episodes|pages|chapters/u,
+      }),
+    ).toBeNull();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({
+      title: "Arrival",
+      type: "movie",
+      progress: 0,
+      total: 0,
+      rating: 10,
+      repeatCount: 0,
+    });
+  });
+
+  it("keeps catalog movie metadata separate from personal progress", async () => {
+    const result = {
+      provider: "tmdb",
+      providerId: "329865",
+      providerUrl: "https://www.themoviedb.org/movie/329865",
+      type: "movie",
+      title: "Arrival",
+      total: 1,
+      catalogTotal: 1,
+      durationMinutes: 116,
+    };
+    globalThis.sessionStorage.setItem(
+      "honne:catalog:tmdb:movie:329865",
+      JSON.stringify(result),
+    );
+    globalThis.history.replaceState(
+      null,
+      "",
+      "/#catalog/tmdb/movie/329865",
+    );
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router, []);
+    router.json("POST", "/api/media", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json(
+        {
+          ...mediaItems[2],
+          ...submitted,
+          id: 1,
+          createdAt: "2026-01-05T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        },
+        { status: 201 },
+      );
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const addPanel = await screen.findByRole("region", {
+      name: "Add to your Library",
+    });
+    expect(within(addPanel).queryByText(/progress/u)).toBeNull();
+    expect(screen.queryByText("1 parts")).toBeNull();
+    expect(screen.getByText("116 min")).not.toBeNull();
+    await user.click(
+      within(addPanel).getByRole("button", { name: "Add to Library" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Add media" });
+    expect(
+      within(dialog).queryByRole("spinbutton", {
+        name: /Progress|episodes|pages|chapters/u,
+      }),
+    ).toBeNull();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({
+      type: "movie",
+      progress: 0,
+      total: 0,
+      catalogTotal: 1,
+    });
+  });
+
   it("keeps media details reachable from a Library card", async () => {
     const router = createFetchRouter();
     bootstrap(router);
@@ -499,9 +653,12 @@ describe("Library characterization", () => {
       screen.getByRole("region", { name: "About this title" }),
     ).not.toBeNull();
     const personal = screen.getByRole("region", { name: "Your Library" });
-    expect(within(personal).getByText("In progress")).not.toBeNull();
+    expect(within(personal).getByText("Watching")).not.toBeNull();
+    expect(within(personal).getByText("Episodes watched")).not.toBeNull();
     expect(within(personal).getByText("8 of 26")).not.toBeNull();
     expect(within(personal).getByText("9/10")).not.toBeNull();
+    const repeatLabel = within(personal).getByText("Rewatches");
+    expect(repeatLabel.nextElementSibling?.textContent).toBe("0");
 
     const manageTrigger = screen.getByRole("button", { name: "Manage title" });
     await user.click(manageTrigger);
@@ -618,15 +775,23 @@ describe("Library characterization", () => {
       "completed",
     );
     const progress = screen.getByRole("spinbutton", {
-      name: "Current progress 26 total",
+      name: "Episodes watched 26 episodes total",
     });
     await user.clear(progress);
+    expect((progress as HTMLInputElement).value).toBe("");
     await user.type(progress, "26");
     const rating = screen.getByRole("spinbutton", {
-      name: "Personal rating Use 0 to leave this title unrated.",
+      name: "Personal rating Leave blank to keep this title unrated.",
     });
     await user.clear(rating);
+    expect((rating as HTMLInputElement).value).toBe("");
     await user.type(rating, "10");
+    expect((rating as HTMLInputElement).value).toBe("10");
+    const repeatCount = screen.getByRole("spinbutton", {
+      name: /Rewatches Additional completed viewings/u,
+    });
+    expect((repeatCount as HTMLInputElement).value).toBe("");
+    await user.type(repeatCount, "1");
     await user.type(
       screen.getByRole("textbox", { name: "Review / notes" }),
       "A timeless finale.",
@@ -642,6 +807,7 @@ describe("Library characterization", () => {
       status: "completed",
       progress: 26,
       rating: 10,
+      repeatCount: 1,
       notes: "A timeless finale.",
       description: "Synthetic fixture",
       format: "TV",
@@ -657,6 +823,229 @@ describe("Library characterization", () => {
     expect(await screen.findByText("Completed")).not.toBeNull();
     expect(screen.getByText("26 of 26")).not.toBeNull();
     expect(screen.getByText("A timeless finale.")).not.toBeNull();
+    const personal = screen.getByRole("region", { name: "Your Library" });
+    expect(within(personal).getByText("Rewatches")).not.toBeNull();
+    expect(within(personal).getByText("1")).not.toBeNull();
+  });
+
+  it("saves cleared optional numbers as zero and keeps them visually empty", async () => {
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    const repeatedItem = { ...mediaItems[0], repeatCount: 2 };
+    bootstrap(router, [repeatedItem]);
+    router.json("PATCH", "/api/media/1", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json({
+        ...repeatedItem,
+        ...submitted,
+        updatedAt: "2026-01-05T00:00:00Z",
+      });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Manage Cowboy Bebop",
+    });
+    const rating = within(dialog).getByRole("spinbutton", {
+      name: "Personal rating Leave blank to keep this title unrated.",
+    });
+    const repeatCount = within(dialog).getByRole("spinbutton", {
+      name: /Rewatches Additional completed viewings/u,
+    });
+    await user.clear(rating);
+    await user.clear(repeatCount);
+    expect((rating as HTMLInputElement).value).toBe("");
+    expect((repeatCount as HTMLInputElement).value).toBe("");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({ rating: 0, repeatCount: 0 });
+    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    const reopened = screen.getByRole("dialog", {
+      name: "Manage Cowboy Bebop",
+    });
+    expect(
+      (within(reopened).getByRole("spinbutton", {
+        name: "Personal rating Leave blank to keep this title unrated.",
+      }) as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      (within(reopened).getByRole("spinbutton", {
+        name: /Rewatches Additional completed viewings/u,
+      }) as HTMLInputElement).value,
+    ).toBe("");
+  });
+
+  it("hides movie progress while preserving legacy values in updates", async () => {
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router);
+    router.json("PATCH", "/api/media/3", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json({
+        ...mediaItems[2],
+        ...submitted,
+        updatedAt: "2026-01-05T00:00:00Z",
+      });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(
+      await screen.findByRole("progressbar", {
+        name: "Episodes watched for Cowboy Bebop",
+      }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("progressbar", { name: "Pages read for Dune" }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("progressbar", {
+        name: /Spirited Away/u,
+      }),
+    ).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /^View details for Spirited Away/,
+      }),
+    );
+    const personal = screen.getByRole("region", { name: "Your Library" });
+    expect(within(personal).queryByText(/Progress|watched|read/u)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Manage title" }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Manage Spirited Away",
+    });
+    expect(within(dialog).getByRole("option", { name: "Watching" })).not
+      .toBeNull();
+    expect(
+      within(dialog).queryByRole("spinbutton", {
+        name: /Progress|episodes|pages|chapters/u,
+      }),
+    ).toBeNull();
+    const rating = within(dialog).getByRole("spinbutton", {
+      name: "Personal rating Leave blank to keep this title unrated.",
+    });
+    await user.clear(rating);
+    await user.type(rating, "9");
+    const repeatCount = within(dialog).getByRole("spinbutton", {
+      name: /Rewatches Additional completed viewings/u,
+    });
+    await user.type(repeatCount, "2");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({
+      type: "movie",
+      progress: 1,
+      total: 1,
+      rating: 9,
+      repeatCount: 2,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    await user.click(
+      screen.getByRole("button", { name: "Edit title details" }),
+    );
+    const editor = screen.getByRole("dialog", { name: "Update media" });
+    expect(
+      within(editor).queryByRole("spinbutton", { name: /Progress/u }),
+    ).toBeNull();
+    await user.selectOptions(
+      within(editor).getByRole("combobox", { name: /Type/u }),
+      "anime",
+    );
+    expect(
+      (within(editor).getByRole("spinbutton", {
+        name: "Episodes watched",
+      }) as HTMLInputElement).value,
+    ).toBe("1");
+    expect(
+      (within(editor).getByRole("spinbutton", {
+        name: /Total episodes/u,
+      }) as HTMLInputElement).value,
+    ).toBe("1");
+  });
+
+  it("labels Activity progress with the media-specific unit", async () => {
+    globalThis.history.replaceState(null, "", "/#activity");
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/activity?limit=100", [
+      {
+        id: 1,
+        mediaId: 1,
+        title: "Cowboy Bebop",
+        mediaType: "anime",
+        action: "updated",
+        changes: { fromProgress: 8, toProgress: 9 },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        id: 2,
+        mediaId: 2,
+        title: "Dune",
+        mediaType: "book",
+        action: "updated",
+        changes: { fromProgress: 100, toProgress: 120 },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        id: 3,
+        title: "A manga",
+        mediaType: "manga",
+        action: "updated",
+        changes: { fromProgress: 4, toProgress: 5 },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        id: 4,
+        mediaId: 3,
+        title: "Spirited Away",
+        mediaType: "movie",
+        action: "updated",
+        changes: { fromProgress: 0, toProgress: 1 },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        id: 5,
+        mediaId: 1,
+        title: "Cowboy Bebop",
+        mediaType: "anime",
+        action: "updated",
+        changes: { fromRepeatCount: 0, toRepeatCount: 1 },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        id: 6,
+        mediaId: 2,
+        title: "Dune",
+        mediaType: "book",
+        action: "updated",
+        changes: { fromRepeatCount: 1, toRepeatCount: 2 },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
+    ]);
+    render(<App />);
+
+    expect(await screen.findByText("Episodes 8 → 9")).not.toBeNull();
+    expect(screen.getByText("Pages 100 → 120")).not.toBeNull();
+    expect(screen.getByText("Chapters 4 → 5")).not.toBeNull();
+    expect(screen.getByText("Progress 0 → 1")).not.toBeNull();
+    expect(screen.getByText("Rewatches 0 → 1")).not.toBeNull();
+    expect(screen.getByText("Rereads 1 → 2")).not.toBeNull();
   });
 
   it("preserves management values after a failed save and restores focus on Escape", async () => {

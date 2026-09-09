@@ -163,6 +163,7 @@ For anime, manga, and light novels selected through AniList discovery, Honne syn
 - list status;
 - episode/chapter progress;
 - personal rating;
+- rewatch or reread count;
 - notes;
 - local deletion, when `ANILIST_DELETE_ON_LOCAL_DELETE=true`.
 
@@ -196,7 +197,6 @@ Use two terminals:
 ```bash
 cd backend
 cp .env.example .env # optional
-# If OAuth is not being configured yet, leave all three ANILIST_* OAuth values empty.
 go run .
 ```
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -61,7 +62,7 @@ func TestLegacyStoreMigratesWithDurableCoalescedOutbox(t *testing.T) {
 		t.Fatalf("migration did not survive restart: %+v", reopened)
 	}
 	persisted, _ := os.ReadFile(path)
-	if !strings.Contains(string(persisted), `"version": 2`) {
+	if !strings.Contains(string(persisted), `"version": 3`) {
 		t.Fatalf("expected versioned store, got %s", persisted)
 	}
 }
@@ -102,6 +103,51 @@ func TestManualAniListTypeStaysLocalOnly(t *testing.T) {
 	}
 }
 
+func TestRepeatUpdateQueuesOnlyAfterAniListValueIsKnown(t *testing.T) {
+	store, err := newStore(filepath.Join(t.TempDir(), "media.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.items = []Media{{
+		ID: 1, Title: "Bebop", Type: "anime", Status: "completed", Progress: 26, Total: 26,
+		Rating: 9, Notes: "Original", RepeatCount: 1, Provider: "anilist", ProviderID: "20", SyncStatus: "synced",
+	}}
+	store.nextID = 2
+	syncer, err := newAniListSync(testAniListConfig(store.path), store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store, anilist: syncer}
+
+	repeatOnly := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Bebop", Type: "anime", Status: "completed", Progress: 26, Total: 26,
+		Rating: 9, Notes: "Original", RepeatCount: intPointer(2), Provider: "anilist", ProviderID: "20",
+	})
+	repeatOnly.SetPathValue("id", "1")
+	repeatResponse := httptest.NewRecorder()
+	application.updateMedia(repeatResponse, repeatOnly)
+	if repeatResponse.Code != http.StatusOK || len(store.syncJobs) != 0 || store.items[0].SyncStatus != "synced" {
+		t.Fatalf("local repeat update affected AniList sync: code=%d item=%+v jobs=%+v", repeatResponse.Code, store.items[0], store.syncJobs)
+	}
+
+	store.items[0].AniListUserID = 7
+	store.items[0].AniListRepeatKnown = true
+	knownRepeatUpdate := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Bebop", Type: "anime", Status: "completed", Progress: 26, Total: 26,
+		Rating: 9, Notes: "Original", RepeatCount: intPointer(3), Provider: "anilist", ProviderID: "20",
+	})
+	knownRepeatUpdate.SetPathValue("id", "1")
+	knownResponse := httptest.NewRecorder()
+	application.updateMedia(knownResponse, knownRepeatUpdate)
+	if knownResponse.Code != http.StatusOK || len(store.syncJobs) != 1 || store.syncJobs[0].AniListUserID != 7 {
+		t.Fatalf("known repeat update did not queue for its AniList account: code=%d jobs=%+v", knownResponse.Code, store.syncJobs)
+	}
+	reopened, err := newStore(store.path)
+	if err != nil || len(reopened.syncJobs) != 1 || reopened.syncJobs[0].AniListUserID != 7 || reopened.items[0].RepeatCount != 3 {
+		t.Fatalf("repeat sync intent did not survive restart: store=%+v err=%v", reopened, err)
+	}
+}
+
 func TestDeleteCancelsUpsertQueuedBeforeAnyAccountWasConnected(t *testing.T) {
 	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
 	store.items = []Media{{ID: 1, Title: "Bebop", Type: "anime", Status: "planned", Provider: "anilist", ProviderID: "20"}}
@@ -131,7 +177,7 @@ func TestLocalOnlyDeleteDoesNotTouchConnectedAccount(t *testing.T) {
 	}
 }
 
-func TestSyncWorkerSendsFormatIndependentAniListValues(t *testing.T) {
+func TestSyncWorkerSafelyHydratesThenSendsAniListRepeat(t *testing.T) {
 	var received map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer token" {
@@ -144,8 +190,12 @@ func TestSyncWorkerSendsFormatIndependentAniListValues(t *testing.T) {
 			t.Fatal(err)
 		}
 		received = request.Variables
+		remoteRepeat := 4
+		if repeat, ok := received["repeat"].(float64); ok {
+			remoteRepeat = int(repeat)
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"SaveMediaListEntry":{"id":99}}}`))
+		_, _ = fmt.Fprintf(w, `{"data":{"SaveMediaListEntry":{"id":99,"repeat":%d}}}`, remoteRepeat)
 	}))
 	defer server.Close()
 
@@ -167,8 +217,107 @@ func TestSyncWorkerSendsFormatIndependentAniListValues(t *testing.T) {
 	if received["status"] != "CURRENT" || received["scoreRaw"] != float64(80) || received["progress"] != float64(7) {
 		t.Fatalf("unexpected AniList variables: %+v", received)
 	}
-	if len(store.syncJobs) != 0 || store.items[0].SyncStatus != "synced" || store.items[0].ProviderListEntryID != 99 {
-		t.Fatalf("sync result was not persisted: items=%+v jobs=%+v", store.items, store.syncJobs)
+	if _, sentUnknownRepeat := received["repeat"]; sentUnknownRepeat {
+		t.Fatalf("unknown local repeat count was sent to AniList: %+v", received)
+	}
+	if len(store.syncJobs) != 0 || store.items[0].SyncStatus != "synced" || store.items[0].ProviderListEntryID != 99 ||
+		store.items[0].RepeatCount != 4 || !store.items[0].AniListRepeatKnown || store.items[0].AniListUserID != 7 {
+		t.Fatalf("remote repeat was not safely hydrated: items=%+v jobs=%+v", store.items, store.syncJobs)
+	}
+
+	store.mu.Lock()
+	store.items[0].RepeatCount = 5
+	syncer.queueUpsertLocked(0)
+	store.mu.Unlock()
+	if !syncer.processNext(context.Background()) {
+		t.Fatal("expected worker to sync a known repeat count")
+	}
+	if received["repeat"] != float64(5) || store.items[0].RepeatCount != 5 || len(store.syncJobs) != 0 {
+		t.Fatalf("known repeat did not synchronize: variables=%+v item=%+v jobs=%+v", received, store.items[0], store.syncJobs)
+	}
+}
+
+func TestKnownAniListRepeatRequiresRemoteConfirmation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"SaveMediaListEntry":{"id":99}}}`))
+	}))
+	defer server.Close()
+
+	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+	cfg := testAniListConfig(store.path)
+	cfg.AniListAPIURL = server.URL
+	syncer, _ := newAniListSync(cfg, store)
+	_, err := syncer.upsertRemote(context.Background(), aniListAuth{AccessToken: "token", UserID: 7}, Media{
+		Provider: "anilist", ProviderID: "20", Type: "anime", Status: "completed",
+		RepeatCount: 2, AniListUserID: 7, AniListRepeatKnown: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "confirm the repeat count") {
+		t.Fatalf("known repeat was accepted without confirmation: %v", err)
+	}
+}
+
+func TestPositiveLocalRepeatIsPreservedDuringInitialHydration(t *testing.T) {
+	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+	sentItem := Media{ID: 1, Title: "Bebop", Type: "anime", Status: "completed", RepeatCount: 2, Provider: "anilist", ProviderID: "20"}
+	store.items = []Media{sentItem}
+	store.syncJobs = []syncJob{{
+		ID: 1, MediaID: 1, Operation: syncUpsert, ProviderMediaID: 20, AniListUserID: 7,
+		Generation: 1, NextAttemptAt: time.Now(),
+	}}
+	store.nextJobID = 2
+	syncer, _ := newAniListSync(testAniListConfig(store.path), store)
+	syncer.auth = &aniListAuth{AccessToken: "token", UserID: 7, Username: "owner", ExpiresAt: time.Now().Add(time.Hour)}
+	remoteRepeat := 0
+
+	syncer.recordSuccess(
+		store.syncJobs[0],
+		aniListUpsertResult{ListEntryID: 99, Repeat: &remoteRepeat},
+		sentItem,
+		7,
+	)
+
+	item := store.items[0]
+	if item.RepeatCount != 2 || !item.AniListRepeatKnown || item.AniListUserID != 7 || len(store.syncJobs) != 1 || store.syncJobs[0].AniListUserID != 7 {
+		t.Fatalf("positive local repeat was not preserved and queued: item=%+v jobs=%+v", item, store.syncJobs)
+	}
+}
+
+func TestAniListSuccessRollsBackWhenPersistenceFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	store, _ := newStore(path)
+	now := time.Now().UTC()
+	sentItem := Media{
+		ID: 1, Title: "Bebop", Type: "anime", Status: "completed", Provider: "anilist", ProviderID: "20",
+		SyncStatus: "pending", CreatedAt: now, UpdatedAt: now,
+	}
+	job := syncJob{
+		ID: 1, MediaID: 1, Operation: syncUpsert, ProviderMediaID: 20, AniListUserID: 7,
+		Generation: 1, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now,
+	}
+	store.items = []Media{sentItem}
+	store.syncJobs = []syncJob{job}
+	store.nextID = 2
+	store.nextJobID = 2
+	store.mu.Lock()
+	if err := store.persistLocked(); err != nil {
+		store.mu.Unlock()
+		t.Fatal(err)
+	}
+	store.mu.Unlock()
+
+	store.path = t.TempDir()
+	syncer, _ := newAniListSync(testAniListConfig(store.path), store)
+	remoteRepeat := 4
+	err := syncer.recordSuccess(job, aniListUpsertResult{ListEntryID: 99, Repeat: &remoteRepeat}, sentItem, 7)
+	if err == nil || store.items[0].ProviderListEntryID != 0 || store.items[0].RepeatCount != 0 ||
+		store.items[0].AniListRepeatKnown || len(store.syncJobs) != 1 || store.syncJobs[0].Attempts != 1 ||
+		store.items[0].SyncStatus != "error" {
+		t.Fatalf("failed success persistence did not roll back safely: err=%v item=%+v jobs=%+v", err, store.items[0], store.syncJobs)
+	}
+	reopened, err := newStore(path)
+	if err != nil || len(reopened.syncJobs) != 1 || reopened.items[0].SyncStatus != "pending" {
+		t.Fatalf("durable job was not recoverable after restart: store=%+v err=%v", reopened, err)
 	}
 }
 
@@ -199,6 +348,52 @@ func TestDeleteLooksUpListEntryWhenMissing(t *testing.T) {
 
 	if !syncer.processNext(context.Background()) || len(queries) != 2 || len(store.syncJobs) != 0 {
 		t.Fatalf("delete was not resolved and completed: queries=%d jobs=%+v", len(queries), store.syncJobs)
+	}
+}
+
+func TestDeleteSkipsLegacyAniListEntryWithUnknownOwner(t *testing.T) {
+	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+	item := Media{
+		ID: 1, Title: "Legacy", Type: "anime", Status: "completed", Provider: "anilist", ProviderID: "20",
+		ProviderListEntryID: 99, SyncStatus: "synced",
+	}
+	syncer, _ := newAniListSync(testAniListConfig(store.path), store)
+	syncer.auth = &aniListAuth{AccessToken: "token", UserID: 8, Username: "other", ExpiresAt: time.Now().Add(time.Hour)}
+	store.mu.Lock()
+	syncer.queueDeleteLocked(item)
+	store.mu.Unlock()
+	if len(store.syncJobs) != 0 {
+		t.Fatalf("legacy unowned list-entry ID was queued for deletion: %+v", store.syncJobs)
+	}
+}
+
+func TestDeleteKeepsRestoredAniListOwnerInsteadOfCurrentAccount(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"DeleteMediaListEntry":{"deleted":true}}}`))
+	}))
+	defer server.Close()
+
+	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+	item := Media{
+		ID: 1, Title: "Bebop", Type: "anime", Status: "completed", Provider: "anilist", ProviderID: "20",
+		ProviderListEntryID: 99, AniListUserID: 7, AniListRepeatKnown: true, SyncStatus: "synced",
+	}
+	cfg := testAniListConfig(store.path)
+	cfg.AniListAPIURL = server.URL
+	syncer, _ := newAniListSync(cfg, store)
+	syncer.auth = &aniListAuth{AccessToken: "token", UserID: 8, Username: "other", ExpiresAt: time.Now().Add(time.Hour)}
+	store.mu.Lock()
+	syncer.queueDeleteLocked(item)
+	store.mu.Unlock()
+
+	if len(store.syncJobs) != 1 || store.syncJobs[0].AniListUserID != 7 {
+		t.Fatalf("delete was assigned to the wrong AniList owner: %+v", store.syncJobs)
+	}
+	if syncer.processNext(context.Background()) || calls != 0 || store.syncJobs[0].LastError == "" {
+		t.Fatalf("cross-account delete was not safely paused: calls=%d jobs=%+v", calls, store.syncJobs)
 	}
 }
 
@@ -276,7 +471,7 @@ func TestForbiddenAniListResponsePausesForReconnect(t *testing.T) {
 func TestDisconnectDetachesSyncedItemsAndRejectsPendingJobs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	store, _ := newStore(path)
-	store.items = []Media{{ID: 1, Title: "Bebop", Type: "anime", Status: "planned", Provider: "anilist", ProviderID: "20", ProviderListEntryID: 99, SyncStatus: "synced"}}
+	store.items = []Media{{ID: 1, Title: "Bebop", Type: "anime", Status: "planned", RepeatCount: 2, Provider: "anilist", ProviderID: "20", ProviderListEntryID: 99, AniListUserID: 7, AniListRepeatKnown: true, SyncStatus: "synced"}}
 	cfg := testAniListConfig(path)
 	syncer, _ := newAniListSync(cfg, store)
 	syncer.auth = &aniListAuth{AccessToken: "token", UserID: 7, Username: "owner", ExpiresAt: time.Now().Add(time.Hour)}
@@ -293,7 +488,7 @@ func TestDisconnectDetachesSyncedItemsAndRejectsPendingJobs(t *testing.T) {
 
 	disconnected := httptest.NewRecorder()
 	syncer.disconnectHandler(disconnected, httptest.NewRequest(http.MethodDelete, "/api/integrations/anilist?discardPending=true", nil))
-	if disconnected.Code != http.StatusNoContent || len(store.syncJobs) != 0 || store.items[0].SyncStatus != "local_only" || store.items[0].ProviderListEntryID != 0 {
+	if disconnected.Code != http.StatusNoContent || len(store.syncJobs) != 0 || store.items[0].SyncStatus != "local_only" || store.items[0].ProviderListEntryID != 0 || store.items[0].AniListUserID != 0 || store.items[0].AniListRepeatKnown {
 		t.Fatalf("forced disconnect did not discard jobs and detach items: code=%d jobs=%+v item=%+v", disconnected.Code, store.syncJobs, store.items[0])
 	}
 }

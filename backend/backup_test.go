@@ -17,7 +17,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	s := &store{
 		items: []Media{{
 			ID: 7, Title: "Cowboy Bebop", Type: "anime", Status: "in_progress",
-			Progress: 8, Genres: []string{"Sci-Fi"}, CreatedAt: now, UpdatedAt: now,
+			Progress: 8, RepeatCount: 2, Genres: []string{"Sci-Fi"}, AniListUserID: 42, AniListRepeatKnown: true, CreatedAt: now, UpdatedAt: now,
 		}},
 		syncJobs: []syncJob{{
 			ID: 9, MediaID: 7, Operation: "upsert", ProviderMediaID: 1,
@@ -39,7 +39,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	if response.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
 		response.Header().Get("Cache-Control") != "no-store" ||
 		response.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		response.Header().Get("X-Honne-Backup-Version") != "2" {
+		response.Header().Get("X-Honne-Backup-Version") != "3" {
 		t.Fatalf("unexpected backup headers: %v", response.Header())
 	}
 	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, `attachment; filename="honne-backup-`) || !strings.HasSuffix(disposition, `.json"`) {
@@ -57,7 +57,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backup could not be restored: %v", err)
 	}
-	if len(restored.items) != 1 || restored.items[0].ID != 7 || restored.items[0].Genres[0] != "Sci-Fi" ||
+	if len(restored.items) != 1 || restored.items[0].ID != 7 || restored.items[0].RepeatCount != 2 || restored.items[0].AniListUserID != 42 || !restored.items[0].AniListRepeatKnown || restored.items[0].Genres[0] != "Sci-Fi" ||
 		len(restored.syncJobs) != 1 || restored.syncJobs[0].ID != 9 ||
 		len(restored.activities) != 1 || restored.activities[0].ID != 11 ||
 		restored.nextID != 8 || restored.nextJobID != 10 || restored.nextActivityID != 12 {
