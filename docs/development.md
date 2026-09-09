@@ -10,7 +10,7 @@ cp -n .env.example .env
 docker compose up -d --build
 ```
 
-Open `http://localhost:7417`. The source-development default is bound to `127.0.0.1` and intentionally differs from the `8080` default used by published release assets.
+Open `http://localhost:7417`. Both source development and published release assets use this localhost-only host port by default.
 
 ## Run the processes directly
 

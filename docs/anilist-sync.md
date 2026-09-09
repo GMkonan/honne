@@ -20,8 +20,7 @@ Common redirect URLs:
 
 | Installation | Redirect URL |
 | --- | --- |
-| Release default | `http://localhost:8080/api/integrations/anilist/callback` |
-| Source Compose default | `http://localhost:7417/api/integrations/anilist/callback` |
+| Local release or source default | `http://localhost:7417/api/integrations/anilist/callback` |
 | Public domain | `https://lists.example.com/api/integrations/anilist/callback` |
 
 The scheme, host, port, and path must match exactly. Copy the generated **Client ID** and **Client Secret**.
@@ -33,13 +32,13 @@ Add the credentials and the same redirect URL to the installation's `.env` file:
 ```dotenv
 ANILIST_CLIENT_ID=1234
 ANILIST_CLIENT_SECRET=replace-with-the-client-secret
-ANILIST_REDIRECT_URL=http://localhost:8080/api/integrations/anilist/callback
+ANILIST_REDIRECT_URL=http://localhost:7417/api/integrations/anilist/callback
 
 # Keep false initially so local deletion cannot remove the AniList entry.
 ANILIST_DELETE_ON_LOCAL_DELETE=false
 ```
 
-Never commit or share the client secret. For a source Compose installation on port `7417`, replace the redirect URL accordingly. Honne's environment templates default `ANILIST_DELETE_ON_LOCAL_DELETE` to `true`; change it explicitly to `false` before connecting if local deletion must remain local-only.
+Never commit or share the client secret. Honne's environment templates default `ANILIST_DELETE_ON_LOCAL_DELETE` to `true`; change it explicitly to `false` before connecting if local deletion must remain local-only.
 
 Recreate the backend so it receives the new environment:
 
@@ -94,7 +93,7 @@ Disconnecting does not remove entries from AniList. The access token is stored s
 
 ### AniList rejects the callback
 
-The redirect URL registered in AniList Developer Settings must exactly equal `ANILIST_REDIRECT_URL`, including `/api/integrations/anilist/callback`. Separately, `APP_ORIGIN` must equal the origin used to open Honne, such as `http://localhost:8080`, without the callback path.
+The redirect URL registered in AniList Developer Settings must exactly equal `ANILIST_REDIRECT_URL`, including `/api/integrations/anilist/callback`. Separately, `APP_ORIGIN` must equal the origin used to open Honne, such as `http://localhost:7417`, without the callback path.
 
 Update all three settings together when changing Honne's scheme, host, or port.
 

@@ -27,7 +27,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Open `http://localhost:8080`. Collection data, activities, pending synchronization jobs, and ID counters are stored in the named `honne-data` volume.
+Open `http://localhost:7417`. Collection data, activities, pending synchronization jobs, and ID counters are stored in the named `honne-data` volume.
 
 Useful commands:
 
@@ -160,8 +160,8 @@ Alternatively, keep `HONNE_DATA_VOLUME=honne-data` and restore a downloaded JSON
 The release binds to localhost by default. For a different local port, update both values:
 
 ```dotenv
-HONNE_PORT=127.0.0.1:7417
-APP_ORIGIN=http://localhost:7417
+HONNE_PORT=127.0.0.1:8123
+APP_ORIGIN=http://localhost:8123
 ```
 
 When AniList OAuth is enabled, its registered redirect URL and `ANILIST_REDIRECT_URL` must use the same host and port.
@@ -169,8 +169,8 @@ When AniList OAuth is enabled, its registered redirect URL and `ANILIST_REDIRECT
 For remote access, prefer a private network such as Tailscale. A public deployment must use authentication and HTTPS. Put Honne behind a reverse proxy and configure its external origin:
 
 ```dotenv
-HONNE_PORT=127.0.0.1:8080
+HONNE_PORT=127.0.0.1:7417
 APP_ORIGIN=https://lists.example.com
 ```
 
-Proxy `https://lists.example.com` to `http://127.0.0.1:8080`. `APP_ORIGIN` is also the destination after the AniList OAuth callback.
+Proxy `https://lists.example.com` to `http://127.0.0.1:7417`. `APP_ORIGIN` is also the destination after the AniList OAuth callback.

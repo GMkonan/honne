@@ -39,7 +39,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Open [http://localhost:8080](http://localhost:8080). Your collection is stored in the `honne-data` Docker volume and survives container replacement.
+Open [http://localhost:7417](http://localhost:7417). Your collection is stored in the `honne-data` Docker volume and survives container replacement.
 
 Provider credentials are optional. Without them, Honne remains fully usable for manual tracking; AniList/Kitsu and Open Library discovery are credential-free, while TMDB and authenticated AniList synchronization require configuration.
 
@@ -56,4 +56,4 @@ cp -n .env.example .env
 docker compose up -d --build
 ```
 
-The source Compose environment opens on [http://localhost:7417](http://localhost:7417) by default, separately from the `8080` release default. See the [development guide](docs/development.md) for local processes and validation commands.
+The source Compose environment also opens on [http://localhost:7417](http://localhost:7417) by default. See the [development guide](docs/development.md) for local processes and validation commands.
