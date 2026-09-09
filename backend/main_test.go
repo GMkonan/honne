@@ -364,7 +364,7 @@ func TestLoadConfigValidatesOptionalAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Port != "8080" || cfg.AppUsername != "owner" || cfg.AniListDeleteEnabled {
+	if cfg.Port != "7417" || cfg.AppUsername != "owner" || cfg.AniListDeleteEnabled {
 		t.Fatalf("unexpected config: %+v", cfg)
 	}
 }
