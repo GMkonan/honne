@@ -151,8 +151,10 @@ interface AniListImportPreview {
 
 interface AniListImportResult {
   imported: number;
+  reconciled?: number;
   skipped: number;
   items: Media[];
+  reconciledItems?: Media[];
 }
 
 class RequestError extends Error {
@@ -970,7 +972,13 @@ function App() {
       method: "POST",
       body: JSON.stringify({ username, types, statuses }),
     });
-    setItems((current) => [...result.items, ...current]);
+    const reconciled = new Map(
+      (result.reconciledItems || []).map((item) => [item.id, item]),
+    );
+    setItems((current) => [
+      ...result.items,
+      ...current.map((item) => reconciled.get(item.id) || item),
+    ]);
     void refreshAniListStatus().catch(() => {});
     void refreshActivity().catch(() => {});
     setImportOpen(false);
@@ -1791,11 +1799,18 @@ function AniListImportModal(
       !entry.alreadyExists && selectedTypes.includes(entry.type) &&
       selectedStatuses.includes(entry.status)
     ).length || 0;
+  const selectedExistingCount = integration?.connected
+    ? preview?.entries.filter((entry) =>
+      entry.alreadyExists && selectedTypes.includes(entry.type) &&
+      selectedStatuses.includes(entry.status)
+    ).length || 0
+    : 0;
   const existingCount = preview?.entries.filter((entry) => entry.alreadyExists)
     .length || 0;
+  const selectedChangeCount = selectedCount + selectedExistingCount;
 
   async function confirmImport() {
-    if (!preview || selectedCount === 0) return;
+    if (!preview || selectedChangeCount === 0) return;
     setImporting(true);
     setError("");
     try {
@@ -1941,8 +1956,16 @@ function AniListImportModal(
               </fieldset>
 
               <div className="import-summary">
-                <span>{selectedCount} new titles selected</span>
-                <small>Existing AniList IDs are skipped automatically.</small>
+                <span>
+                  {selectedCount} new titles selected
+                  {selectedExistingCount > 0 &&
+                    ` · ${selectedExistingCount} existing titles to link`}
+                </span>
+                <small>
+                  {integration?.connected
+                    ? "Existing selected titles link to your account, refresh repeat counts, and queue local tracking differences."
+                    : "Existing AniList IDs are skipped automatically."}
+                </small>
               </div>
             </div>
           )}
@@ -1954,9 +1977,17 @@ function AniListImportModal(
             type="button"
             className="primary-button"
             onClick={confirmImport}
-            disabled={!preview || selectedCount === 0 || importing}
+            disabled={!preview || selectedChangeCount === 0 || importing}
           >
-            {importing ? "Importing..." : `Import ${selectedCount} titles`}
+            {importing
+              ? "Importing..."
+              : selectedCount > 0
+              ? `Import ${selectedCount} titles${
+                selectedExistingCount > 0
+                  ? ` & link ${selectedExistingCount} existing`
+                  : ""
+              }`
+              : `Link ${selectedExistingCount} existing titles`}
           </button>
         </footer>
       </section>

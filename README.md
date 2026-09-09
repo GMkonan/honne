@@ -171,7 +171,7 @@ Changes are saved locally first. If AniList is unavailable, a durable job remain
 
 Manually entered anime, manga, and light novels have no AniList media ID and are marked **local only**. A future linking flow can associate them with a search result. Books, movies, and series are always local to Honne.
 
-When an AniList account is connected, imports are restricted to that same account so another public profile cannot accidentally be synchronized into it.
+When an AniList account is connected, imports are restricted to that same account so another public profile cannot accidentally be synchronized into it. Re-importing selected existing titles links them to that account and reads their current rewatch or reread count before Honne sends later changes, preventing an unknown local zero from overwriting AniList.
 
 ## Other discovery providers
 
