@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -25,6 +26,12 @@ const (
 )
 
 var errAniListUnauthorized = errors.New("AniList authorization is no longer valid")
+
+type aniListUpsertResult struct {
+	ListEntryID int
+	Repeat      *int
+	RepeatSent  bool
+}
 
 type syncJob struct {
 	ID                  int64     `json:"id"`
@@ -145,6 +152,9 @@ func (s *aniListSync) queueUpsertLocked(index int) {
 		connected = true
 	}
 	knownUserID := s.knownUserID()
+	if item.AniListRepeatKnown && item.AniListUserID > 0 {
+		knownUserID = item.AniListUserID
+	}
 	for jobIndex := range s.store.syncJobs {
 		job := &s.store.syncJobs[jobIndex]
 		if job.MediaID != item.ID {
@@ -204,6 +214,15 @@ func (s *aniListSync) queueDeleteLocked(item Media) {
 		s.store.syncJobs = slices.Delete(s.store.syncJobs, jobIndex, jobIndex+1)
 		return
 	}
+	// Legacy snapshots can contain a list-entry ID without recording which
+	// AniList account owns it. Require a connected import or a safely owned
+	// pending job before allowing remote deletion.
+	if item.AniListUserID == 0 && (jobIndex < 0 || s.store.syncJobs[jobIndex].AniListUserID == 0) {
+		if jobIndex >= 0 {
+			s.store.syncJobs = slices.Delete(s.store.syncJobs, jobIndex, jobIndex+1)
+		}
+		return
+	}
 	if !s.cfg.aniListConfigured() || !s.cfg.AniListDeleteEnabled || !isAniListLinked(item) {
 		if jobIndex >= 0 {
 			s.store.syncJobs = slices.Delete(s.store.syncJobs, jobIndex, jobIndex+1)
@@ -213,6 +232,9 @@ func (s *aniListSync) queueDeleteLocked(item Media) {
 	now := time.Now().UTC()
 	providerID, _ := strconv.Atoi(item.ProviderID)
 	knownUserID := s.knownUserID()
+	if item.AniListUserID > 0 {
+		knownUserID = item.AniListUserID
+	}
 	if jobIndex >= 0 {
 		job := &s.store.syncJobs[jobIndex]
 		job.Operation = syncDelete
@@ -243,6 +265,12 @@ func (s *aniListSync) queueDeleteLocked(item Media) {
 		UpdatedAt:           now,
 	})
 	s.store.nextJobID++
+}
+
+func aniListWritableFieldsChanged(before, after Media) bool {
+	return before.Status != after.Status || before.Progress != after.Progress ||
+		before.Rating != after.Rating || before.Notes != after.Notes ||
+		(after.AniListRepeatKnown && after.AniListUserID > 0 && before.RepeatCount != after.RepeatCount)
 }
 
 func isAniListLinked(item Media) bool {
@@ -318,12 +346,12 @@ func (s *aniListSync) processNext(ctx context.Context) bool {
 		return false
 	}
 
-	var listEntryID int
+	var result aniListUpsertResult
 	var err error
 	if job.Operation == syncDelete {
 		err = s.deleteRemote(ctx, auth, job)
 	} else {
-		listEntryID, err = s.upsertRemote(ctx, auth, item)
+		result, err = s.upsertRemote(ctx, auth, item)
 	}
 	if err != nil {
 		if errors.Is(err, errAniListUnauthorized) {
@@ -334,7 +362,10 @@ func (s *aniListSync) processNext(ctx context.Context) bool {
 		s.recordFailure(job, err)
 		return true
 	}
-	s.recordSuccess(job, listEntryID)
+	if err := s.recordSuccess(job, result, item, auth.UserID); err != nil {
+		slog.Error("anilist_sync_persist_failed", "job_id", job.ID, "media_id", job.MediaID, "error", err)
+		return false
+	}
 	return true
 }
 
@@ -428,43 +459,89 @@ func (s *aniListSync) recordFailure(snapshot syncJob, syncErr error) {
 	_ = s.store.persistLocked()
 }
 
-func (s *aniListSync) recordSuccess(snapshot syncJob, listEntryID int) {
+func (s *aniListSync) recordSuccess(snapshot syncJob, result aniListUpsertResult, sentItem Media, authUserID int) error {
 	s.store.mu.Lock()
 	defer s.store.mu.Unlock()
 	index := slices.IndexFunc(s.store.syncJobs, func(job syncJob) bool { return job.ID == snapshot.ID })
 	if index < 0 {
-		return
+		return nil
 	}
+	originalItems := slices.Clone(s.store.items)
+	originalJobs := slices.Clone(s.store.syncJobs)
+	originalNextJobID := s.store.nextJobID
 	job := &s.store.syncJobs[index]
-	if snapshot.Operation == syncUpsert && listEntryID > 0 {
-		job.ProviderListEntryID = listEntryID
-		if itemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID }); itemIndex >= 0 {
-			s.store.items[itemIndex].ProviderListEntryID = listEntryID
+	generationCurrent := job.Generation == snapshot.Generation && job.Operation == snapshot.Operation
+	itemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID })
+	if snapshot.Operation == syncUpsert && result.ListEntryID > 0 {
+		job.ProviderListEntryID = result.ListEntryID
+		if itemIndex >= 0 {
+			s.store.items[itemIndex].ProviderListEntryID = result.ListEntryID
 		}
 	}
-	if job.Generation == snapshot.Generation && job.Operation == snapshot.Operation {
-		if snapshot.Operation == syncUpsert {
-			if itemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID }); itemIndex >= 0 {
-				s.store.items[itemIndex].SyncStatus = "synced"
-				s.store.items[itemIndex].SyncError = ""
+
+	repeatChangedWhileUnknown := false
+	if snapshot.Operation == syncUpsert && itemIndex >= 0 && result.Repeat != nil &&
+		*result.Repeat >= 0 && *result.Repeat <= maxRepeatCount && authUserID > 0 {
+		item := &s.store.items[itemIndex]
+		wasKnownForAccount := sentItem.AniListRepeatKnown && sentItem.AniListUserID == authUserID
+		item.AniListUserID = authUserID
+		item.AniListRepeatKnown = true
+		if result.RepeatSent {
+			if generationCurrent {
+				item.RepeatCount = *result.Repeat
+			}
+		} else if !wasKnownForAccount {
+			if sentItem.RepeatCount == 0 && item.RepeatCount == 0 {
+				item.RepeatCount = *result.Repeat
+			} else if item.RepeatCount != *result.Repeat {
+				repeatChangedWhileUnknown = true
 			}
 		}
+	}
+
+	if generationCurrent {
+		if snapshot.Operation == syncUpsert && itemIndex >= 0 {
+			s.store.items[itemIndex].SyncStatus = "synced"
+			s.store.items[itemIndex].SyncError = ""
+		}
 		s.store.syncJobs = slices.Delete(s.store.syncJobs, index, index+1)
+		if repeatChangedWhileUnknown && itemIndex >= 0 {
+			s.queueUpsertLocked(itemIndex)
+		}
 	} else {
 		job.NextAttemptAt = time.Now().UTC()
 		job.Attempts = 0
 		job.LastError = ""
 	}
-	_ = s.store.persistLocked()
+	if err := s.store.persistLocked(); err != nil {
+		s.store.items = originalItems
+		s.store.syncJobs = originalJobs
+		s.store.nextJobID = originalNextJobID
+		retryIndex := slices.IndexFunc(s.store.syncJobs, func(job syncJob) bool { return job.ID == snapshot.ID })
+		if retryIndex >= 0 {
+			retry := &s.store.syncJobs[retryIndex]
+			retry.Attempts++
+			retry.NextAttemptAt = time.Now().UTC().Add(15 * time.Second)
+			retry.LastError = "could not persist AniList synchronization result"
+			retry.UpdatedAt = time.Now().UTC()
+		}
+		if retryItemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID }); retryItemIndex >= 0 {
+			s.store.items[retryItemIndex].SyncStatus = "error"
+			s.store.items[retryItemIndex].SyncError = "AniList synchronization succeeded, but the local result could not be saved; it will be retried"
+		}
+		return fmt.Errorf("persist AniList synchronization result: %w", err)
+	}
+	return nil
 }
 
-func (s *aniListSync) upsertRemote(ctx context.Context, auth aniListAuth, item Media) (int, error) {
+func (s *aniListSync) upsertRemote(ctx context.Context, auth aniListAuth, item Media) (aniListUpsertResult, error) {
 	mediaID, err := strconv.Atoi(item.ProviderID)
 	if err != nil || mediaID < 1 {
-		return 0, errors.New("invalid AniList media ID")
+		return aniListUpsertResult{}, errors.New("invalid AniList media ID")
 	}
-	const mutation = `mutation ($mediaId: Int, $status: MediaListStatus, $scoreRaw: Int, $progress: Int, $notes: String) {
-  SaveMediaListEntry(mediaId: $mediaId, status: $status, scoreRaw: $scoreRaw, progress: $progress, notes: $notes) { id }
+	repeatSent := item.AniListRepeatKnown && item.AniListUserID == auth.UserID
+	mutation := `mutation ($mediaId: Int, $status: MediaListStatus, $scoreRaw: Int, $progress: Int, $notes: String) {
+  SaveMediaListEntry(mediaId: $mediaId, status: $status, scoreRaw: $scoreRaw, progress: $progress, notes: $notes) { id repeat }
 }`
 	variables := map[string]any{
 		"mediaId":  mediaID,
@@ -473,18 +550,31 @@ func (s *aniListSync) upsertRemote(ctx context.Context, auth aniListAuth, item M
 		"progress": item.Progress,
 		"notes":    item.Notes,
 	}
+	if repeatSent {
+		mutation = `mutation ($mediaId: Int, $status: MediaListStatus, $scoreRaw: Int, $progress: Int, $repeat: Int, $notes: String) {
+  SaveMediaListEntry(mediaId: $mediaId, status: $status, scoreRaw: $scoreRaw, progress: $progress, repeat: $repeat, notes: $notes) { id repeat }
+}`
+		variables["repeat"] = item.RepeatCount
+	}
 	var data struct {
 		Entry struct {
-			ID int `json:"id"`
+			ID     int  `json:"id"`
+			Repeat *int `json:"repeat"`
 		} `json:"SaveMediaListEntry"`
 	}
 	if err := s.graphQL(ctx, auth.AccessToken, mutation, variables, &data); err != nil {
-		return 0, err
+		return aniListUpsertResult{}, err
 	}
 	if data.Entry.ID < 1 {
-		return 0, errors.New("AniList did not return a list entry ID")
+		return aniListUpsertResult{}, errors.New("AniList did not return a list entry ID")
 	}
-	return data.Entry.ID, nil
+	if data.Entry.Repeat != nil && (*data.Entry.Repeat < 0 || *data.Entry.Repeat > maxRepeatCount) {
+		return aniListUpsertResult{}, errors.New("AniList returned an invalid repeat count")
+	}
+	if repeatSent && data.Entry.Repeat == nil {
+		return aniListUpsertResult{}, errors.New("AniList did not confirm the repeat count")
+	}
+	return aniListUpsertResult{ListEntryID: data.Entry.ID, Repeat: data.Entry.Repeat, RepeatSent: repeatSent}, nil
 }
 
 func mapLocalStatus(status string) string {
@@ -824,6 +914,8 @@ func (s *aniListSync) detachAccountItems(discardPending bool) error {
 	for index := range s.store.items {
 		if isAniListLinked(s.store.items[index]) {
 			s.store.items[index].ProviderListEntryID = 0
+			s.store.items[index].AniListUserID = 0
+			s.store.items[index].AniListRepeatKnown = false
 			s.store.items[index].SyncStatus = "local_only"
 			s.store.items[index].SyncError = ""
 		}

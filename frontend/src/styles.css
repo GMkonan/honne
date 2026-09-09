@@ -867,9 +867,11 @@ button {
 .progress-label {
   display: flex;
   justify-content: space-between;
+  gap: 6px;
   margin-top: 6px;
   color: var(--overlay);
-  font-size: 7px;
+  font-size: 12px;
+  line-height: 1.2;
 }
 .progress-label strong {
   color: var(--muted);
@@ -884,6 +886,9 @@ button {
   display: block;
   height: 100%;
   background: var(--blue);
+}
+.progress-placeholder {
+  height: 27px;
 }
 .notes {
   display: none;
@@ -2022,6 +2027,9 @@ button {
   min-width: 0;
   padding: 10px;
   background: var(--base);
+}
+.detail-personal-stats > .detail-repeat-stat {
+  grid-column: 1 / -1;
 }
 .detail-personal-stats dt,
 .detail-review > span {

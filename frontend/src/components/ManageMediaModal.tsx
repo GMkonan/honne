@@ -11,12 +11,18 @@ import {
   type DetailLibraryMedia,
   type DetailMediaStatus,
 } from "./MediaDetailPage.tsx";
+import {
+  mediaStatusLabel,
+  mediaTracking,
+  optionalNumberInputValue,
+} from "../mediaTracking.ts";
 
 export interface ManagedMediaValues {
   status: DetailMediaStatus;
   progress: number;
   total: number;
   rating: number;
+  repeatCount: number;
   notes: string;
 }
 
@@ -27,23 +33,13 @@ interface ManageMediaModalProps {
   onSave: (values: ManagedMediaValues) => Promise<void>;
 }
 
-const statuses: { value: DetailMediaStatus; label: string }[] = [
-  { value: "planned", label: "Planned" },
-  { value: "in_progress", label: "In progress" },
-  { value: "completed", label: "Completed" },
-  { value: "paused", label: "Paused" },
-  { value: "dropped", label: "Dropped" },
+const statuses: DetailMediaStatus[] = [
+  "planned",
+  "in_progress",
+  "completed",
+  "paused",
+  "dropped",
 ];
-
-function statusLabel(
-  status: { value: DetailMediaStatus; label: string },
-  type: DetailLibraryMedia["type"],
-): string {
-  if (status.value !== "planned") return status.label;
-  return ["book", "manga", "light_novel"].includes(type)
-    ? "Plan to read"
-    : "Plan to watch";
-}
 
 function safeHTTPURL(value: string): string {
   try {
@@ -70,6 +66,7 @@ export function ManageMediaModal(
     progress: item.progress,
     total: item.total,
     rating: item.rating,
+    repeatCount: item.repeatCount || 0,
     notes: item.notes,
   });
   const [saving, setSaving] = useState(false);
@@ -146,6 +143,7 @@ export function ManageMediaModal(
   }
 
   const cover = safeHTTPURL(item.coverUrl.replaceAll('"', ""));
+  const tracking = mediaTracking(item.type);
   return (
     <div
       className="modal-backdrop"
@@ -196,39 +194,59 @@ export function ManageMediaModal(
               onChange={handleChange}
             >
               {statuses.map((status) => (
-                <option value={status.value} key={status.value}>
-                  {statusLabel(status, item.type)}
+                <option value={status} key={status}>
+                  {mediaStatusLabel(status, item.type)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Current progress
+            {tracking.repeatLabel}
             <input
               type="number"
-              name="progress"
+              name="repeatCount"
               min="0"
-              max={form.total > 0 ? form.total : undefined}
-              value={form.progress}
+              max="1000"
+              step="1"
+              value={optionalNumberInputValue(form.repeatCount)}
               onChange={handleChange}
+              placeholder="0"
             />
-            <small>
-              {form.total > 0
-                ? `${form.total} total`
-                : "No catalog total available"}
-            </small>
+            <small>{tracking.repeatHelp}</small>
           </label>
-          <label>
-            Total
-            <input
-              type="number"
-              name="total"
-              min="0"
-              value={form.total}
-              onChange={handleChange}
-            />
-            <small>Episodes, pages, or chapters</small>
-          </label>
+          {tracking.tracksProgress && (
+            <>
+              <label>
+                {tracking.progressLabel}
+                <input
+                  type="number"
+                  name="progress"
+                  min="0"
+                  max={form.total > 0 ? form.total : undefined}
+                  value={optionalNumberInputValue(form.progress)}
+                  onChange={handleChange}
+                  placeholder="0"
+                />
+                <small>
+                  {form.total > 0
+                    ? `${form.total} ${tracking.unitPlural} total`
+                    : "No total set"}
+                </small>
+              </label>
+              <label>
+                {tracking.totalLabel}
+                <input
+                  type="number"
+                  name="total"
+                  min="0"
+                  value={optionalNumberInputValue(form.total)}
+                  onChange={handleChange}
+                  placeholder="0"
+                />
+                <small>Measured in {tracking.unitPlural}.</small>
+              </label>
+            </>
+          )}
           <label className="wide">
             Personal rating
             <input
@@ -237,10 +255,11 @@ export function ManageMediaModal(
               min="0"
               max="10"
               step="1"
-              value={form.rating}
+              value={optionalNumberInputValue(form.rating)}
               onChange={handleChange}
+              placeholder="0"
             />
-            <small>Use 0 to leave this title unrated.</small>
+            <small>Leave blank to keep this title unrated.</small>
           </label>
           <label className="wide">
             Review / notes

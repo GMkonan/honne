@@ -58,7 +58,11 @@ func TestValidateInput(t *testing.T) {
 	reversedDates.EndDate = "1965-12-31"
 	mismatchedReleaseYear := valid
 	mismatchedReleaseYear.ReleaseYear = 1964
-	cases = append(cases, tooManyGenres, tooManyCredits, invalidGenre, invalidCredit, invalidReleaseStatus, invalidDate, invalidDuration, invalidCatalogTotal, invalidCommunityRating, invalidFormat, reversedDates, mismatchedReleaseYear)
+	invalidRepeatCount := valid
+	invalidRepeatCount.RepeatCount = intPointer(-1)
+	tooManyRepeats := valid
+	tooManyRepeats.RepeatCount = intPointer(maxRepeatCount + 1)
+	cases = append(cases, tooManyGenres, tooManyCredits, invalidGenre, invalidCredit, invalidReleaseStatus, invalidDate, invalidDuration, invalidCatalogTotal, invalidCommunityRating, invalidFormat, reversedDates, mismatchedReleaseYear, invalidRepeatCount, tooManyRepeats)
 
 	for i, input := range cases {
 		if err := validateInput(input); err == nil {
@@ -135,7 +139,7 @@ func TestManualMediaIdentityRemainsEditable(t *testing.T) {
 	application := &app{store: store}
 	created := httptest.NewRecorder()
 	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", mediaInput{
-		Title: "Manual title", Type: "anime", Status: "planned",
+		Title: "Manual title", Type: "anime", Status: "planned", Progress: 1, Total: 1,
 	}))
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
@@ -149,6 +153,137 @@ func TestManualMediaIdentityRemainsEditable(t *testing.T) {
 	application.updateMedia(updated, request)
 	if updated.Code != http.StatusOK || store.items[0].Type != "movie" || store.items[0].Title != "Manual movie" {
 		t.Fatalf("manual identity update = %d, item=%+v", updated.Code, store.items[0])
+	}
+}
+
+func TestMovieTrackingRejectsNewProgressAndPreservesLegacyValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	store, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store}
+
+	invalidCreate := httptest.NewRecorder()
+	application.createMedia(invalidCreate, jsonRequest(http.MethodPost, "/api/media", mediaInput{
+		Title: "Legacy-style movie", Type: "movie", Status: "completed", Progress: 1, Total: 1,
+	}))
+	if invalidCreate.Code != http.StatusUnprocessableEntity || len(store.items) != 0 {
+		t.Fatalf("movie create = %d, items=%+v", invalidCreate.Code, store.items)
+	}
+
+	created := httptest.NewRecorder()
+	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", mediaInput{
+		Title: "Movie", Type: "movie", Status: "completed",
+	}))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
+	}
+
+	store.mu.Lock()
+	store.items[0].Progress = 1
+	store.items[0].Total = 1
+	if err := store.persistLocked(); err != nil {
+		store.mu.Unlock()
+		t.Fatal(err)
+	}
+	store.mu.Unlock()
+
+	preserved := httptest.NewRecorder()
+	preserveRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Movie", Type: "movie", Status: "completed", Progress: 1, Total: 1, Rating: 9,
+	})
+	preserveRequest.SetPathValue("id", "1")
+	application.updateMedia(preserved, preserveRequest)
+	if preserved.Code != http.StatusOK || store.items[0].Progress != 1 || store.items[0].Total != 1 {
+		t.Fatalf("legacy movie update = %d, item=%+v", preserved.Code, store.items[0])
+	}
+
+	changed := httptest.NewRecorder()
+	changeRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Movie", Type: "movie", Status: "completed", Progress: 1, Total: 2, Rating: 9,
+	})
+	changeRequest.SetPathValue("id", "1")
+	application.updateMedia(changed, changeRequest)
+	if changed.Code != http.StatusUnprocessableEntity || store.items[0].Total != 1 {
+		t.Fatalf("movie progress change = %d, item=%+v", changed.Code, store.items[0])
+	}
+
+	reopened, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.items[0].Progress != 1 || reopened.items[0].Total != 1 || reopened.items[0].Rating != 9 {
+		t.Fatalf("legacy movie values did not survive reopen: %+v", reopened.items[0])
+	}
+}
+
+func TestRepeatCountPersistsAndLegacyUpdatesPreserveIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	store, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store}
+
+	created := httptest.NewRecorder()
+	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", RepeatCount: intPointer(2),
+	}))
+	if created.Code != http.StatusCreated || store.items[0].RepeatCount != 2 {
+		t.Fatalf("create = %d, item=%+v", created.Code, store.items[0])
+	}
+
+	legacyUpdate := httptest.NewRecorder()
+	legacyRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", Rating: 9,
+	})
+	legacyRequest.SetPathValue("id", "1")
+	application.updateMedia(legacyUpdate, legacyRequest)
+	if legacyUpdate.Code != http.StatusOK || store.items[0].RepeatCount != 2 {
+		t.Fatalf("legacy update = %d, item=%+v", legacyUpdate.Code, store.items[0])
+	}
+
+	updated := httptest.NewRecorder()
+	updateRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", Rating: 9, RepeatCount: intPointer(3),
+	})
+	updateRequest.SetPathValue("id", "1")
+	application.updateMedia(updated, updateRequest)
+	if updated.Code != http.StatusOK || store.items[0].RepeatCount != 3 {
+		t.Fatalf("repeat update = %d, item=%+v", updated.Code, store.items[0])
+	}
+
+	invalid := httptest.NewRecorder()
+	invalidRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", Rating: 9, RepeatCount: intPointer(maxRepeatCount + 1),
+	})
+	invalidRequest.SetPathValue("id", "1")
+	application.updateMedia(invalid, invalidRequest)
+	if invalid.Code != http.StatusUnprocessableEntity || store.items[0].RepeatCount != 3 {
+		t.Fatalf("invalid repeat update = %d, item=%+v", invalid.Code, store.items[0])
+	}
+
+	reopened, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.items[0].RepeatCount != 3 {
+		t.Fatalf("repeat count did not survive restart: %+v", reopened.items[0])
+	}
+
+	cleared := httptest.NewRecorder()
+	clearRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", Rating: 9, RepeatCount: intPointer(0),
+	})
+	clearRequest.SetPathValue("id", "1")
+	(&app{store: reopened}).updateMedia(cleared, clearRequest)
+	if cleared.Code != http.StatusOK || reopened.items[0].RepeatCount != 0 {
+		t.Fatalf("clear repeat count = %d, item=%+v", cleared.Code, reopened.items[0])
+	}
+	clearedStore, err := newStore(path)
+	if err != nil || clearedStore.items[0].RepeatCount != 0 {
+		t.Fatalf("cleared repeat count did not survive restart: store=%+v err=%v", clearedStore, err)
 	}
 }
 
@@ -175,25 +310,45 @@ func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(persisted), `"version": 2`) {
+	if !strings.Contains(string(persisted), `"version": 3`) {
 		t.Fatalf("v1 snapshot was not upgraded on write: %s", persisted)
 	}
 	if _, err := newStore(path); err != nil {
-		t.Fatalf("v2 snapshot did not reopen: %v", err)
+		t.Fatalf("v3 snapshot did not reopen: %v", err)
+	}
+
+	v2Path := filepath.Join(t.TempDir(), "media.json")
+	if err := os.WriteFile(v2Path, []byte(`{"version":2,"items":[{"id":1,"title":"Older","type":"movie","status":"completed","progress":0,"total":0,"rating":8,"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v2Store, err := newStore(v2Path)
+	if err != nil || v2Store.items[0].RepeatCount != 0 {
+		t.Fatalf("v2 snapshot did not migrate with a zero repeat count: store=%+v err=%v", v2Store, err)
+	}
+	v2Store.mu.Lock()
+	err = v2Store.persistLocked()
+	v2Store.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2Persisted, err := os.ReadFile(v2Path)
+	if err != nil || !strings.Contains(string(v2Persisted), `"version": 3`) {
+		t.Fatalf("v2 snapshot was not upgraded on write: data=%s err=%v", v2Persisted, err)
 	}
 }
 
 func TestNewStoreRejectsUnknownSnapshotVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
-	if err := os.WriteFile(path, []byte(`{"version":3,"items":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"version":4,"items":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 3") {
+	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 4") {
 		t.Fatalf("expected unsupported version error, got %v", err)
 	}
 }
 
 func TestLoadConfigValidatesOptionalAuthentication(t *testing.T) {
+	t.Setenv("PORT", "")
 	t.Setenv("ANILIST_CLIENT_ID", "")
 	t.Setenv("ANILIST_CLIENT_SECRET", "")
 	t.Setenv("ANILIST_REDIRECT_URL", "")
@@ -209,9 +364,13 @@ func TestLoadConfigValidatesOptionalAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.AppUsername != "owner" || cfg.AniListDeleteEnabled {
+	if cfg.Port != "8080" || cfg.AppUsername != "owner" || cfg.AniListDeleteEnabled {
 		t.Fatalf("unexpected config: %+v", cfg)
 	}
+}
+
+func intPointer(value int) *int {
+	return &value
 }
 
 func TestBasicAuthIsOptionalAndLeavesHealthPublic(t *testing.T) {

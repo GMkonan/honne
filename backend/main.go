@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const persistedStoreVersion = 2
+const persistedStoreVersion = 3
 
 var (
 	validTypes    = []string{"anime", "series", "movie", "book", "manga", "light_novel"}
@@ -38,6 +38,7 @@ type Media struct {
 	Progress            int           `json:"progress"`
 	Total               int           `json:"total"`
 	Rating              int           `json:"rating"`
+	RepeatCount         int           `json:"repeatCount"`
 	Notes               string        `json:"notes"`
 	CoverURL            string        `json:"coverUrl"`
 	Provider            string        `json:"provider,omitempty"`
@@ -56,6 +57,8 @@ type Media struct {
 	CatalogTotal        int           `json:"catalogTotal,omitempty"`
 	CommunityRating     float64       `json:"communityRating,omitempty"`
 	ProviderListEntryID int           `json:"providerListEntryId,omitempty"`
+	AniListUserID       int           `json:"anilistUserId,omitempty"`
+	AniListRepeatKnown  bool          `json:"anilistRepeatKnown,omitempty"`
 	SyncStatus          string        `json:"syncStatus,omitempty"`
 	SyncError           string        `json:"syncError,omitempty"`
 	CreatedAt           time.Time     `json:"createdAt"`
@@ -69,6 +72,7 @@ type mediaInput struct {
 	Progress        int           `json:"progress"`
 	Total           int           `json:"total"`
 	Rating          int           `json:"rating"`
+	RepeatCount     *int          `json:"repeatCount,omitempty"`
 	Notes           string        `json:"notes"`
 	CoverURL        string        `json:"coverUrl"`
 	Provider        string        `json:"provider"`
@@ -131,7 +135,7 @@ func newStore(path string) (*store, error) {
 		if err := json.Unmarshal(trimmed, &persisted); err != nil {
 			return nil, fmt.Errorf("decode data file: %w", err)
 		}
-		if persisted.Version != 1 && persisted.Version != persistedStoreVersion {
+		if persisted.Version < 1 || persisted.Version > persistedStoreVersion {
 			return nil, fmt.Errorf("unsupported data file version %d", persisted.Version)
 		}
 		s.items = persisted.Items
@@ -279,6 +283,10 @@ func (a *app) createMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
+	if err := validateTrackingForCreate(input); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
 
 	now := time.Now().UTC()
 	a.store.mu.Lock()
@@ -357,6 +365,11 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "provider-linked media identity cannot be changed")
 		return
 	}
+	if err := validateTrackingForUpdate(original, input); err != nil {
+		a.store.mu.Unlock()
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
 	originalJobs := slices.Clone(a.store.syncJobs)
 	originalNextJobID := a.store.nextJobID
 	originalActivities := slices.Clone(a.store.activities)
@@ -367,6 +380,9 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 	item.Progress = input.Progress
 	item.Total = input.Total
 	item.Rating = input.Rating
+	if input.RepeatCount != nil {
+		item.RepeatCount = *input.RepeatCount
+	}
 	item.Notes = strings.TrimSpace(input.Notes)
 	item.CoverURL = strings.TrimSpace(input.CoverURL)
 	item.Provider = input.Provider
@@ -379,7 +395,8 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 	// updates. This also prevents older clients from clearing fields they do not
 	// know about when sending their complete legacy payload.
 	item.UpdatedAt = time.Now().UTC()
-	if a.anilist != nil {
+	queuedAniListUpsert := a.anilist != nil && aniListWritableFieldsChanged(original, *item)
+	if queuedAniListUpsert {
 		a.anilist.queueUpsertLocked(index)
 	}
 	updated := *item
@@ -393,7 +410,7 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 		a.store.nextActivityID = originalNextActivityID
 	}
 	a.store.mu.Unlock()
-	if err == nil && a.anilist != nil {
+	if err == nil && queuedAniListUpsert {
 		a.anilist.wakeWorker()
 	}
 	if err != nil {
@@ -474,6 +491,9 @@ func validateInput(input mediaInput) error {
 	}
 	if input.Rating < 0 || input.Rating > 10 {
 		return errors.New("rating must be between 0 and 10")
+	}
+	if input.RepeatCount != nil && (*input.RepeatCount < 0 || *input.RepeatCount > maxRepeatCount) {
+		return fmt.Errorf("repeat count must be between 0 and %d", maxRepeatCount)
 	}
 	if (input.Provider == "") != (input.ProviderID == "") {
 		return errors.New("provider and providerId must be supplied together")

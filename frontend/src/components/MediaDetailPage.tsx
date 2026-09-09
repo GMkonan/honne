@@ -20,13 +20,15 @@ import {
   type SearchMediaCredit,
   type SearchMediaType,
 } from "./GlobalSearchBox.tsx";
+import {
+  catalogTotalLabel,
+  mediaStatusLabel,
+  mediaTracking,
+  progressValue,
+  type TrackingMediaStatus,
+} from "../mediaTracking.ts";
 
-export type DetailMediaStatus =
-  | "planned"
-  | "in_progress"
-  | "completed"
-  | "paused"
-  | "dropped";
+export type DetailMediaStatus = TrackingMediaStatus;
 
 export interface DetailLibraryMedia {
   id: number;
@@ -36,6 +38,7 @@ export interface DetailLibraryMedia {
   progress: number;
   total: number;
   rating: number;
+  repeatCount: number;
   notes: string;
   coverUrl: string;
   provider: string;
@@ -87,18 +90,6 @@ const typeDetails: Record<
   light_novel: { label: "Light novel", icon: Clapperboard },
 };
 
-function plannedLabel(type: SearchMediaType): string {
-  return ["book", "manga", "light_novel"].includes(type)
-    ? "Plan to read"
-    : "Plan to watch";
-}
-
-function statusLabel(status: DetailMediaStatus, type: SearchMediaType): string {
-  if (status === "planned") return plannedLabel(type);
-  if (status === "in_progress") return "In progress";
-  return status[0].toUpperCase() + status.slice(1);
-}
-
 function safeHTTPURL(value?: string): string {
   if (!value) return "";
   try {
@@ -149,22 +140,6 @@ function providerLabel(provider: string): string {
       (letter) => letter.toUpperCase(),
     )
     : "Local entry";
-}
-
-function progressLabel(item: DetailLibraryMedia): string {
-  if (item.total > 0) return `${item.progress} of ${item.total}`;
-  return item.progress > 0 ? String(item.progress) : "Not started";
-}
-
-function totalLabel(type: SearchMediaType, total: number): string {
-  const unit = type === "anime" || type === "series"
-    ? "episodes"
-    : type === "movie"
-    ? "parts"
-    : type === "book"
-    ? "pages"
-    : "chapters";
-  return `${total} ${unit}`;
 }
 
 const releaseStatusLabels: Record<string, string> = {
@@ -223,23 +198,30 @@ function LibraryPanel(
     onManage: (item: DetailLibraryMedia) => void;
   },
 ) {
+  const tracking = mediaTracking(item.type);
   return (
     <section className="detail-library-panel" aria-label="Your Library">
       <div className="detail-record-heading">
         <span className="eyebrow">PERSONAL RECORD</span>
         <span className={`detail-status ${item.status}`}>
           <span aria-hidden="true" />
-          {statusLabel(item.status, item.type)}
+          {mediaStatusLabel(item.status, item.type)}
         </span>
       </div>
       <dl className="detail-personal-stats">
-        <div>
-          <dt>Progress</dt>
-          <dd>{progressLabel(item)}</dd>
-        </div>
+        {tracking.tracksProgress && (
+          <div>
+            <dt>{tracking.progressLabel}</dt>
+            <dd>{progressValue(item.progress, item.total)}</dd>
+          </div>
+        )}
         <div>
           <dt>Your rating</dt>
           <dd>{item.rating > 0 ? `${item.rating}/10` : "Not rated"}</dd>
+        </div>
+        <div className={tracking.tracksProgress ? "detail-repeat-stat" : ""}>
+          <dt>{tracking.repeatLabel}</dt>
+          <dd>{item.repeatCount ?? 0}</dd>
         </div>
       </dl>
       {item.notes && (
@@ -321,7 +303,7 @@ export function MediaDetailPage(
     (selection.kind === "external" ? selection.result.subtitle || "" : ""),
     releaseStatusLabels[source.releaseStatus || ""] || "",
     releasePeriod || (source.releaseYear ? String(source.releaseYear) : ""),
-    catalogTotal > 0 ? totalLabel(source.type, catalogTotal) : "",
+    catalogTotal > 0 ? catalogTotalLabel(source.type, catalogTotal) : "",
     durationLabel(source.type, source.durationMinutes || 0),
     providerLabel(source.provider),
   ].filter(Boolean);
@@ -356,8 +338,9 @@ export function MediaDetailPage(
                 <span className="eyebrow">START TRACKING</span>
                 <h2 id="add-title">Add to your Library</h2>
                 <p>
-                  Track your status, progress, personal rating, and notes for
-                  this title.
+                  {mediaTracking(source.type).tracksProgress
+                    ? "Track your status, progress, personal rating, and notes for this title."
+                    : "Track your status, personal rating, and notes for this title."}
                 </p>
                 <button
                   type="button"

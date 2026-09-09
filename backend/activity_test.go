@@ -21,14 +21,14 @@ func TestActivityCRUDPersistenceAndNewestFirstAPI(t *testing.T) {
 
 	create := httptest.NewRecorder()
 	application.createMedia(create, jsonRequest(http.MethodPost, "/api/media", mediaInput{
-		Title: "Cowboy Bebop", Type: "anime", Status: "planned",
+		Title: "Cowboy Bebop", Type: "anime", Status: "planned", RepeatCount: intPointer(1),
 	}))
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create = %d: %s", create.Code, create.Body.String())
 	}
 
 	updateRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
-		Title: "Cowboy Bebop", Type: "anime", Status: "in_progress", Progress: 3, Total: 26, Rating: 9,
+		Title: "Cowboy Bebop", Type: "anime", Status: "in_progress", Progress: 3, Total: 26, Rating: 9, RepeatCount: intPointer(2),
 	})
 	updateRequest.SetPathValue("id", "1")
 	update := httptest.NewRecorder()
@@ -51,7 +51,8 @@ func TestActivityCRUDPersistenceAndNewestFirstAPI(t *testing.T) {
 	updated := store.activities[1]
 	if updated.Action != "updated" || updated.Changes.FromStatus != "planned" || updated.Changes.ToStatus != "in_progress" ||
 		updated.Changes.FromProgress == nil || *updated.Changes.FromProgress != 0 || updated.Changes.ToProgress == nil || *updated.Changes.ToProgress != 3 ||
-		updated.Changes.FromRating == nil || *updated.Changes.FromRating != 0 || updated.Changes.ToRating == nil || *updated.Changes.ToRating != 9 {
+		updated.Changes.FromRating == nil || *updated.Changes.FromRating != 0 || updated.Changes.ToRating == nil || *updated.Changes.ToRating != 9 ||
+		updated.Changes.FromRepeatCount == nil || *updated.Changes.FromRepeatCount != 1 || updated.Changes.ToRepeatCount == nil || *updated.Changes.ToRepeatCount != 2 {
 		t.Fatalf("unexpected structured update activity: %+v", updated)
 	}
 
@@ -129,6 +130,35 @@ func TestCreateRollsBackActivityWhenPersistenceFails(t *testing.T) {
 	}
 	if len(store.items) != 0 || len(store.activities) != 0 || store.nextID != 1 || store.nextActivityID != 1 {
 		t.Fatalf("failed persistence left partial state: items=%+v activities=%+v nextID=%d nextActivityID=%d", store.items, store.activities, store.nextID, store.nextActivityID)
+	}
+}
+
+func TestRepeatCountUpdateRollsBackWhenPersistenceFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	store := &store{
+		path: path,
+		items: []Media{{
+			ID: 1, Title: "Dune", Type: "book", Status: "completed", RepeatCount: 1,
+			CreatedAt: now, UpdatedAt: now,
+		}},
+		syncJobs: []syncJob{}, activities: []Activity{},
+		nextID: 2, nextJobID: 1, nextActivityID: 1,
+	}
+	application := &app{store: store}
+	request := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", RepeatCount: intPointer(2),
+	})
+	request.SetPathValue("id", "1")
+	response := httptest.NewRecorder()
+	application.updateMedia(response, request)
+
+	if response.Code != http.StatusInternalServerError || store.items[0].RepeatCount != 1 ||
+		len(store.activities) != 0 || store.nextActivityID != 1 {
+		t.Fatalf("failed update left partial state: code=%d item=%+v activities=%+v next=%d", response.Code, store.items[0], store.activities, store.nextActivityID)
 	}
 }
 

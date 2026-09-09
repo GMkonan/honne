@@ -2,6 +2,7 @@ const baseMedia = {
   progress: 0,
   total: 0,
   rating: 0,
+  repeatCount: 0,
   notes: "",
   coverUrl: "",
   provider: "",
