@@ -5,7 +5,7 @@ services:
     environment:
       PORT: "8080"
       DATA_PATH: /data/media.json
-      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:7417}
       PROFILE_NAME: ${PROFILE_NAME-My Library}
       PROFILE_AVATAR_URL: ${PROFILE_AVATAR_URL:-}
       APP_USERNAME: ${APP_USERNAME:-}
@@ -34,7 +34,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${HONNE_PORT:-127.0.0.1:8080}:80"
+      - "${HONNE_PORT:-127.0.0.1:7417}:80"
     security_opt:
       - no-new-privileges:true
 
