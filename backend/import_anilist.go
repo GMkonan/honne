@@ -118,26 +118,95 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 	}
 	allowedTypes := stringSet(input.Types)
 	allowedStatuses := stringSet(input.Statuses)
+	selected := func(entry anilistImportEntry) bool {
+		return (len(allowedTypes) == 0 || allowedTypes[entry.Type]) &&
+			(len(allowedStatuses) == 0 || allowedStatuses[entry.Status])
+	}
 
 	a.store.mu.Lock()
 	originalItems := slices.Clone(a.store.items)
+	originalJobs := slices.Clone(a.store.syncJobs)
 	originalActivities := slices.Clone(a.store.activities)
 	originalNextID := a.store.nextID
+	originalNextJobID := a.store.nextJobID
 	originalNextActivityID := a.store.nextActivityID
-	existing := make(map[string]bool, len(a.store.items))
-	for _, item := range a.store.items {
+	existing := make(map[string]int, len(a.store.items))
+	for index, item := range a.store.items {
 		if item.Provider == "anilist" {
-			existing[item.ProviderID] = true
+			existing[item.ProviderID] = index
 		}
 	}
+	if connected {
+		for _, entry := range preview.Entries {
+			index, exists := existing[entry.ProviderID]
+			if !exists || !selected(entry) {
+				continue
+			}
+			mediaID := a.store.items[index].ID
+			for _, job := range a.store.syncJobs {
+				if job.MediaID == mediaID && job.AniListUserID != 0 && job.AniListUserID != connectedAuth.UserID {
+					a.store.mu.Unlock()
+					writeError(w, http.StatusConflict, "an existing AniList change belongs to another account")
+					return
+				}
+			}
+		}
+	}
+
 	imported := make([]Media, 0)
+	reconciledItems := make([]Media, 0)
 	skipped := 0
+	queuedSync := false
 	now := time.Now().UTC()
 	for _, entry := range preview.Entries {
-		if (len(allowedTypes) > 0 && !allowedTypes[entry.Type]) || (len(allowedStatuses) > 0 && !allowedStatuses[entry.Status]) || existing[entry.ProviderID] {
+		if !selected(entry) {
 			skipped++
 			continue
 		}
+		if index, exists := existing[entry.ProviderID]; exists {
+			if !connected {
+				skipped++
+				continue
+			}
+			item := &a.store.items[index]
+			remoteRepeat := repeatCountValue(entry.RepeatCount)
+			repeatKnownForAccount := item.AniListRepeatKnown && item.AniListUserID == connectedAuth.UserID
+			needsUpsert := item.Status != entry.Status || item.Progress != entry.Progress ||
+				item.Rating != entry.Rating || item.Notes != strings.TrimSpace(entry.Notes)
+			if repeatKnownForAccount {
+				needsUpsert = needsUpsert || item.RepeatCount != remoteRepeat
+			} else if item.AniListUserID != 0 && item.AniListUserID != connectedAuth.UserID {
+				item.RepeatCount = remoteRepeat
+			} else if item.RepeatCount == 0 {
+				item.RepeatCount = remoteRepeat
+			} else {
+				needsUpsert = needsUpsert || item.RepeatCount != remoteRepeat
+			}
+			item.ProviderListEntryID = entry.ProviderListEntryID
+			item.AniListUserID = connectedAuth.UserID
+			item.AniListRepeatKnown = true
+			item.UpdatedAt = now
+			hasPendingJob := false
+			for jobIndex := range a.store.syncJobs {
+				job := &a.store.syncJobs[jobIndex]
+				if job.MediaID != item.ID {
+					continue
+				}
+				hasPendingJob = true
+				job.ProviderListEntryID = entry.ProviderListEntryID
+				job.AniListUserID = connectedAuth.UserID
+			}
+			if needsUpsert {
+				a.anilist.queueUpsertLocked(index)
+				queuedSync = true
+			} else if !hasPendingJob {
+				item.SyncStatus = "synced"
+				item.SyncError = ""
+			}
+			reconciledItems = append(reconciledItems, *item)
+			continue
+		}
+
 		item := mediaFromInput(a.store.nextID, entry.mediaInput, now)
 		if connected {
 			// A list-entry ID and repeat count belong to a specific AniList
@@ -153,22 +222,30 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 		a.store.items = append(a.store.items, item)
 		a.store.appendActivityLocked(activityForNewMedia(item, "imported"))
 		imported = append(imported, item)
-		existing[item.ProviderID] = true
+		existing[item.ProviderID] = len(a.store.items) - 1
 	}
-	if len(imported) > 0 {
+	if len(imported) > 0 || len(reconciledItems) > 0 {
 		err = a.store.persistLocked()
 	}
 	if err != nil {
 		a.store.items = originalItems
+		a.store.syncJobs = originalJobs
 		a.store.activities = originalActivities
 		a.store.nextID = originalNextID
+		a.store.nextJobID = originalNextJobID
 		a.store.nextActivityID = originalNextActivityID
 		a.store.mu.Unlock()
 		writeError(w, http.StatusInternalServerError, "could not save imported titles")
 		return
 	}
 	a.store.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"imported": len(imported), "skipped": skipped, "items": imported})
+	if queuedSync {
+		a.anilist.wakeWorker()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"imported": len(imported), "reconciled": len(reconciledItems), "skipped": skipped,
+		"items": imported, "reconciledItems": reconciledItems,
+	})
 }
 
 func (s *discoveryService) fetchAniListList(ctx context.Context, username string) (anilistImportPreview, error) {

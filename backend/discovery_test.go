@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -181,7 +182,16 @@ func TestDiscoveryValidation(t *testing.T) {
 }
 
 func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var requestBody struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(requestBody.Query, "progress repeat notes") {
+			t.Fatalf("AniList import query does not request repeat: %s", requestBody.Query)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":{"User":{"name":"konan","avatar":{"large":"https://example.com/avatar.jpg"}},"anime":{"lists":[{"entries":[{"id":700,"status":"CURRENT","score":8,"progress":12,"repeat":2,"notes":"great","media":{"id":20,"siteUrl":"https://anilist.co/anime/20","format":"TV","status":"FINISHED","description":"Ninjas.<br>More ninjas.","episodes":220,"duration":23,"genres":["Action"],"averageScore":79,"title":{"romaji":"NARUTO","english":"Naruto","native":"NARUTO -ナルト-"},"coverImage":{"extraLarge":"https://example.com/naruto.jpg"},"startDate":{"year":2002,"month":10,"day":3},"endDate":{"year":2007,"month":2,"day":8},"studios":{"nodes":[{"name":"Pierrot"}]},"staff":{"edges":[{"role":"Original Creator","node":{"name":{"full":"Masashi Kishimoto"}}}]}}}]}]},"manga":{"lists":[{"entries":[{"id":701,"status":"PLANNING","score":0,"progress":0,"repeat":1,"notes":"","media":{"id":123,"siteUrl":"https://anilist.co/manga/123","format":"NOVEL","description":"A novel.","chapters":10,"title":{"romaji":"Novel","english":"A Novel","native":"小説"},"coverImage":{"extraLarge":"https://example.com/novel.jpg"},"startDate":{"year":2020},"studios":{"nodes":[]}}}]}]}}}`))
 	}))
@@ -207,10 +217,11 @@ func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
 	if len(store.items) != 2 || store.items[0].Provider != "anilist" || store.items[1].Type != "light_novel" {
 		t.Fatalf("unexpected imported items: %+v", store.items)
 	}
-	if store.items[0].ProviderListEntryID != 700 || store.items[1].ProviderListEntryID != 701 || store.items[0].SyncStatus != "synced" || !store.items[0].AniListRepeatKnown || store.items[0].AniListUserID != 7 {
-		t.Fatalf("connected import did not retain owned list-entry IDs: %+v", store.items)
+	if store.items[0].ProviderListEntryID != 700 || store.items[1].ProviderListEntryID != 701 || store.items[0].SyncStatus != "synced" ||
+		store.items[0].RepeatCount != 2 || !store.items[0].AniListRepeatKnown || store.items[0].AniListUserID != 7 || store.items[1].RepeatCount != 1 {
+		t.Fatalf("connected import did not retain owned AniList state: %+v", store.items)
 	}
-	if strings.Contains(store.items[0].Description, "<br>") || store.items[0].Progress != 12 || store.items[0].RepeatCount != 2 || store.items[1].RepeatCount != 1 {
+	if strings.Contains(store.items[0].Description, "<br>") || store.items[0].Progress != 12 {
 		t.Fatalf("metadata was not normalized: %+v", store.items[0])
 	}
 	metadata := store.items[0]
@@ -220,6 +231,130 @@ func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
 	if len(store.activities) != 2 || store.activities[0].Action != "imported" || store.activities[1].Action != "imported" || store.nextActivityID != 3 {
 		t.Fatalf("import activity was not recorded: activities=%+v next=%d", store.activities, store.nextActivityID)
 	}
+}
+
+func TestConnectedAniListImportReconcilesRepeatAndQueuesLocalDifferences(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"User":{"name":"konan","avatar":{}},"anime":{"lists":[{"entries":[{"id":700,"status":"CURRENT","score":3,"progress":12,"repeat":4,"notes":"remote","media":{"id":20,"siteUrl":"https://anilist.co/anime/20","format":"TV","episodes":26,"title":{"romaji":"Cowboy Bebop","english":"Cowboy Bebop","native":"カウボーイビバップ"},"coverImage":{},"startDate":{},"endDate":{},"studios":{"nodes":[]},"staff":{"edges":[]}}}]}]},"manga":{"lists":[]}}}`))
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "media.json")
+	store, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.items = []Media{{
+		ID: 1, Title: "Cowboy Bebop", Type: "anime", Status: "completed", Progress: 26, Total: 26,
+		Rating: 9, RepeatCount: 0, Notes: "local", Provider: "anilist", ProviderID: "20", SyncStatus: "local_only",
+	}}
+	store.nextID = 2
+	syncer, err := newAniListSync(testAniListConfig(path), store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncer.auth = &aniListAuth{AccessToken: "token", UserID: 7, Username: "konan", ExpiresAt: time.Now().Add(time.Hour)}
+	application := &app{store: store, discovery: testDiscoveryService(server.URL), anilist: syncer}
+	body, _ := json.Marshal(anilistImportRequest{Username: "konan", Types: []string{"anime"}, Statuses: []string{"in_progress"}})
+	request := httptest.NewRequest(http.MethodPost, "/api/import/anilist", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+	application.importAniList(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("reconciliation = %d: %s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Imported   int     `json:"imported"`
+		Reconciled int     `json:"reconciled"`
+		Items      []Media `json:"items"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	item := store.items[0]
+	if result.Imported != 0 || result.Reconciled != 1 || len(result.Items) != 0 || item.RepeatCount != 4 ||
+		!item.AniListRepeatKnown || item.AniListUserID != 7 || item.ProviderListEntryID != 700 || item.SyncStatus != "pending" ||
+		len(store.syncJobs) != 1 || store.syncJobs[0].AniListUserID != 7 {
+		t.Fatalf("existing item was not reconciled: result=%+v item=%+v", result, item)
+	}
+	if item.Status != "completed" || item.Progress != 26 || item.Rating != 9 || item.Notes != "local" {
+		t.Fatalf("reconciliation overwrote local tracking: %+v", item)
+	}
+	if len(store.activities) != 0 {
+		t.Fatalf("reconciliation should not create bulk activity events: %+v", store.activities)
+	}
+	reopened, err := newStore(path)
+	if err != nil || reopened.items[0].RepeatCount != 4 || !reopened.items[0].AniListRepeatKnown || reopened.items[0].AniListUserID != 7 || len(reopened.syncJobs) != 1 {
+		t.Fatalf("reconciled state did not survive restart: store=%+v err=%v", reopened, err)
+	}
+}
+
+func TestAniListImportRepeatOwnership(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"User":{"name":"konan","avatar":{}},"anime":{"lists":[{"entries":[{"id":700,"status":"CURRENT","score":3,"progress":12,"repeat":4,"notes":"remote","media":{"id":20,"siteUrl":"https://anilist.co/anime/20","format":"TV","episodes":26,"title":{"romaji":"Cowboy Bebop"},"coverImage":{},"startDate":{},"endDate":{},"studios":{"nodes":[]},"staff":{"edges":[]}}}]}]},"manga":{"lists":[]}}}`))
+	}))
+	defer server.Close()
+
+	t.Run("matching existing tracking needs no outbox job", func(t *testing.T) {
+		store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+		store.items = []Media{{
+			ID: 1, Title: "Cowboy Bebop", Type: "anime", Status: "in_progress", Progress: 12,
+			Rating: 3, Notes: "remote", Provider: "anilist", ProviderID: "20", SyncStatus: "local_only",
+		}}
+		store.nextID = 2
+		syncer, _ := newAniListSync(testAniListConfig(store.path), store)
+		syncer.auth = &aniListAuth{AccessToken: "token", UserID: 7, Username: "konan", ExpiresAt: time.Now().Add(time.Hour)}
+		application := &app{store: store, discovery: testDiscoveryService(server.URL), anilist: syncer}
+		body, _ := json.Marshal(anilistImportRequest{Username: "konan", Types: []string{"anime"}, Statuses: []string{"in_progress"}})
+		response := httptest.NewRecorder()
+		application.importAniList(response, httptest.NewRequest(http.MethodPost, "/api/import/anilist", bytes.NewReader(body)))
+
+		item := store.items[0]
+		if response.Code != http.StatusOK || item.RepeatCount != 4 || !item.AniListRepeatKnown || item.AniListUserID != 7 || item.SyncStatus != "synced" || len(store.syncJobs) != 0 {
+			t.Fatalf("matching item was not safely reconciled: code=%d item=%+v jobs=%+v", response.Code, item, store.syncJobs)
+		}
+	})
+
+	t.Run("public import keeps repeat local and unowned", func(t *testing.T) {
+		store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+		syncer, _ := newAniListSync(testAniListConfig(store.path), store)
+		application := &app{store: store, discovery: testDiscoveryService(server.URL), anilist: syncer}
+		body, _ := json.Marshal(anilistImportRequest{Username: "konan", Types: []string{"anime"}, Statuses: []string{"in_progress"}})
+		response := httptest.NewRecorder()
+		application.importAniList(response, httptest.NewRequest(http.MethodPost, "/api/import/anilist", bytes.NewReader(body)))
+
+		item := store.items[0]
+		if response.Code != http.StatusOK || item.RepeatCount != 4 || item.AniListRepeatKnown || item.AniListUserID != 0 || item.SyncStatus != "local_only" {
+			t.Fatalf("public repeat import gained AniList ownership: code=%d item=%+v", response.Code, item)
+		}
+	})
+
+	t.Run("persistence failure rolls reconciliation back", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "media.json")
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		store := &store{
+			path: path,
+			items: []Media{{
+				ID: 1, Title: "Cowboy Bebop", Type: "anime", Status: "completed", Provider: "anilist", ProviderID: "20", SyncStatus: "local_only",
+			}},
+			syncJobs: []syncJob{}, activities: []Activity{}, nextID: 2, nextJobID: 1, nextActivityID: 1,
+		}
+		syncer, _ := newAniListSync(testAniListConfig(path), store)
+		syncer.auth = &aniListAuth{AccessToken: "token", UserID: 7, Username: "konan", ExpiresAt: time.Now().Add(time.Hour)}
+		application := &app{store: store, discovery: testDiscoveryService(server.URL), anilist: syncer}
+		body, _ := json.Marshal(anilistImportRequest{Username: "konan", Types: []string{"anime"}, Statuses: []string{"in_progress"}})
+		response := httptest.NewRecorder()
+		application.importAniList(response, httptest.NewRequest(http.MethodPost, "/api/import/anilist", bytes.NewReader(body)))
+
+		item := store.items[0]
+		if response.Code != http.StatusInternalServerError || item.RepeatCount != 0 || item.AniListRepeatKnown || item.AniListUserID != 0 ||
+			item.SyncStatus != "local_only" || len(store.syncJobs) != 0 || store.nextJobID != 1 {
+			t.Fatalf("failed reconciliation left partial state: code=%d item=%+v jobs=%+v nextJobID=%d", response.Code, item, store.syncJobs, store.nextJobID)
+		}
+	})
 }
 
 func testDiscoveryService(baseURL string) *discoveryService {

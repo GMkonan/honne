@@ -191,6 +191,84 @@ describe("Library characterization", () => {
     ).toBe("true");
   });
 
+  it("links existing AniList titles and applies their repeat counts", async () => {
+    globalThis.history.replaceState(null, "", "/#settings");
+    const router = createFetchRouter();
+    const linkedItem = {
+      ...mediaItems[0],
+      provider: "anilist",
+      providerId: "20",
+      providerUrl: "https://anilist.co/anime/20",
+      format: "TV",
+    };
+    const connected = {
+      configured: true,
+      connected: true,
+      username: "konan",
+      deleteOnLocalDelete: true,
+      pending: 0,
+      errors: 0,
+    };
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router, [linkedItem]);
+    router
+      .json("GET", "/api/integrations/anilist", connected)
+      .json("GET", "/api/import/anilist?username=konan", {
+        username: "konan",
+        entries: [{
+          ...linkedItem,
+          providerListEntryId: 700,
+          alreadyExists: true,
+        }],
+      })
+      .json("POST", "/api/import/anilist", async (request: Request) => {
+        submitted = await request.json() as Record<string, unknown>;
+        return Response.json({
+          imported: 0,
+          reconciled: 1,
+          skipped: 0,
+          items: [],
+          reconciledItems: [{
+            ...linkedItem,
+            repeatCount: 4,
+            providerListEntryId: 700,
+            syncStatus: "synced",
+          }],
+        });
+      });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Import AniList library" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview list" }));
+    const linkButton = await screen.findByRole("button", {
+      name: "Link 1 existing titles",
+    });
+    expect((linkButton as HTMLButtonElement).disabled).toBe(false);
+    await user.click(linkButton);
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /Bring your library/u }))
+        .toBeNull()
+    );
+    expect(submitted).toMatchObject({
+      username: "konan",
+      types: ["anime"],
+      statuses: ["in_progress"],
+    });
+    await user.click(screen.getByRole("link", { name: "Library" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    const personal = screen.getByRole("region", { name: "Your Library" });
+    const repeatLabel = within(personal).getByText("Rewatches");
+    expect(repeatLabel.nextElementSibling?.textContent).toBe("4");
+  });
+
   it("downloads a restorable backup from Settings", async () => {
     globalThis.history.replaceState(null, "", "/#settings");
     const router = createFetchRouter();
