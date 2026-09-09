@@ -4,7 +4,8 @@ A self-hostable, local-first library for anime, series, movies, books, manga, an
 
 Track what you plan to watch or read, keep personal progress and ratings, enrich titles from optional catalogs, and synchronize AniList-linked entries without giving up ownership of your local collection.
 
-![Honne Library showing a profile summary, media filters, and tracked titles](docs/assets/library.jpg)
+![Honne Home](docs/assets/home.png)
+![Honne Library](docs/assets/library.png)
 
 ## Highlights
 
