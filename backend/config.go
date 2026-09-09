@@ -51,7 +51,7 @@ func loadConfig() (config, error) {
 
 	dataPath := envOr("DATA_PATH", "data/media.json")
 	cfg := config{
-		Port:                 envOr("PORT", "8080"),
+		Port:                 envOr("PORT", "7417"),
 		DataPath:             dataPath,
 		AllowedOrigin:        envOr("APP_ORIGIN", "http://localhost:5173"),
 		AppUsername:          os.Getenv("APP_USERNAME"),

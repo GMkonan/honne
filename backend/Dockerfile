@@ -14,6 +14,7 @@ RUN addgroup -S honne && adduser -S -G honne honne \
     && mkdir -p /data \
     && chown honne:honne /data
 COPY --from=build /honne-api /usr/local/bin/honne-api
+ENV PORT=8080
 USER honne
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
