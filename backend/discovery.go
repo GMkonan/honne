@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,26 +27,27 @@ var errProviderUnavailable = errors.New("provider is not configured")
 var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
 
 type discoveryResult struct {
-	Provider        string        `json:"provider"`
-	ProviderID      string        `json:"providerId"`
-	ProviderURL     string        `json:"providerUrl"`
-	Type            string        `json:"type"`
-	Title           string        `json:"title"`
-	OriginalTitle   string        `json:"originalTitle,omitempty"`
-	Description     string        `json:"description,omitempty"`
-	CoverURL        string        `json:"coverUrl,omitempty"`
-	ReleaseYear     int           `json:"releaseYear,omitempty"`
-	Format          string        `json:"format,omitempty"`
-	Total           int           `json:"total,omitempty"`
-	Subtitle        string        `json:"subtitle,omitempty"`
-	Genres          []string      `json:"genres,omitempty"`
-	Credits         []mediaCredit `json:"credits,omitempty"`
-	ReleaseStatus   string        `json:"releaseStatus,omitempty"`
-	StartDate       string        `json:"startDate,omitempty"`
-	EndDate         string        `json:"endDate,omitempty"`
-	DurationMinutes int           `json:"durationMinutes,omitempty"`
-	CatalogTotal    int           `json:"catalogTotal,omitempty"`
-	CommunityRating float64       `json:"communityRating,omitempty"`
+	Provider         string        `json:"provider"`
+	ProviderID       string        `json:"providerId"`
+	ProviderURL      string        `json:"providerUrl"`
+	Type             string        `json:"type"`
+	Title            string        `json:"title"`
+	OriginalTitle    string        `json:"originalTitle,omitempty"`
+	Description      string        `json:"description,omitempty"`
+	CoverURL         string        `json:"coverUrl,omitempty"`
+	ReleaseYear      int           `json:"releaseYear,omitempty"`
+	Format           string        `json:"format,omitempty"`
+	Total            int           `json:"total,omitempty"`
+	Subtitle         string        `json:"subtitle,omitempty"`
+	Genres           []string      `json:"genres,omitempty"`
+	Credits          []mediaCredit `json:"credits,omitempty"`
+	ReleaseStatus    string        `json:"releaseStatus,omitempty"`
+	StartDate        string        `json:"startDate,omitempty"`
+	EndDate          string        `json:"endDate,omitempty"`
+	DurationMinutes  int           `json:"durationMinutes,omitempty"`
+	CatalogTotal     int           `json:"catalogTotal,omitempty"`
+	CommunityRating  float64       `json:"communityRating,omitempty"`
+	CatalogPlatforms []string      `json:"catalogPlatforms,omitempty"`
 }
 
 type discoveryResponse struct {
@@ -111,6 +112,11 @@ type cachedDiscovery struct {
 	expiresAt time.Time
 }
 
+type cachedDiscoveryDetail struct {
+	result    discoveryResult
+	expiresAt time.Time
+}
+
 type discoveryService struct {
 	client       *http.Client
 	anilistBase  string
@@ -118,10 +124,13 @@ type discoveryService struct {
 	booksBase    string
 	tmdbBase     string
 	tmdbToken    string
+	rawgBase     string
+	rawgKey      string
 	contactEmail string
 
-	mu    sync.Mutex
-	cache map[string]cachedDiscovery
+	mu          sync.Mutex
+	cache       map[string]cachedDiscovery
+	detailCache map[string]cachedDiscoveryDetail
 }
 
 func newDiscoveryService(cfg config) *discoveryService {
@@ -132,8 +141,11 @@ func newDiscoveryService(cfg config) *discoveryService {
 		booksBase:    cfg.OpenLibraryAPIURL,
 		tmdbBase:     cfg.TMDBAPIURL,
 		tmdbToken:    cfg.TMDBAPIToken,
+		rawgBase:     cfg.RAWGAPIURL,
+		rawgKey:      cfg.RAWGAPIKey,
 		contactEmail: cfg.AppContactEmail,
 		cache:        make(map[string]cachedDiscovery),
+		detailCache:  make(map[string]cachedDiscoveryDetail),
 	}
 }
 
@@ -160,7 +172,11 @@ func (a *app) searchDiscovery(w http.ResponseWriter, r *http.Request) {
 
 	response, err := a.discovery.search(r.Context(), mediaType, query, page)
 	if errors.Is(err, errProviderUnavailable) {
-		writeError(w, http.StatusServiceUnavailable, "movie and series search requires TMDB_API_TOKEN")
+		message := "movie and series search requires TMDB_API_TOKEN"
+		if mediaType == "game" {
+			message = "game search requires RAWG_API_KEY"
+		}
+		writeError(w, http.StatusServiceUnavailable, message)
 		return
 	}
 	if err != nil {
@@ -254,6 +270,8 @@ func (s *discoveryService) search(ctx context.Context, mediaType, query string, 
 		response, err = s.searchBooks(ctx, query, page)
 	case "movie", "series":
 		response, err = s.searchTMDB(ctx, mediaType, query, page)
+	case "game":
+		response, err = s.searchRAWG(ctx, query, page)
 	default:
 		return discoveryResponse{}, fmt.Errorf("unsupported discovery media type %q", mediaType)
 	}
@@ -620,5 +638,5 @@ func slicesContains(values []string, target string) bool {
 }
 
 func logProviderError(mediaType string, err error) {
-	fmt.Fprintf(os.Stderr, "discovery provider error for %s: %v\n", mediaType, err)
+	slog.Error("discovery_provider_failed", "media_type", mediaType, "error", err)
 }

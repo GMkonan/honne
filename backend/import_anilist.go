@@ -357,7 +357,8 @@ func mediaFromInput(id int, input mediaInput, now time.Time) Media {
 	return Media{
 		ID: id, Title: strings.TrimSpace(input.Title), Type: input.Type, Status: input.Status,
 		Progress: input.Progress, Total: input.Total, Rating: input.Rating, RepeatCount: repeatCountValue(input.RepeatCount),
-		PlaytimeMinutes: playtimeMinutesValue(input.PlaytimeMinutes), PlayedOnPlatforms: personalPlatformsValue(input.PlayedOnPlatforms), Notes: strings.TrimSpace(input.Notes),
+		PlaytimeMinutes: playtimeMinutesValue(input.PlaytimeMinutes), PlayedOnPlatforms: personalPlatformsValue(input.PlayedOnPlatforms),
+		CatalogPlatforms: catalogPlatformsValue(input.CatalogPlatforms), Notes: strings.TrimSpace(input.Notes),
 		CoverURL: strings.TrimSpace(input.CoverURL), Provider: input.Provider, ProviderID: input.ProviderID,
 		ProviderURL: strings.TrimSpace(input.ProviderURL), OriginalTitle: strings.TrimSpace(input.OriginalTitle),
 		Description: strings.TrimSpace(input.Description), ReleaseYear: input.ReleaseYear,
@@ -366,6 +367,14 @@ func mediaFromInput(id int, input mediaInput, now time.Time) Media {
 		DurationMinutes: input.DurationMinutes, CatalogTotal: input.CatalogTotal,
 		CommunityRating: input.CommunityRating, CreatedAt: now, UpdatedAt: now,
 	}
+}
+
+func catalogPlatformsValue(values []string) []string {
+	platforms := normalizedMetadataStrings(values)
+	if platforms == nil {
+		return []string{}
+	}
+	return platforms
 }
 
 func stringSet(values []string) map[string]bool {
