@@ -18,10 +18,11 @@ import (
 	"time"
 )
 
-const persistedStoreVersion = 3
+const persistedStoreVersion = 4
 
 var (
-	validTypes    = []string{"anime", "series", "movie", "book", "manga", "light_novel"}
+	validTypes    = []string{"anime", "series", "movie", "book", "manga", "light_novel", "game"}
+	catalogTypes  = []string{"anime", "series", "movie", "book", "manga", "light_novel"}
 	validStatuses = []string{"planned", "in_progress", "completed", "paused", "dropped"}
 )
 
@@ -39,6 +40,8 @@ type Media struct {
 	Total               int           `json:"total"`
 	Rating              int           `json:"rating"`
 	RepeatCount         int           `json:"repeatCount"`
+	PlaytimeMinutes     int           `json:"playtimeMinutes"`
+	PlayedOnPlatforms   []string      `json:"playedOnPlatforms"`
 	Notes               string        `json:"notes"`
 	CoverURL            string        `json:"coverUrl"`
 	Provider            string        `json:"provider,omitempty"`
@@ -66,30 +69,32 @@ type Media struct {
 }
 
 type mediaInput struct {
-	Title           string        `json:"title"`
-	Type            string        `json:"type"`
-	Status          string        `json:"status"`
-	Progress        int           `json:"progress"`
-	Total           int           `json:"total"`
-	Rating          int           `json:"rating"`
-	RepeatCount     *int          `json:"repeatCount,omitempty"`
-	Notes           string        `json:"notes"`
-	CoverURL        string        `json:"coverUrl"`
-	Provider        string        `json:"provider"`
-	ProviderID      string        `json:"providerId"`
-	ProviderURL     string        `json:"providerUrl"`
-	OriginalTitle   string        `json:"originalTitle"`
-	Description     string        `json:"description"`
-	ReleaseYear     int           `json:"releaseYear"`
-	Format          string        `json:"format,omitempty"`
-	Genres          []string      `json:"genres,omitempty"`
-	Credits         []mediaCredit `json:"credits,omitempty"`
-	ReleaseStatus   string        `json:"releaseStatus,omitempty"`
-	StartDate       string        `json:"startDate,omitempty"`
-	EndDate         string        `json:"endDate,omitempty"`
-	DurationMinutes int           `json:"durationMinutes,omitempty"`
-	CatalogTotal    int           `json:"catalogTotal,omitempty"`
-	CommunityRating float64       `json:"communityRating,omitempty"`
+	Title             string        `json:"title"`
+	Type              string        `json:"type"`
+	Status            string        `json:"status"`
+	Progress          int           `json:"progress"`
+	Total             int           `json:"total"`
+	Rating            int           `json:"rating"`
+	RepeatCount       *int          `json:"repeatCount,omitempty"`
+	PlaytimeMinutes   *int          `json:"playtimeMinutes,omitempty"`
+	PlayedOnPlatforms *[]string     `json:"playedOnPlatforms,omitempty"`
+	Notes             string        `json:"notes"`
+	CoverURL          string        `json:"coverUrl"`
+	Provider          string        `json:"provider"`
+	ProviderID        string        `json:"providerId"`
+	ProviderURL       string        `json:"providerUrl"`
+	OriginalTitle     string        `json:"originalTitle"`
+	Description       string        `json:"description"`
+	ReleaseYear       int           `json:"releaseYear"`
+	Format            string        `json:"format,omitempty"`
+	Genres            []string      `json:"genres,omitempty"`
+	Credits           []mediaCredit `json:"credits,omitempty"`
+	ReleaseStatus     string        `json:"releaseStatus,omitempty"`
+	StartDate         string        `json:"startDate,omitempty"`
+	EndDate           string        `json:"endDate,omitempty"`
+	DurationMinutes   int           `json:"durationMinutes,omitempty"`
+	CatalogTotal      int           `json:"catalogTotal,omitempty"`
+	CommunityRating   float64       `json:"communityRating,omitempty"`
 }
 
 type persistedStore struct {
@@ -153,7 +158,11 @@ func newStore(path string) (*store, error) {
 			s.nextActivityID = persisted.NextActivityID
 		}
 	}
-	for _, item := range s.items {
+	for index := range s.items {
+		if s.items[index].PlayedOnPlatforms == nil {
+			s.items[index].PlayedOnPlatforms = []string{}
+		}
+		item := s.items[index]
 		if item.ID >= s.nextID {
 			s.nextID = item.ID + 1
 		}
@@ -383,6 +392,12 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 	if input.RepeatCount != nil {
 		item.RepeatCount = *input.RepeatCount
 	}
+	if input.PlaytimeMinutes != nil {
+		item.PlaytimeMinutes = *input.PlaytimeMinutes
+	}
+	if input.PlayedOnPlatforms != nil {
+		item.PlayedOnPlatforms = normalizedPersonalPlatforms(*input.PlayedOnPlatforms)
+	}
 	item.Notes = strings.TrimSpace(input.Notes)
 	item.CoverURL = strings.TrimSpace(input.CoverURL)
 	item.Provider = input.Provider
@@ -494,6 +509,19 @@ func validateInput(input mediaInput) error {
 	}
 	if input.RepeatCount != nil && (*input.RepeatCount < 0 || *input.RepeatCount > maxRepeatCount) {
 		return fmt.Errorf("repeat count must be between 0 and %d", maxRepeatCount)
+	}
+	if input.PlaytimeMinutes != nil && (*input.PlaytimeMinutes < 0 || *input.PlaytimeMinutes > maxPlaytimeMinutes) {
+		return fmt.Errorf("playtime must be between 0 and %d minutes", maxPlaytimeMinutes)
+	}
+	if input.PlayedOnPlatforms != nil {
+		if len(*input.PlayedOnPlatforms) > maxPersonalPlatforms {
+			return fmt.Errorf("played-on platforms cannot contain more than %d entries", maxPersonalPlatforms)
+		}
+		for _, platform := range *input.PlayedOnPlatforms {
+			if length := len([]rune(strings.TrimSpace(platform))); length < 1 || length > maxPersonalPlatformLength {
+				return fmt.Errorf("played-on platforms must contain between 1 and %d characters", maxPersonalPlatformLength)
+			}
+		}
 	}
 	if (input.Provider == "") != (input.ProviderID == "") {
 		return errors.New("provider and providerId must be supplied together")
@@ -607,6 +635,24 @@ func normalizedMetadataStrings(values []string) []string {
 		seen[key] = true
 		result = append(result, value)
 		if len(result) == 12 {
+			break
+		}
+	}
+	return result
+}
+
+func normalizedPersonalPlatforms(values []string) []string {
+	result := make([]string, 0, min(len(values), maxPersonalPlatforms))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		key := strings.ToLower(value)
+		if length := len([]rune(value)); length < 1 || length > maxPersonalPlatformLength || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, value)
+		if len(result) == maxPersonalPlatforms {
 			break
 		}
 	}

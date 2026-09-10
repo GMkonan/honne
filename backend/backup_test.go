@@ -15,10 +15,16 @@ import (
 func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	now := time.Date(2026, time.September, 6, 23, 0, 0, 0, time.UTC)
 	s := &store{
-		items: []Media{{
-			ID: 7, Title: "Cowboy Bebop", Type: "anime", Status: "in_progress",
-			Progress: 8, RepeatCount: 2, Genres: []string{"Sci-Fi"}, AniListUserID: 42, AniListRepeatKnown: true, CreatedAt: now, UpdatedAt: now,
-		}},
+		items: []Media{
+			{
+				ID: 7, Title: "Cowboy Bebop", Type: "anime", Status: "in_progress",
+				Progress: 8, RepeatCount: 2, PlayedOnPlatforms: []string{}, Genres: []string{"Sci-Fi"}, AniListUserID: 42, AniListRepeatKnown: true, CreatedAt: now, UpdatedAt: now,
+			},
+			{
+				ID: 8, Title: "Hades", Type: "game", Status: "in_progress",
+				PlaytimeMinutes: 720, PlayedOnPlatforms: []string{"PC", "Steam Deck"}, Genres: []string{"Action"}, CreatedAt: now, UpdatedAt: now,
+			},
+		},
 		syncJobs: []syncJob{{
 			ID: 9, MediaID: 7, Operation: "upsert", ProviderMediaID: 1,
 			AniListUserID: 42, Generation: 1, CreatedAt: now, UpdatedAt: now,
@@ -27,7 +33,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 			ID: 11, MediaID: 7, Title: "Cowboy Bebop", MediaType: "anime",
 			Action: "updated", OccurredAt: now,
 		}},
-		nextID: 8, nextJobID: 10, nextActivityID: 12,
+		nextID: 9, nextJobID: 10, nextActivityID: 12,
 	}
 	application := &app{store: s}
 	response := httptest.NewRecorder()
@@ -39,7 +45,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	if response.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
 		response.Header().Get("Cache-Control") != "no-store" ||
 		response.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		response.Header().Get("X-Honne-Backup-Version") != "3" {
+		response.Header().Get("X-Honne-Backup-Version") != "4" {
 		t.Fatalf("unexpected backup headers: %v", response.Header())
 	}
 	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, `attachment; filename="honne-backup-`) || !strings.HasSuffix(disposition, `.json"`) {
@@ -57,10 +63,11 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backup could not be restored: %v", err)
 	}
-	if len(restored.items) != 1 || restored.items[0].ID != 7 || restored.items[0].RepeatCount != 2 || restored.items[0].AniListUserID != 42 || !restored.items[0].AniListRepeatKnown || restored.items[0].Genres[0] != "Sci-Fi" ||
+	if len(restored.items) != 2 || restored.items[0].ID != 7 || restored.items[0].RepeatCount != 2 || restored.items[0].AniListUserID != 42 || !restored.items[0].AniListRepeatKnown || restored.items[0].Genres[0] != "Sci-Fi" ||
+		restored.items[1].ID != 8 || restored.items[1].PlaytimeMinutes != 720 || strings.Join(restored.items[1].PlayedOnPlatforms, ",") != "PC,Steam Deck" || restored.items[1].Genres[0] != "Action" ||
 		len(restored.syncJobs) != 1 || restored.syncJobs[0].ID != 9 ||
 		len(restored.activities) != 1 || restored.activities[0].ID != 11 ||
-		restored.nextID != 8 || restored.nextJobID != 10 || restored.nextActivityID != 12 {
+		restored.nextID != 9 || restored.nextJobID != 10 || restored.nextActivityID != 12 {
 		t.Fatalf("restored backup lost durable state: %+v", restored)
 	}
 }

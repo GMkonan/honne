@@ -133,6 +133,52 @@ func TestCreateRollsBackActivityWhenPersistenceFails(t *testing.T) {
 	}
 }
 
+func TestGamePlaytimeActivityPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	store, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store}
+	created := httptest.NewRecorder()
+	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", mediaInput{
+		Title: "Hades", Type: "game", Status: "in_progress", PlaytimeMinutes: intPointer(30),
+	}))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
+	}
+
+	updated := httptest.NewRecorder()
+	request := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Hades", Type: "game", Status: "in_progress", PlaytimeMinutes: intPointer(95),
+	})
+	request.SetPathValue("id", "1")
+	application.updateMedia(updated, request)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("update = %d: %s", updated.Code, updated.Body.String())
+	}
+	change := store.activities[1].Changes
+	if change.FromPlaytimeMinutes == nil || *change.FromPlaytimeMinutes != 30 || change.ToPlaytimeMinutes == nil || *change.ToPlaytimeMinutes != 95 {
+		t.Fatalf("unexpected playtime activity: %+v", change)
+	}
+
+	cleared := httptest.NewRecorder()
+	clearRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Hades", Type: "game", Status: "in_progress", PlaytimeMinutes: intPointer(0),
+	})
+	clearRequest.SetPathValue("id", "1")
+	application.updateMedia(cleared, clearRequest)
+	clearChange := store.activities[2].Changes
+	if cleared.Code != http.StatusOK || clearChange.ToPlaytimeMinutes == nil || *clearChange.ToPlaytimeMinutes != 0 {
+		t.Fatalf("playtime clear activity = %+v, code=%d", clearChange, cleared.Code)
+	}
+
+	reopened, err := newStore(path)
+	if err != nil || reopened.activities[2].Changes.ToPlaytimeMinutes == nil || *reopened.activities[2].Changes.ToPlaytimeMinutes != 0 {
+		t.Fatalf("playtime activity did not survive restart: store=%+v err=%v", reopened, err)
+	}
+}
+
 func TestRepeatCountUpdateRollsBackWhenPersistenceFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	if err := os.Mkdir(path, 0o755); err != nil {
@@ -159,6 +205,36 @@ func TestRepeatCountUpdateRollsBackWhenPersistenceFails(t *testing.T) {
 	if response.Code != http.StatusInternalServerError || store.items[0].RepeatCount != 1 ||
 		len(store.activities) != 0 || store.nextActivityID != 1 {
 		t.Fatalf("failed update left partial state: code=%d item=%+v activities=%+v next=%d", response.Code, store.items[0], store.activities, store.nextActivityID)
+	}
+}
+
+func TestGameTrackingUpdateRollsBackWhenPersistenceFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	store := &store{
+		path: path,
+		items: []Media{{
+			ID: 1, Title: "Hades", Type: "game", Status: "in_progress", PlaytimeMinutes: 60,
+			PlayedOnPlatforms: []string{"PC"}, CreatedAt: now, UpdatedAt: now,
+		}},
+		syncJobs: []syncJob{}, activities: []Activity{},
+		nextID: 2, nextJobID: 1, nextActivityID: 1,
+	}
+	platforms := []string{"Switch"}
+	request := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Hades", Type: "game", Status: "in_progress", PlaytimeMinutes: intPointer(120), PlayedOnPlatforms: &platforms,
+	})
+	request.SetPathValue("id", "1")
+	response := httptest.NewRecorder()
+	(&app{store: store}).updateMedia(response, request)
+
+	if response.Code != http.StatusInternalServerError || store.items[0].PlaytimeMinutes != 60 ||
+		len(store.items[0].PlayedOnPlatforms) != 1 || store.items[0].PlayedOnPlatforms[0] != "PC" ||
+		len(store.activities) != 0 || store.nextActivityID != 1 {
+		t.Fatalf("failed game update left partial state: code=%d item=%+v activities=%+v next=%d", response.Code, store.items[0], store.activities, store.nextActivityID)
 	}
 }
 
