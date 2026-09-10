@@ -35,17 +35,31 @@ func (a *app) refreshMediaMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := a.discovery.search(r.Context(), snapshot.Type, snapshot.Title, 1)
-	if errors.Is(err, errProviderUnavailable) {
+	var matched *discoveryResult
+	exact := false
+	var discoveryErr error
+	if snapshot.Provider == "rawg" && snapshot.Type == "game" {
+		var result discoveryResult
+		result, discoveryErr = a.discovery.detail(r.Context(), snapshot.Provider, snapshot.Type, snapshot.ProviderID)
+		if discoveryErr == nil {
+			matched, exact = &result, true
+		}
+	} else {
+		var response discoveryResponse
+		response, discoveryErr = a.discovery.search(r.Context(), snapshot.Type, snapshot.Title, 1)
+		if discoveryErr == nil {
+			matched, exact = refreshedMetadataMatch(snapshot, response.Results)
+		}
+	}
+	if errors.Is(discoveryErr, errProviderUnavailable) {
 		writeError(w, http.StatusServiceUnavailable, "the metadata provider is not configured")
 		return
 	}
-	if err != nil {
-		logProviderError(snapshot.Type, err)
+	if discoveryErr != nil {
+		logProviderError(snapshot.Type, discoveryErr)
 		writeError(w, http.StatusBadGateway, "the metadata provider is temporarily unavailable")
 		return
 	}
-	matched, exact := refreshedMetadataMatch(snapshot, response.Results)
 	if matched == nil {
 		writeError(w, http.StatusNotFound, "catalog metadata was not found for this title")
 		return
@@ -122,6 +136,9 @@ func applyRefreshedMetadata(item *Media, result discoveryResult, exactIdentity b
 	}
 	if len(result.Genres) > 0 {
 		item.Genres = normalizedMetadataStrings(result.Genres)
+	}
+	if len(result.CatalogPlatforms) > 0 {
+		item.CatalogPlatforms = normalizedMetadataStrings(result.CatalogPlatforms)
 	}
 	if len(result.Credits) > 0 {
 		item.Credits = normalizedMediaCredits(result.Credits)

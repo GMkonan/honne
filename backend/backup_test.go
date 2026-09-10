@@ -22,7 +22,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 			},
 			{
 				ID: 8, Title: "Hades", Type: "game", Status: "in_progress",
-				PlaytimeMinutes: 720, PlayedOnPlatforms: []string{"PC", "Steam Deck"}, Genres: []string{"Action"}, CreatedAt: now, UpdatedAt: now,
+				PlaytimeMinutes: 720, PlayedOnPlatforms: []string{"PC", "Steam Deck"}, CatalogPlatforms: []string{"PC", "PlayStation 5"}, Genres: []string{"Action"}, CreatedAt: now, UpdatedAt: now,
 			},
 		},
 		syncJobs: []syncJob{{
@@ -45,7 +45,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	if response.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
 		response.Header().Get("Cache-Control") != "no-store" ||
 		response.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		response.Header().Get("X-Honne-Backup-Version") != "4" {
+		response.Header().Get("X-Honne-Backup-Version") != "5" {
 		t.Fatalf("unexpected backup headers: %v", response.Header())
 	}
 	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, `attachment; filename="honne-backup-`) || !strings.HasSuffix(disposition, `.json"`) {
@@ -64,7 +64,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 		t.Fatalf("backup could not be restored: %v", err)
 	}
 	if len(restored.items) != 2 || restored.items[0].ID != 7 || restored.items[0].RepeatCount != 2 || restored.items[0].AniListUserID != 42 || !restored.items[0].AniListRepeatKnown || restored.items[0].Genres[0] != "Sci-Fi" ||
-		restored.items[1].ID != 8 || restored.items[1].PlaytimeMinutes != 720 || strings.Join(restored.items[1].PlayedOnPlatforms, ",") != "PC,Steam Deck" || restored.items[1].Genres[0] != "Action" ||
+		restored.items[1].ID != 8 || restored.items[1].PlaytimeMinutes != 720 || strings.Join(restored.items[1].PlayedOnPlatforms, ",") != "PC,Steam Deck" || strings.Join(restored.items[1].CatalogPlatforms, ",") != "PC,PlayStation 5" || restored.items[1].Genres[0] != "Action" ||
 		len(restored.syncJobs) != 1 || restored.syncJobs[0].ID != 9 ||
 		len(restored.activities) != 1 || restored.activities[0].ID != 11 ||
 		restored.nextID != 9 || restored.nextJobID != 10 || restored.nextActivityID != 12 {

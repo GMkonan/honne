@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const persistedStoreVersion = 4
+const persistedStoreVersion = 5
 
 var (
 	validTypes    = []string{"anime", "series", "movie", "book", "manga", "light_novel", "game"}
@@ -42,6 +42,7 @@ type Media struct {
 	RepeatCount         int           `json:"repeatCount"`
 	PlaytimeMinutes     int           `json:"playtimeMinutes"`
 	PlayedOnPlatforms   []string      `json:"playedOnPlatforms"`
+	CatalogPlatforms    []string      `json:"catalogPlatforms"`
 	Notes               string        `json:"notes"`
 	CoverURL            string        `json:"coverUrl"`
 	Provider            string        `json:"provider,omitempty"`
@@ -78,6 +79,7 @@ type mediaInput struct {
 	RepeatCount       *int          `json:"repeatCount,omitempty"`
 	PlaytimeMinutes   *int          `json:"playtimeMinutes,omitempty"`
 	PlayedOnPlatforms *[]string     `json:"playedOnPlatforms,omitempty"`
+	CatalogPlatforms  []string      `json:"catalogPlatforms,omitempty"`
 	Notes             string        `json:"notes"`
 	CoverURL          string        `json:"coverUrl"`
 	Provider          string        `json:"provider"`
@@ -162,6 +164,9 @@ func newStore(path string) (*store, error) {
 		if s.items[index].PlayedOnPlatforms == nil {
 			s.items[index].PlayedOnPlatforms = []string{}
 		}
+		if s.items[index].CatalogPlatforms == nil {
+			s.items[index].CatalogPlatforms = []string{}
+		}
 		item := s.items[index]
 		if item.ID >= s.nextID {
 			s.nextID = item.ID + 1
@@ -241,6 +246,7 @@ func main() {
 	mux.HandleFunc("GET /api/backup", application.downloadBackup)
 	mux.HandleFunc("GET /api/discovery/search", application.searchDiscovery)
 	mux.HandleFunc("GET /api/discovery/global", application.searchGlobalDiscovery)
+	mux.HandleFunc("GET /api/discovery/detail", application.getDiscoveryDetail)
 	mux.HandleFunc("GET /api/import/anilist", application.previewAniListImport)
 	mux.HandleFunc("POST /api/import/anilist", application.importAniList)
 	mux.HandleFunc("GET /api/integrations/anilist", application.anilist.statusHandler)
@@ -538,6 +544,17 @@ func validateInput(input mediaInput) error {
 	for _, genre := range input.Genres {
 		if length := len([]rune(strings.TrimSpace(genre))); length < 1 || length > 100 {
 			return errors.New("genres must contain between 1 and 100 characters")
+		}
+	}
+	if input.Type != "game" && len(input.CatalogPlatforms) > 0 {
+		return errors.New("catalog platforms are only supported for games")
+	}
+	if len(input.CatalogPlatforms) > 12 {
+		return errors.New("catalog platforms cannot contain more than 12 entries")
+	}
+	for _, platform := range input.CatalogPlatforms {
+		if length := len([]rune(strings.TrimSpace(platform))); length < 1 || length > 100 {
+			return errors.New("catalog platforms must contain between 1 and 100 characters")
 		}
 	}
 	if len(input.Credits) > 12 {

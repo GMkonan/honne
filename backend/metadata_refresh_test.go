@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -82,6 +83,85 @@ func TestRefreshMediaMetadataUsesTitleFallbackAndPreservesPersonalData(t *testin
 	}
 	if len(reopened.items) != 1 || reopened.items[0].CatalogTotal != 26 || reopened.items[0].Status != "in_progress" {
 		t.Fatalf("refreshed metadata did not survive restart: %+v", reopened.items)
+	}
+}
+
+func TestRefreshRAWGMetadataUsesProviderIDAndPreservesPersonalData(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/games/420" {
+			t.Fatalf("refresh used an unexpected RAWG path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"id":420,"slug":"hades","name":"Hades","description_raw":"Escape the Underworld.","released":"2020-09-17","rating":4.5,"genres":[{"name":"Action"}],"developers":[{"name":"Supergiant Games"}],"platforms":[{"platform":{"name":"PC"}},{"platform":{"name":"Nintendo Switch"}}]}`))
+	}))
+	defer provider.Close()
+
+	path := filepath.Join(t.TempDir(), "media.json")
+	s, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	s.items = []Media{{
+		ID: 1, Title: "Hades", Type: "game", Status: "in_progress", Rating: 9, RepeatCount: 2,
+		PlaytimeMinutes: 120, PlayedOnPlatforms: []string{"Steam Deck"}, Notes: "personal note",
+		Provider: "rawg", ProviderID: "420", CreatedAt: now, UpdatedAt: now,
+	}}
+	s.nextID = 2
+	application := &app{store: s, discovery: rawgTestService(provider.URL, "secret")}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/media/1/refresh-metadata", nil)
+	request.SetPathValue("id", "1")
+	application.refreshMediaMetadata(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("refresh = %d: %s", response.Code, response.Body.String())
+	}
+	var updated Media
+	if err := json.NewDecoder(response.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.PlaytimeMinutes != 120 || strings.Join(updated.PlayedOnPlatforms, ",") != "Steam Deck" ||
+		updated.Rating != 9 || updated.RepeatCount != 2 || updated.Notes != "personal note" || !updated.UpdatedAt.Equal(now) {
+		t.Fatalf("RAWG refresh changed personal data: %+v", updated)
+	}
+	if updated.Description == "" || updated.ProviderURL != "https://rawg.io/games/hades" || updated.ReleaseYear != 2020 ||
+		strings.Join(updated.Genres, ",") != "Action" || strings.Join(updated.CatalogPlatforms, ",") != "PC,Nintendo Switch" ||
+		len(updated.Credits) != 1 || updated.CommunityRating != 9 {
+		t.Fatalf("RAWG metadata was not refreshed: %+v", updated)
+	}
+	reopened, err := newStore(path)
+	if err != nil || len(reopened.items) != 1 || len(reopened.items[0].CatalogPlatforms) != 2 {
+		t.Fatalf("RAWG refresh did not survive restart: store=%+v err=%v", reopened, err)
+	}
+}
+
+func TestRefreshRAWGMetadataRollsBackWhenPersistenceFails(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":420,"slug":"hades","name":"Hades","description_raw":"New description","released":"2020-09-17","genres":[{"name":"Action"}],"platforms":[{"platform":{"name":"PC"}}]}`))
+	}))
+	defer provider.Close()
+	path := filepath.Join(t.TempDir(), "media.json")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	s := &store{
+		path: path, items: []Media{{
+			ID: 1, Title: "Hades", Type: "game", Status: "in_progress", PlaytimeMinutes: 90,
+			PlayedOnPlatforms: []string{"Steam Deck"}, CatalogPlatforms: []string{}, Provider: "rawg", ProviderID: "420",
+			CreatedAt: now, UpdatedAt: now,
+		}}, syncJobs: []syncJob{}, activities: []Activity{}, nextID: 2, nextJobID: 1, nextActivityID: 1,
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/media/1/refresh-metadata", nil)
+	request.SetPathValue("id", "1")
+	(&app{store: s, discovery: rawgTestService(provider.URL, "secret")}).refreshMediaMetadata(response, request)
+
+	item := s.items[0]
+	if response.Code != http.StatusInternalServerError || item.Description != "" || len(item.Genres) != 0 ||
+		len(item.CatalogPlatforms) != 0 || item.ProviderURL != "" || item.PlaytimeMinutes != 90 ||
+		strings.Join(item.PlayedOnPlatforms, ",") != "Steam Deck" || !item.UpdatedAt.Equal(now) {
+		t.Fatalf("failed RAWG refresh left partial state: code=%d item=%+v", response.Code, item)
 	}
 }
 
