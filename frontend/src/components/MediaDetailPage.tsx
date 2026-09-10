@@ -6,6 +6,7 @@ import {
   Clapperboard,
   ExternalLink,
   Film,
+  Gamepad2,
   Library,
   type LucideIcon,
   Pencil,
@@ -22,6 +23,7 @@ import {
 } from "./GlobalSearchBox.tsx";
 import {
   catalogTotalLabel,
+  formatPlaytime,
   mediaStatusLabel,
   mediaTracking,
   progressValue,
@@ -39,6 +41,8 @@ export interface DetailLibraryMedia {
   total: number;
   rating: number;
   repeatCount: number;
+  playtimeMinutes: number;
+  playedOnPlatforms: string[];
   notes: string;
   coverUrl: string;
   provider: string;
@@ -88,6 +92,7 @@ const typeDetails: Record<
   book: { label: "Book", icon: BookOpen },
   manga: { label: "Manga", icon: Library },
   light_novel: { label: "Light novel", icon: Clapperboard },
+  game: { label: "Game", icon: Gamepad2 },
 };
 
 function safeHTTPURL(value?: string): string {
@@ -209,6 +214,12 @@ function LibraryPanel(
         </span>
       </div>
       <dl className="detail-personal-stats">
+        {item.type === "game" && (
+          <div className="detail-game-stat">
+            <dt>Playtime</dt>
+            <dd>{formatPlaytime(item.playtimeMinutes || 0)}</dd>
+          </div>
+        )}
         {tracking.tracksProgress && (
           <div>
             <dt>{tracking.progressLabel}</dt>
@@ -224,6 +235,12 @@ function LibraryPanel(
           <dd>{item.repeatCount ?? 0}</dd>
         </div>
       </dl>
+      {item.type === "game" && item.playedOnPlatforms?.length > 0 && (
+        <div className="detail-platforms">
+          <span>Played on</span>
+          <p>{item.playedOnPlatforms.join(" · ")}</p>
+        </div>
+      )}
       {item.notes && (
         <div className="detail-review">
           <span>Review / notes</span>

@@ -646,6 +646,297 @@ describe("Library characterization", () => {
     });
   });
 
+  it("keeps the discovery dialog keyboard-contained and restores focus", async () => {
+    const router = createFetchRouter();
+    bootstrap(router, []);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const trigger = await screen.findByRole("button", {
+      name: "Add your first title",
+    });
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", {
+      name: "Find something to add",
+    });
+    const anime = within(dialog).getByRole("button", { name: "Anime" });
+    const games = within(dialog).getByRole("button", { name: "Games" });
+    expect(document.activeElement).toBe(anime);
+    expect(games.getAttribute("aria-pressed")).toBe("false");
+    await user.click(games);
+    expect(games.getAttribute("aria-pressed")).toBe("true");
+
+    within(dialog).getByRole("button", { name: "Close discovery" }).focus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: "Add manually" }),
+    );
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Find something to add" }))
+      .toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("clears incompatible fields when a new entry changes type", async () => {
+    const router = createFetchRouter();
+    const submissions: Record<string, unknown>[] = [];
+    bootstrap(router, []);
+    router.json("POST", "/api/media", async (request: Request) => {
+      const payload = await request.json() as Record<string, unknown>;
+      submissions.push(payload);
+      return Response.json(
+        {
+          ...mediaItems[0],
+          ...payload,
+          id: submissions.length,
+          createdAt: "2026-01-05T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        },
+        { status: 201 },
+      );
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Add manually" }));
+    let dialog = screen.getByRole("dialog", { name: "Add media" });
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Title" }),
+      "Progress to game",
+    );
+    await user.type(
+      within(dialog).getByRole("spinbutton", { name: /Episodes watched/u }),
+      "4",
+    );
+    await user.type(
+      within(dialog).getByRole("spinbutton", { name: /Total episodes/u }),
+      "10",
+    );
+    await user.selectOptions(
+      within(dialog).getByRole("combobox", { name: "Type" }),
+      "game",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+    await waitFor(() => expect(submissions).toHaveLength(1));
+    expect(submissions[0]).toMatchObject({
+      type: "game",
+      progress: 0,
+      total: 0,
+    });
+
+    await user.click(screen.getByRole("button", { name: /Books.*本.*0/u }));
+    await user.click(screen.getByRole("button", { name: "Add another title" }));
+    await user.click(screen.getByRole("button", { name: "Games" }));
+    await user.click(screen.getByRole("button", { name: "Add manually" }));
+    dialog = screen.getByRole("dialog", { name: "Add media" });
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Title" }),
+      "Game to book",
+    );
+    await user.type(
+      within(dialog).getByRole("spinbutton", { name: /Playtime \(hours\)/u }),
+      "0.5",
+    );
+    await user.type(
+      within(dialog).getByRole("textbox", { name: /Played on/u }),
+      "PC",
+    );
+    await user.selectOptions(
+      within(dialog).getByRole("combobox", { name: "Type" }),
+      "book",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+    await waitFor(() => expect(submissions).toHaveLength(2));
+    expect(submissions[1]).toMatchObject({
+      type: "book",
+      playtimeMinutes: 0,
+      playedOnPlatforms: [],
+    });
+  });
+
+  it("creates and manages games with playtime and personal platforms", async () => {
+    const router = createFetchRouter();
+    let created: Record<string, unknown> | undefined;
+    let updated: Record<string, unknown> | undefined;
+    bootstrap(router, []);
+    router.json("POST", "/api/media", async (request: Request) => {
+      created = await request.json() as Record<string, unknown>;
+      return Response.json(
+        {
+          ...mediaItems[0],
+          ...created,
+          id: 1,
+          createdAt: "2026-01-05T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        },
+        { status: 201 },
+      );
+    });
+    router.json("PATCH", "/api/media/1", async (request: Request) => {
+      const payload = await request.json() as Record<string, unknown>;
+      if ((payload.playedOnPlatforms as string[]).length > 12) {
+        return Response.json(
+          { error: "played-on platforms cannot contain more than 12 entries" },
+          { status: 422 },
+        );
+      }
+      updated = payload;
+      return Response.json({
+        ...mediaItems[0],
+        ...updated,
+        id: 1,
+        createdAt: "2026-01-05T00:00:00Z",
+        updatedAt: "2026-01-06T00:00:00Z",
+      });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Games" }));
+    expect(
+      screen.getByText(
+        "Game catalog search will be available in a later update.",
+      ),
+    )
+      .not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add manually" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Add media" });
+    expect(
+      within(dialog).getByRole("option", { name: "Games", selected: true }),
+    ).not.toBeNull();
+    expect(within(dialog).getByRole("option", { name: "Plan to play" })).not
+      .toBeNull();
+    expect(within(dialog).getByRole("option", { name: "Playing" })).not
+      .toBeNull();
+    expect(
+      within(dialog).queryByRole("spinbutton", {
+        name: /Progress|episodes|pages|chapters/u,
+      }),
+    ).toBeNull();
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Title" }),
+      "Celeste",
+    );
+    await user.type(
+      within(dialog).getByRole("spinbutton", { name: /Playtime \(hours\)/u }),
+      "1.5",
+    );
+    await user.type(
+      within(dialog).getByRole("textbox", { name: /Played on/u }),
+      "PC, Switch, pc",
+    );
+    await user.type(
+      within(dialog).getByRole("spinbutton", {
+        name: /Replays Additional completed playthroughs/u,
+      }),
+      "2",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+
+    await waitFor(() => expect(created).toBeDefined());
+    expect(created).toMatchObject({
+      title: "Celeste",
+      type: "game",
+      status: "planned",
+      progress: 0,
+      total: 0,
+      repeatCount: 2,
+      playtimeMinutes: 90,
+      playedOnPlatforms: ["PC", "Switch"],
+    });
+    expect(screen.getByText("1h 30m")).not.toBeNull();
+    const gamesFilter = screen.getByRole("button", {
+      name: /Games.*ゲーム.*1/u,
+    });
+    await user.click(gamesFilter);
+    expect(gamesFilter.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Celeste")).not.toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: /^View details for Celeste/u }),
+    );
+    const personal = screen.getByRole("region", { name: "Your Library" });
+    expect(within(personal).getByText("Plan to play")).not.toBeNull();
+    expect(within(personal).getByText("1h 30m")).not.toBeNull();
+    expect(within(personal).getByText("PC · Switch")).not.toBeNull();
+    expect(
+      within(personal).getByText("Replays").nextElementSibling?.textContent,
+    )
+      .toBe("2");
+
+    await user.click(
+      within(personal).getByRole("button", { name: "Manage title" }),
+    );
+    const manager = screen.getByRole("dialog", { name: "Manage Celeste" });
+    const playtime = within(manager).getByRole("spinbutton", {
+      name: /Playtime \(hours\)/u,
+    });
+    const platforms = within(manager).getByRole("textbox", {
+      name: /Played on/u,
+    });
+    expect((playtime as HTMLInputElement).value).toBe("1.5");
+    await user.clear(playtime);
+    await user.type(playtime, "0.5");
+    expect((playtime as HTMLInputElement).value).toBe("0.5");
+    const excessivePlatforms = Array.from(
+      { length: 13 },
+      (_, index) => `Platform ${index}`,
+    ).join(", ");
+    await user.clear(platforms);
+    await user.type(platforms, excessivePlatforms);
+    await user.click(
+      within(manager).getByRole("button", { name: "Save changes" }),
+    );
+
+    expect((await within(manager).findByRole("alert")).textContent).toBe(
+      "played-on platforms cannot contain more than 12 entries",
+    );
+    expect((platforms as HTMLInputElement).value).toBe(excessivePlatforms);
+    expect(updated).toBeUndefined();
+
+    await user.clear(platforms);
+    await user.type(platforms, "PC, Switch");
+    await user.click(
+      within(manager).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(updated).toBeDefined());
+    expect(updated).toMatchObject({
+      type: "game",
+      playtimeMinutes: 30,
+      playedOnPlatforms: ["PC", "Switch"],
+    });
+
+    await user.click(
+      within(personal).getByRole("button", { name: "Manage title" }),
+    );
+    const reopenedManager = screen.getByRole("dialog", {
+      name: "Manage Celeste",
+    });
+    const reopenedPlaytime = within(reopenedManager).getByRole("spinbutton", {
+      name: /Playtime \(hours\)/u,
+    });
+    expect((reopenedPlaytime as HTMLInputElement).value).toBe("0.5");
+    await user.clear(reopenedPlaytime);
+    await user.click(
+      within(reopenedManager).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updated?.playtimeMinutes).toBe(0));
+  });
+
   it("keeps catalog movie metadata separate from personal progress", async () => {
     const result = {
       provider: "tmdb",
@@ -1115,6 +1406,14 @@ describe("Library characterization", () => {
         changes: { fromRepeatCount: 1, toRepeatCount: 2 },
         occurredAt: "2026-01-05T00:00:00Z",
       },
+      {
+        id: 7,
+        title: "Celeste",
+        mediaType: "game",
+        action: "updated",
+        changes: { fromPlaytimeMinutes: 0, toPlaytimeMinutes: 90 },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
     ]);
     render(<App />);
 
@@ -1124,6 +1423,7 @@ describe("Library characterization", () => {
     expect(screen.getByText("Progress 0 → 1")).not.toBeNull();
     expect(screen.getByText("Rewatches 0 → 1")).not.toBeNull();
     expect(screen.getByText("Rereads 1 → 2")).not.toBeNull();
+    expect(screen.getByText("Playtime Not tracked → 1h 30m")).not.toBeNull();
   });
 
   it("preserves management values after a failed save and restores focus on Escape", async () => {
