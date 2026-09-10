@@ -14,10 +14,12 @@ services:
       APP_PASSWORD: ${APP_PASSWORD:-}
       APP_CONTACT_EMAIL: ${APP_CONTACT_EMAIL:-}
       TMDB_API_TOKEN: ${TMDB_API_TOKEN:-}
+      RAWG_API_KEY: ${RAWG_API_KEY:-}
       ANILIST_API_URL: ${ANILIST_API_URL:-https://graphql.anilist.co}
       KITSU_API_URL: ${KITSU_API_URL:-https://kitsu.io/api/edge}
       OPEN_LIBRARY_API_URL: ${OPEN_LIBRARY_API_URL:-https://openlibrary.org}
       TMDB_API_URL: ${TMDB_API_URL:-https://api.themoviedb.org/3}
+      RAWG_API_URL: ${RAWG_API_URL:-https://api.rawg.io/api}
       ANILIST_CLIENT_ID: ${ANILIST_CLIENT_ID:-}
       ANILIST_CLIENT_SECRET: ${ANILIST_CLIENT_SECRET:-}
       ANILIST_REDIRECT_URL: ${ANILIST_REDIRECT_URL:-}
