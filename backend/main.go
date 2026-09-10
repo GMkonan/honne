@@ -22,7 +22,7 @@ const persistedStoreVersion = 5
 
 var (
 	validTypes    = []string{"anime", "series", "movie", "book", "manga", "light_novel", "game"}
-	catalogTypes  = []string{"anime", "series", "movie", "book", "manga", "light_novel"}
+	catalogTypes  = []string{"anime", "series", "movie", "book", "manga", "light_novel", "game"}
 	validStatuses = []string{"planned", "in_progress", "completed", "paused", "dropped"}
 )
 
