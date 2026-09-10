@@ -18,13 +18,19 @@ func TestProfileConfigDefaults(t *testing.T) {
 	t.Setenv("ANILIST_CLIENT_SECRET", "")
 	t.Setenv("ANILIST_REDIRECT_URL", "")
 	t.Setenv("ANILIST_DELETE_ON_LOCAL_DELETE", "true")
+	unsetEnv(t, "RAWG_API_URL")
+	t.Setenv("RAWG_API_KEY", "")
 
 	cfg, err := loadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ProfileName != "My Library" || cfg.ProfileAvatarURL != "" {
+	if cfg.ProfileName != "My Library" || cfg.ProfileAvatarURL != "" || cfg.RAWGAPIURL != "https://api.rawg.io/api" {
 		t.Fatalf("unexpected profile defaults: %+v", cfg)
+	}
+	t.Setenv("RAWG_API_URL", "ftp://example.com")
+	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "RAWG_API_URL") {
+		t.Fatalf("invalid RAWG URL was accepted: %v", err)
 	}
 }
 
@@ -71,6 +77,7 @@ func TestProfileEndpointReturnsOnlyPublicFields(t *testing.T) {
 		ProfileName:      "Konan",
 		ProfileAvatarURL: "https://images.example.com/avatar.png",
 		TMDBAPIToken:     "must-not-leak",
+		RAWGAPIKey:       "must-not-leak",
 		AppPassword:      "must-not-leak",
 	}}
 	response := httptest.NewRecorder()

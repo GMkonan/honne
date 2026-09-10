@@ -76,7 +76,15 @@ func TestValidateInput(t *testing.T) {
 	invalidPlatform.Type = "game"
 	invalidPlatforms := []string{""}
 	invalidPlatform.PlayedOnPlatforms = &invalidPlatforms
-	cases = append(cases, tooManyGenres, tooManyCredits, invalidGenre, invalidCredit, invalidReleaseStatus, invalidDate, invalidDuration, invalidCatalogTotal, invalidCommunityRating, invalidFormat, reversedDates, mismatchedReleaseYear, invalidRepeatCount, tooManyRepeats, invalidPlaytime, tooManyPlatforms, invalidPlatform)
+	nonGameCatalogPlatform := valid
+	nonGameCatalogPlatform.CatalogPlatforms = []string{"PC"}
+	tooManyCatalogPlatforms := valid
+	tooManyCatalogPlatforms.Type = "game"
+	tooManyCatalogPlatforms.CatalogPlatforms = make([]string, 13)
+	invalidCatalogPlatform := valid
+	invalidCatalogPlatform.Type = "game"
+	invalidCatalogPlatform.CatalogPlatforms = []string{strings.Repeat("x", 101)}
+	cases = append(cases, tooManyGenres, tooManyCredits, invalidGenre, invalidCredit, invalidReleaseStatus, invalidDate, invalidDuration, invalidCatalogTotal, invalidCommunityRating, invalidFormat, reversedDates, mismatchedReleaseYear, invalidRepeatCount, tooManyRepeats, invalidPlaytime, tooManyPlatforms, invalidPlatform, nonGameCatalogPlatform, tooManyCatalogPlatforms, invalidCatalogPlatform)
 
 	for i, input := range cases {
 		if err := validateInput(input); err == nil {
@@ -105,7 +113,7 @@ func TestExpandedMediaMetadataPersistsAcrossCreateAndUpdate(t *testing.T) {
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
 	}
-	if len(store.items) != 1 || strings.Join(store.items[0].Genres, ",") != "Science Fiction,Politics" || store.items[0].Credits[0] != (mediaCredit{Name: "Frank Herbert", Role: "Author"}) {
+	if len(store.items) != 1 || store.items[0].CatalogPlatforms == nil || strings.Join(store.items[0].Genres, ",") != "Science Fiction,Politics" || store.items[0].Credits[0] != (mediaCredit{Name: "Frank Herbert", Role: "Author"}) {
 		t.Fatalf("create did not normalize metadata: %+v", store.items)
 	}
 
@@ -244,8 +252,9 @@ func TestGameTrackingPersistsAndLegacyUpdatesPreserveIt(t *testing.T) {
 	created := httptest.NewRecorder()
 	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", mediaInput{
 		Title: "Hades", Type: "game", Status: "in_progress", PlaytimeMinutes: intPointer(95), PlayedOnPlatforms: &platforms,
+		CatalogPlatforms: []string{"PC", " pc ", "Nintendo Switch"},
 	}))
-	if created.Code != http.StatusCreated || store.items[0].PlaytimeMinutes != 95 || strings.Join(store.items[0].PlayedOnPlatforms, ",") != "PC,Steam Deck" {
+	if created.Code != http.StatusCreated || store.items[0].PlaytimeMinutes != 95 || strings.Join(store.items[0].PlayedOnPlatforms, ",") != "PC,Steam Deck" || strings.Join(store.items[0].CatalogPlatforms, ",") != "PC,Nintendo Switch" {
 		t.Fatalf("create = %d, item=%+v", created.Code, store.items[0])
 	}
 
@@ -255,7 +264,7 @@ func TestGameTrackingPersistsAndLegacyUpdatesPreserveIt(t *testing.T) {
 	})
 	legacyRequest.SetPathValue("id", "1")
 	application.updateMedia(legacyUpdate, legacyRequest)
-	if legacyUpdate.Code != http.StatusOK || store.items[0].PlaytimeMinutes != 95 || len(store.items[0].PlayedOnPlatforms) != 2 {
+	if legacyUpdate.Code != http.StatusOK || store.items[0].PlaytimeMinutes != 95 || len(store.items[0].PlayedOnPlatforms) != 2 || len(store.items[0].CatalogPlatforms) != 2 {
 		t.Fatalf("legacy update = %d, item=%+v", legacyUpdate.Code, store.items[0])
 	}
 
@@ -272,7 +281,7 @@ func TestGameTrackingPersistsAndLegacyUpdatesPreserveIt(t *testing.T) {
 	}
 
 	reopened, err := newStore(path)
-	if err != nil || reopened.items[0].PlaytimeMinutes != 0 || reopened.items[0].PlayedOnPlatforms == nil {
+	if err != nil || reopened.items[0].PlaytimeMinutes != 0 || reopened.items[0].PlayedOnPlatforms == nil || strings.Join(reopened.items[0].CatalogPlatforms, ",") != "PC,Nintendo Switch" {
 		t.Fatalf("game tracking did not survive restart: store=%+v err=%v", reopened, err)
 	}
 
@@ -392,11 +401,11 @@ func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(persisted), `"version": 4`) || !strings.Contains(string(persisted), `"playedOnPlatforms": []`) {
+	if !strings.Contains(string(persisted), `"version": 5`) || !strings.Contains(string(persisted), `"playedOnPlatforms": []`) || !strings.Contains(string(persisted), `"catalogPlatforms": []`) {
 		t.Fatalf("v1 snapshot was not upgraded on write: %s", persisted)
 	}
 	if _, err := newStore(path); err != nil {
-		t.Fatalf("v4 snapshot did not reopen: %v", err)
+		t.Fatalf("v5 snapshot did not reopen: %v", err)
 	}
 
 	v2Path := filepath.Join(t.TempDir(), "media.json")
@@ -414,12 +423,12 @@ func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	v2Persisted, err := os.ReadFile(v2Path)
-	if err != nil || !strings.Contains(string(v2Persisted), `"version": 4`) {
+	if err != nil || !strings.Contains(string(v2Persisted), `"version": 5`) {
 		t.Fatalf("v2 snapshot was not upgraded on write: data=%s err=%v", v2Persisted, err)
 	}
 }
 
-func TestVersionThreeSnapshotMigratesToVersionFour(t *testing.T) {
+func TestVersionThreeSnapshotMigratesToVersionFive(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	if err := os.WriteFile(path, []byte(`{"version":3,"items":[{"id":1,"title":"Before games","type":"anime","status":"planned","progress":0,"total":0,"rating":0,"repeatCount":0,"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -432,17 +441,35 @@ func TestVersionThreeSnapshotMigratesToVersionFour(t *testing.T) {
 	err = store.persistLocked()
 	store.mu.Unlock()
 	data, readErr := os.ReadFile(path)
-	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 4`) || !strings.Contains(string(data), `"playedOnPlatforms": []`) {
-		t.Fatalf("v3 snapshot was not rewritten as v4: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 5`) || !strings.Contains(string(data), `"playedOnPlatforms": []`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
+		t.Fatalf("v3 snapshot was not rewritten as v5: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	}
+}
+
+func TestVersionFourSnapshotMigratesToVersionFive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	if err := os.WriteFile(path, []byte(`{"version":4,"items":[{"id":1,"title":"Hades","type":"game","status":"in_progress","progress":0,"total":0,"rating":9,"repeatCount":1,"playtimeMinutes":90,"playedOnPlatforms":["PC"],"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := newStore(path)
+	if err != nil || store.items[0].CatalogPlatforms == nil || store.items[0].PlaytimeMinutes != 90 {
+		t.Fatalf("v4 snapshot did not migrate safely: store=%+v err=%v", store, err)
+	}
+	store.mu.Lock()
+	err = store.persistLocked()
+	store.mu.Unlock()
+	data, readErr := os.ReadFile(path)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 5`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
+		t.Fatalf("v4 snapshot was not rewritten as v5: data=%s persistErr=%v readErr=%v", data, err, readErr)
 	}
 }
 
 func TestNewStoreRejectsUnknownSnapshotVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
-	if err := os.WriteFile(path, []byte(`{"version":5,"items":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"version":6,"items":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 5") {
+	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 6") {
 		t.Fatalf("expected unsupported version error, got %v", err)
 	}
 }

@@ -24,6 +24,8 @@ type config struct {
 	OpenLibraryAPIURL string
 	TMDBAPIURL        string
 	TMDBAPIToken      string
+	RAWGAPIURL        string
+	RAWGAPIKey        string
 	AppContactEmail   string
 
 	AniListClientID      string
@@ -63,6 +65,8 @@ func loadConfig() (config, error) {
 		OpenLibraryAPIURL:    envOr("OPEN_LIBRARY_API_URL", "https://openlibrary.org"),
 		TMDBAPIURL:           envOr("TMDB_API_URL", "https://api.themoviedb.org/3"),
 		TMDBAPIToken:         os.Getenv("TMDB_API_TOKEN"),
+		RAWGAPIURL:           envOr("RAWG_API_URL", "https://api.rawg.io/api"),
+		RAWGAPIKey:           strings.TrimSpace(os.Getenv("RAWG_API_KEY")),
 		AppContactEmail:      os.Getenv("APP_CONTACT_EMAIL"),
 		AniListClientID:      os.Getenv("ANILIST_CLIENT_ID"),
 		AniListClientSecret:  os.Getenv("ANILIST_CLIENT_SECRET"),
@@ -86,6 +90,9 @@ func loadConfig() (config, error) {
 	if configured != 0 && configured != len(oauthValues) {
 		return config{}, errors.New("ANILIST_CLIENT_ID, ANILIST_CLIENT_SECRET, and ANILIST_REDIRECT_URL must be supplied together")
 	}
+	if !validHTTPBaseURL(cfg.RAWGAPIURL) {
+		return config{}, errors.New("RAWG_API_URL must be an absolute HTTP or HTTPS URL without credentials")
+	}
 	return cfg, nil
 }
 
@@ -103,6 +110,12 @@ func loadProfileName() (string, error) {
 		return "", errors.New("PROFILE_NAME must contain between 1 and 80 characters")
 	}
 	return value, nil
+}
+
+func validHTTPBaseURL(value string) bool {
+	parsed, err := url.Parse(value)
+	return err == nil && parsed.Host != "" && (parsed.Scheme == "http" || parsed.Scheme == "https") &&
+		parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
 func validateProfileAvatarURL(value string) (string, error) {

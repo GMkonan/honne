@@ -77,6 +77,7 @@ All application responses disable caching. When Basic Auth is configured, every 
 - `GET /api/backup`: download a restorable snapshot without AniList credentials
 - `GET /api/discovery/search?type=anime&q=bebop&page=1`: search one catalog
 - `GET /api/discovery/global?q=bebop`: search all available catalogs
+- `GET /api/discovery/detail?provider=rawg&type=game&id=3498`: load one game's full catalog metadata
 - `GET /api/import/anilist?username=example`: preview a public AniList library
 - `POST /api/import/anilist`: import or reconcile selected entries
 - `GET /api/integrations/anilist`: connection and queue status
