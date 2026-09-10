@@ -10,14 +10,16 @@ import (
 const maxStoredActivities = 500
 
 type ActivityChanges struct {
-	FromStatus      string `json:"fromStatus,omitempty"`
-	ToStatus        string `json:"toStatus,omitempty"`
-	FromProgress    *int   `json:"fromProgress,omitempty"`
-	ToProgress      *int   `json:"toProgress,omitempty"`
-	FromRating      *int   `json:"fromRating,omitempty"`
-	ToRating        *int   `json:"toRating,omitempty"`
-	FromRepeatCount *int   `json:"fromRepeatCount,omitempty"`
-	ToRepeatCount   *int   `json:"toRepeatCount,omitempty"`
+	FromStatus          string `json:"fromStatus,omitempty"`
+	ToStatus            string `json:"toStatus,omitempty"`
+	FromProgress        *int   `json:"fromProgress,omitempty"`
+	ToProgress          *int   `json:"toProgress,omitempty"`
+	FromRating          *int   `json:"fromRating,omitempty"`
+	ToRating            *int   `json:"toRating,omitempty"`
+	FromRepeatCount     *int   `json:"fromRepeatCount,omitempty"`
+	ToRepeatCount       *int   `json:"toRepeatCount,omitempty"`
+	FromPlaytimeMinutes *int   `json:"fromPlaytimeMinutes,omitempty"`
+	ToPlaytimeMinutes   *int   `json:"toPlaytimeMinutes,omitempty"`
 }
 
 type Activity struct {
@@ -73,6 +75,11 @@ func activityForUpdatedMedia(before, after Media) Activity {
 		from, to := before.RepeatCount, after.RepeatCount
 		changes.FromRepeatCount = &from
 		changes.ToRepeatCount = &to
+	}
+	if before.PlaytimeMinutes != after.PlaytimeMinutes {
+		from, to := before.PlaytimeMinutes, after.PlaytimeMinutes
+		changes.FromPlaytimeMinutes = &from
+		changes.ToPlaytimeMinutes = &to
 	}
 	return Activity{
 		MediaID:    after.ID,

@@ -138,7 +138,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Use the same process with the previous tag for a rollback; do not combine an older image with a newer Compose file. Rolling back containers does not reverse a persistence migration. If the newer release changed the persistence version, restore the matching pre-update backup before starting the older containers.
+After the containers are healthy, reload every open Honne tab so it uses the frontend contract shipped with the new backend. Use the same process with the previous tag for a rollback; do not combine an older image with a newer Compose file. Rolling back containers does not reverse a persistence migration. If the newer release changed the persistence version, restore the matching pre-update backup before starting the older containers.
 
 ## Migrate a source installation
 

@@ -149,7 +149,7 @@ func (a *app) searchDiscovery(w http.ResponseWriter, r *http.Request) {
 		}
 		page = parsed
 	}
-	if !slicesContains(validTypes, mediaType) {
+	if !slicesContains(catalogTypes, mediaType) {
 		writeError(w, http.StatusBadRequest, "invalid media type")
 		return
 	}
@@ -183,16 +183,16 @@ func (a *app) searchGlobalDiscovery(w http.ResponseWriter, r *http.Request) {
 		response discoveryResponse
 		err      error
 	}
-	outcomes := make(chan searchOutcome, len(validTypes))
-	for index, mediaType := range validTypes {
+	outcomes := make(chan searchOutcome, len(catalogTypes))
+	for index, mediaType := range catalogTypes {
 		go func() {
 			response, err := a.discovery.search(r.Context(), mediaType, query, 1)
 			outcomes <- searchOutcome{index: index, response: response, err: err}
 		}()
 	}
 
-	ordered := make([]searchOutcome, len(validTypes))
-	for range validTypes {
+	ordered := make([]searchOutcome, len(catalogTypes))
+	for range catalogTypes {
 		outcome := <-outcomes
 		ordered[outcome.index] = outcome
 	}
@@ -201,7 +201,7 @@ func (a *app) searchGlobalDiscovery(w http.ResponseWriter, r *http.Request) {
 	seen := make(map[string]bool)
 	successes := 0
 	for index, outcome := range ordered {
-		mediaType := validTypes[index]
+		mediaType := catalogTypes[index]
 		if outcome.err != nil {
 			result.UnavailableTypes = append(result.UnavailableTypes, mediaType)
 			logProviderError(mediaType, outcome.err)
@@ -254,6 +254,8 @@ func (s *discoveryService) search(ctx context.Context, mediaType, query string, 
 		response, err = s.searchBooks(ctx, query, page)
 	case "movie", "series":
 		response, err = s.searchTMDB(ctx, mediaType, query, page)
+	default:
+		return discoveryResponse{}, fmt.Errorf("unsupported discovery media type %q", mediaType)
 	}
 	if err != nil {
 		return discoveryResponse{}, err

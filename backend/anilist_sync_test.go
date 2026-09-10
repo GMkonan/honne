@@ -62,7 +62,7 @@ func TestLegacyStoreMigratesWithDurableCoalescedOutbox(t *testing.T) {
 		t.Fatalf("migration did not survive restart: %+v", reopened)
 	}
 	persisted, _ := os.ReadFile(path)
-	if !strings.Contains(string(persisted), `"version": 3`) {
+	if !strings.Contains(string(persisted), `"version": 4`) {
 		t.Fatalf("expected versioned store, got %s", persisted)
 	}
 }

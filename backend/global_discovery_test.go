@@ -82,6 +82,18 @@ func TestGlobalDiscoveryFailsOnlyWhenEveryTypeFails(t *testing.T) {
 	}
 }
 
+func TestGameIsStorableButNotSearchedWithoutACatalog(t *testing.T) {
+	if !slicesContains(validTypes, "game") || slicesContains(catalogTypes, "game") {
+		t.Fatalf("unexpected game capabilities: valid=%v catalog=%v", validTypes, catalogTypes)
+	}
+	application := globalDiscoveryTestApp("http://example.invalid", "")
+	response := httptest.NewRecorder()
+	application.searchDiscovery(response, httptest.NewRequest(http.MethodGet, "/api/discovery/search?type=game&q=hades", nil))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("game catalog search = %d, want 400: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestGlobalDiscoveryValidatesQuery(t *testing.T) {
 	application := globalDiscoveryTestApp("http://example.invalid", "")
 	for _, target := range []string{

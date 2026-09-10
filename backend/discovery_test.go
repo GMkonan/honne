@@ -181,6 +181,20 @@ func TestDiscoveryValidation(t *testing.T) {
 	}
 }
 
+func TestAniListImportRejectsGameFilter(t *testing.T) {
+	store, err := newStore(filepath.Join(t.TempDir(), "media.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store}
+	response := httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"username":"player","types":["game"],"statuses":[]}`)
+	application.importAniList(response, httptest.NewRequest(http.MethodPost, "/api/import/anilist", body))
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid import media type") {
+		t.Fatalf("game AniList filter = %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestAniListImportMapsAndPersistsEntries(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var requestBody struct {
