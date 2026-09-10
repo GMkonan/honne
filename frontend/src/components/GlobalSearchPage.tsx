@@ -1,8 +1,9 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, CircleAlert, Plus, RefreshCw, Search } from "lucide-react";
-import type {
-  SearchCatalogResult,
-  SearchMediaType,
+import {
+  catalogCoverStyle,
+  type SearchCatalogResult,
+  type SearchMediaType,
 } from "./GlobalSearchBox.tsx";
 
 type TypeFilter = "all" | SearchMediaType;
@@ -41,12 +42,6 @@ const typeLabels: Record<SearchMediaType, string> = {
   light_novel: "Light novels",
   game: "Games",
 };
-
-function coverStyle(coverUrl?: string) {
-  return coverUrl
-    ? { backgroundImage: `url("${coverUrl.replaceAll('"', "")}")` }
-    : undefined;
-}
 
 export function GlobalSearchPage({
   query,
@@ -238,7 +233,7 @@ export function GlobalSearchPage({
                         >
                           <span
                             className="search-result-cover"
-                            style={coverStyle(result.coverUrl)}
+                            style={catalogCoverStyle(result.coverUrl)}
                           />
                           <span className="catalog-result-copy">
                             <small>

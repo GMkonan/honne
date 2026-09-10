@@ -677,6 +677,76 @@ describe("Library characterization", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("keeps manual game creation available when RAWG is not configured", async () => {
+    const router = createFetchRouter();
+    bootstrap(router, []);
+    router.json(
+      "GET",
+      "/api/discovery/search?type=game&q=Hades&page=1",
+      { error: "game search requires RAWG_API_KEY" },
+      503,
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Games" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Search for games" }),
+      "Hades",
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "RAWG_API_KEY",
+    );
+    await user.click(screen.getByRole("button", { name: "Add manually" }));
+    expect(
+      within(screen.getByRole("dialog", { name: "Add media" })).getByRole(
+        "option",
+        { name: "Games", selected: true },
+      ),
+    ).not.toBeNull();
+  });
+
+  it("ignores a stale game result after the discovery type changes", async () => {
+    const router = createFetchRouter();
+    let resolveSearch: ((response: Response) => void) | undefined;
+    bootstrap(router, []);
+    router.json(
+      "GET",
+      "/api/discovery/search?type=game&q=Hades&page=1",
+      () => new Promise<Response>((resolve) => resolveSearch = resolve),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Games" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Search for games" }),
+      "Hades",
+    );
+    await waitFor(() => expect(resolveSearch).toBeDefined());
+    await user.click(screen.getByRole("button", { name: "Anime" }));
+    resolveSearch?.(Response.json({
+      results: [{
+        provider: "rawg",
+        providerId: "420",
+        providerUrl: "https://rawg.io/games/hades",
+        type: "game",
+        title: "Stale Hades",
+      }],
+      page: 1,
+      hasMore: false,
+    }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByText("Stale Hades")).toBeNull();
+  });
+
   it("clears incompatible fields when a new entry changes type", async () => {
     const router = createFetchRouter();
     const submissions: Record<string, unknown>[] = [];
@@ -761,6 +831,146 @@ describe("Library characterization", () => {
     });
   });
 
+  it("searches RAWG, enriches game details, and preserves catalog metadata", async () => {
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router, []);
+    router.json(
+      "GET",
+      "/api/discovery/search?type=game&q=Hades&page=1",
+      {
+        results: [{
+          provider: "rawg",
+          providerId: "420",
+          providerUrl: "https://rawg.io/games/hades",
+          type: "game",
+          title: "Hades",
+          coverUrl: "https://images.example/hades.jpg",
+          releaseYear: 2020,
+          genres: ["Action"],
+          catalogPlatforms: ["PC"],
+          communityRating: 9,
+        }],
+        page: 1,
+        hasMore: false,
+      },
+    );
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=rawg&type=game&id=420",
+      {
+        provider: "rawg",
+        providerId: "420",
+        providerUrl: "https://rawg.io/games/hades",
+        type: "game",
+        title: "Hades",
+        description: "Escape the Underworld.",
+        coverUrl: "https://images.example/hades.jpg",
+        releaseYear: 2020,
+        startDate: "2020-09-17",
+        releaseStatus: "finished",
+        genres: ["Action", "Indie"],
+        credits: [{ name: "Supergiant Games", role: "Developer" }],
+        catalogPlatforms: ["PC", "PlayStation 5"],
+        communityRating: 9,
+      },
+    );
+    router.json("POST", "/api/media", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json({
+        ...mediaItems[0],
+        ...submitted,
+        id: 1,
+        createdAt: "2026-01-05T00:00:00Z",
+        updatedAt: "2026-01-05T00:00:00Z",
+      }, { status: 201 });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Games" }));
+    const search = screen.getByRole("textbox", { name: "Search for games" });
+    await user.type(search, "Hades");
+    const result = await screen.findByRole("button", { name: /Hades/u });
+    expect(
+      within(screen.getByRole("dialog", { name: "Find something to add" }))
+        .getByRole("status").textContent,
+    ).toContain("1 catalog results available");
+    expect(screen.getAllByRole("link", { name: "RAWG" }).length)
+      .toBeGreaterThan(
+        0,
+      );
+    await user.click(result);
+
+    expect(await screen.findByText("Escape the Underworld.")).not.toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Hades", level: 1 }),
+    );
+    expect(screen.getByRole("heading", { name: "Available on" })).not
+      .toBeNull();
+    expect(screen.getByText("PlayStation 5")).not.toBeNull();
+    expect(screen.getByText("Supergiant Games")).not.toBeNull();
+    expect(screen.getByRole("link", { name: /View on RAWG/u })).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add to Library" }));
+    const addDialog = screen.getByRole("dialog", { name: "Add media" });
+    expect(within(addDialog).getByRole("link", { name: "RAWG" })).not
+      .toBeNull();
+    await user.click(
+      within(addDialog).getByRole(
+        "button",
+        { name: "Add to collection" },
+      ),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({
+      provider: "rawg",
+      providerId: "420",
+      type: "game",
+      title: "Hades",
+      catalogPlatforms: ["PC", "PlayStation 5"],
+      genres: ["Action", "Indie"],
+      credits: [{ name: "Supergiant Games", role: "Developer" }],
+    });
+  });
+
+  it("keeps partial RAWG details usable when enrichment fails", async () => {
+    const result = {
+      provider: "rawg",
+      providerId: "420",
+      providerUrl: "https://rawg.io/games/hades",
+      type: "game",
+      title: "Hades",
+      catalogPlatforms: ["PC"],
+    };
+    globalThis.sessionStorage.setItem(
+      "honne:catalog:rawg:game:420",
+      JSON.stringify(result),
+    );
+    globalThis.history.replaceState(null, "", "/#catalog/rawg/game/420");
+    const router = createFetchRouter();
+    bootstrap(router, []);
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=rawg&type=game&id=420",
+      { error: "the metadata provider is temporarily unavailable" },
+      502,
+    );
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Hades" })).not
+      .toBeNull();
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "Some catalog details could not be loaded",
+    );
+    expect(screen.getByRole("button", { name: "Add to Library" })).not
+      .toBeNull();
+    expect(screen.getByText("PC")).not.toBeNull();
+  });
+
   it("creates and manages games with playtime and personal platforms", async () => {
     const router = createFetchRouter();
     let created: Record<string, unknown> | undefined;
@@ -803,12 +1013,8 @@ describe("Library characterization", () => {
       await screen.findByRole("button", { name: "Add your first title" }),
     );
     await user.click(screen.getByRole("button", { name: "Games" }));
-    expect(
-      screen.getByText(
-        "Game catalog search will be available in a later update.",
-      ),
-    )
-      .not.toBeNull();
+    expect(screen.getByRole("textbox", { name: /Search for games/u })).not
+      .toBeNull();
     await user.click(screen.getByRole("button", { name: "Add manually" }));
 
     const dialog = screen.getByRole("dialog", { name: "Add media" });

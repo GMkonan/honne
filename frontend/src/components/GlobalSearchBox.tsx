@@ -44,6 +44,7 @@ export interface SearchCatalogResult {
   durationMinutes?: number;
   catalogTotal?: number;
   communityRating?: number;
+  catalogPlatforms?: string[];
 }
 
 interface GlobalSearchBoxProps {
@@ -61,6 +62,20 @@ interface GlobalSearchBoxProps {
   onDeactivate: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onOpenCatalog: (result: SearchCatalogResult) => void;
+}
+
+export function catalogCoverStyle(value?: string) {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username || parsed.password
+    ) return undefined;
+    return { backgroundImage: `url("${parsed.href.replaceAll('"', "%22")}")` };
+  } catch {
+    return undefined;
+  }
 }
 
 const typeLabels: Record<SearchMediaType, string> = {
@@ -242,13 +257,7 @@ export function GlobalSearchBox({
                   >
                     <span
                       className="suggestion-cover"
-                      style={result.coverUrl
-                        ? {
-                          backgroundImage: `url("${
-                            result.coverUrl.replaceAll('"', "")
-                          }")`,
-                        }
-                        : undefined}
+                      style={catalogCoverStyle(result.coverUrl)}
                     />
                     <span className="suggestion-copy">
                       <strong>{result.title}</strong>
