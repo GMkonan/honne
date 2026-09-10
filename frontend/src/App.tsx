@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
 import {
+  catalogCoverStyle,
   GlobalSearchBox,
   type SearchCatalogResult,
   type SearchMediaCredit,
@@ -42,6 +43,7 @@ import {
   ManageMediaModal,
 } from "./components/ManageMediaModal.tsx";
 import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
+import { ProviderAttribution } from "./components/ProviderAttribution.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
   formatPlaytime,
@@ -85,6 +87,7 @@ interface MediaInput {
   durationMinutes: number;
   catalogTotal: number;
   communityRating: number;
+  catalogPlatforms: string[];
 }
 
 interface Media extends MediaInput {
@@ -258,6 +261,7 @@ const emptyForm: MediaInput = {
   durationMinutes: 0,
   catalogTotal: 0,
   communityRating: 0,
+  catalogPlatforms: [],
 };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -315,7 +319,8 @@ function hasExpandedMetadata(item: Media): boolean {
   return Boolean(
     item.format || item.releaseStatus || item.startDate || item.endDate ||
       item.durationMinutes || item.catalogTotal || item.communityRating ||
-      item.genres?.length || item.credits?.length,
+      item.genres?.length || item.credits?.length ||
+      item.catalogPlatforms?.length,
   );
 }
 
@@ -349,6 +354,9 @@ function mediaToInput(item: Media): MediaInput {
     durationMinutes: item.durationMinutes || 0,
     catalogTotal: item.catalogTotal || 0,
     communityRating: item.communityRating || 0,
+    catalogPlatforms: Array.isArray(item.catalogPlatforms)
+      ? item.catalogPlatforms
+      : [],
   };
 }
 
@@ -541,6 +549,13 @@ function sanitizeStoredResult(result: DiscoveryResult): DiscoveryResult {
       Number.MAX_SAFE_INTEGER,
     ),
     communityRating: safeStoredNumber(result.communityRating, 0, 10),
+    catalogPlatforms: Array.isArray(result.catalogPlatforms)
+      ? result.catalogPlatforms.map((platform) => safeStoredText(platform, 100))
+        .filter((platform): platform is string => Boolean(platform)).slice(
+          0,
+          12,
+        )
+      : [],
   };
 }
 
@@ -621,6 +636,11 @@ function App() {
     } | null
   >(null);
   const metadataRefreshAttempted = useRef(new Set<number>());
+  const [externalMetadata, setExternalMetadata] = useState({
+    identity: "",
+    loading: false,
+    error: "",
+  });
   const [draftItem, setDraftItem] = useState<MediaInput | undefined>(undefined);
   const [discoveryType, setDiscoveryType] = useState<
     MediaType | null | undefined
@@ -711,6 +731,66 @@ function App() {
     ) return;
     void refreshMediaMetadata(item);
   }, [detail, items]);
+
+  const externalDetailIdentity = detail?.kind === "external" &&
+      detail.result.provider === "rawg" && detail.result.type === "game"
+    ? `${detail.result.provider}:${detail.result.type}:${detail.result.providerId}`
+    : "";
+
+  useEffect(() => {
+    if (!externalDetailIdentity || detail?.kind !== "external") {
+      setExternalMetadata({ identity: "", loading: false, error: "" });
+      return;
+    }
+    const selected = detail.result;
+    const controller = new AbortController();
+    setExternalMetadata({
+      identity: externalDetailIdentity,
+      loading: true,
+      error: "",
+    });
+    const params = new URLSearchParams({
+      provider: selected.provider,
+      type: selected.type,
+      id: selected.providerId,
+    });
+    request<DiscoveryResult>(`/api/discovery/detail?${params}`, {
+      signal: controller.signal,
+    }).then((expanded) => {
+      const enriched = sanitizeStoredResult({ ...selected, ...expanded });
+      setDetail((current) =>
+        current?.kind === "external" &&
+          `${current.result.provider}:${current.result.type}:${current.result.providerId}` ===
+            externalDetailIdentity
+          ? { kind: "external", result: enriched }
+          : current
+      );
+      try {
+        globalThis.sessionStorage.setItem(
+          `honne:catalog:${expanded.provider}:${expanded.type}:${expanded.providerId}`,
+          JSON.stringify(enriched),
+        );
+      } catch {
+        // The current view still works when private browsing blocks storage.
+      }
+    }).catch((caught: unknown) => {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        return;
+      }
+      setExternalMetadata((current) =>
+        current.identity === externalDetailIdentity
+          ? { ...current, error: errorMessage(caught) }
+          : current
+      );
+    }).finally(() => {
+      setExternalMetadata((current) =>
+        current.identity === externalDetailIdentity
+          ? { ...current, loading: false }
+          : current
+      );
+    });
+    return () => controller.abort();
+  }, [externalDetailIdentity]);
 
   useEffect(() => {
     const query = suggestionQuery.trim();
@@ -981,6 +1061,9 @@ function App() {
       durationMinutes: result.durationMinutes || 0,
       catalogTotal: result.catalogTotal || result.total || 0,
       communityRating: result.communityRating || 0,
+      catalogPlatforms: Array.isArray(result.catalogPlatforms)
+        ? result.catalogPlatforms
+        : [],
     });
     setDiscoveryType(undefined);
     setModalItem(null);
@@ -1388,11 +1471,16 @@ function App() {
           existing={detail?.kind === "external"
             ? findExistingLibraryItem(detail.result, items)
             : undefined}
-          metadataRefreshing={detail?.kind === "local" &&
-            metadataRefreshingId === detail.mediaId}
-          metadataError={detail?.kind === "local" &&
-              metadataRefreshError?.id === detail.mediaId
-            ? metadataRefreshError.message
+          metadataRefreshing={detail?.kind === "local"
+            ? metadataRefreshingId === detail.mediaId
+            : externalMetadata.identity === externalDetailIdentity &&
+              externalMetadata.loading}
+          metadataError={detail?.kind === "local"
+            ? metadataRefreshError?.id === detail.mediaId
+              ? metadataRefreshError.message
+              : ""
+            : externalMetadata.identity === externalDetailIdentity
+            ? externalMetadata.error
             : ""}
           onBack={leaveDetail}
           onAdd={reviewDiscovery}
@@ -1407,6 +1495,7 @@ function App() {
       <footer className="site-footer">
         <div className="page-container">
           <span>HONNE / 個人メディア記録</span>
+          <ProviderAttribution className="site-provider-attribution" />
           <span>LOCAL-FIRST MEDIA LIBRARY</span>
         </div>
       </footer>
@@ -1428,7 +1517,12 @@ function App() {
         <DiscoveryModal
           initialType={discoveryType}
           onClose={() => setDiscoveryType(undefined)}
-          onSelect={reviewDiscovery}
+          onSelect={(result) => {
+            if (result.provider === "rawg") {
+              setDiscoveryType(undefined);
+              openExternalDetail(result);
+            } else reviewDiscovery(result);
+          }}
           onManual={openManualEntry}
         />
       )}
@@ -2053,12 +2147,13 @@ function DiscoveryModal(
 
   useEffect(() => {
     const normalizedQuery = query.trim();
-    if (!mediaType || mediaType === "game" || normalizedQuery.length < 2) {
+    if (!mediaType || normalizedQuery.length < 2) {
       setLoading(false);
       return;
     }
 
     const controller = new AbortController();
+    let active = true;
     const timer = setTimeout(() => {
       setLoading(true);
       setError("");
@@ -2071,21 +2166,26 @@ function DiscoveryModal(
         signal: controller.signal,
       })
         .then((response) => {
+          if (!active) return;
           setResults((current) =>
             page === 1 ? response.results : [...current, ...response.results]
           );
           setHasMore(response.hasMore);
         })
         .catch((caught: unknown) => {
-          if (caught instanceof DOMException && caught.name === "AbortError") {
-            return;
-          }
+          if (
+            !active ||
+            (caught instanceof DOMException && caught.name === "AbortError")
+          ) return;
           setError(errorMessage(caught));
         })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (active) setLoading(false);
+        });
     }, 300);
 
     return () => {
+      active = false;
       clearTimeout(timer);
       controller.abort();
     };
@@ -2186,14 +2286,6 @@ function DiscoveryModal(
                 <p>Choose a media type so we can search the right catalog.</p>
               </div>
             )
-            : mediaType === "game"
-            ? (
-              <div className="discovery-prompt">
-                <Gamepad2 size={28} />
-                <h3>Add a game manually</h3>
-                <p>Game catalog search will be available in a later update.</p>
-              </div>
-            )
             : (
               <>
                 <label className="discovery-search">
@@ -2201,6 +2293,11 @@ function DiscoveryModal(
                   <input
                     value={query}
                     onChange={(event) => updateQuery(event.target.value)}
+                    aria-label={`Search for ${
+                      typeOptions.find((type) => type.value === mediaType)
+                        ?.label
+                        .toLowerCase()
+                    }`}
                     placeholder={`Search for ${
                       typeOptions.find((type) => type.value === mediaType)
                         ?.label
@@ -2210,8 +2307,19 @@ function DiscoveryModal(
                   />
                   {loading && <span>Searching...</span>}
                 </label>
+                <p className="sr-only" role="status" aria-live="polite">
+                  {loading
+                    ? "Searching catalog…"
+                    : error || query.trim().length < 2
+                    ? ""
+                    : results.length > 0
+                    ? `${results.length} catalog results available.`
+                    : "No catalog results found."}
+                </p>
 
-                {error && <div className="discovery-error">{error}</div>}
+                {error && (
+                  <div className="discovery-error" role="alert">{error}</div>
+                )}
                 {query.trim().length < 2
                   ? (
                     <div className="discovery-hint">
@@ -2235,11 +2343,7 @@ function DiscoveryModal(
                         >
                           <span
                             className="result-cover"
-                            style={{
-                              backgroundImage: result.coverUrl
-                                ? `url("${result.coverUrl}")`
-                                : undefined,
-                            }}
+                            style={catalogCoverStyle(result.coverUrl)}
                           />
                           <span className="result-copy">
                             <strong>{result.title}</strong>
@@ -2282,6 +2386,9 @@ function DiscoveryModal(
                 )}
               </>
             )}
+          {mediaType === "game" && (
+            <ProviderAttribution className="discovery-attribution" />
+          )}
         </div>
 
         <footer className="discovery-footer">
@@ -2561,6 +2668,9 @@ function MediaModal(
               )}
               {(initial?.description || item?.description) && (
                 <p>{initial?.description || item?.description}</p>
+              )}
+              {(initial?.provider || item?.provider) === "rawg" && (
+                <ProviderAttribution className="metadata-provider-attribution" />
               )}
             </div>
           </div>

@@ -43,6 +43,17 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+.sr-only {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
 button {
   color: inherit;
 }
@@ -203,7 +214,7 @@ button {
   padding: 9px 11px 6px;
   color: var(--sapphire);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: .1em;
   text-transform: uppercase;
 }
@@ -244,7 +255,7 @@ button {
 .suggestion-copy strong {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -252,14 +263,14 @@ button {
 }
 .suggestion-copy small {
   color: var(--overlay);
-  font-size: 8px;
+  font-size: 12px;
 }
 .suggestion-source {
   padding: 3px 5px;
   border: 1px solid var(--surface-2);
   border-radius: 2px;
   color: var(--overlay);
-  font-size: 7px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 .suggestion-status {
@@ -268,7 +279,7 @@ button {
   border-top: 1px solid var(--surface);
   color: var(--overlay);
   background: var(--base);
-  font-size: 8px;
+  font-size: 12px;
 }
 .search-view-all {
   width: 100%;
@@ -278,7 +289,7 @@ button {
   border-top: 1px solid var(--surface);
   color: var(--blue);
   background: var(--mantle);
-  font-size: 9px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
@@ -1383,7 +1394,7 @@ button {
   outline: 0;
   color: var(--text);
   background: transparent;
-  font-size: 10px;
+  font-size: 12px;
 }
 .search-page-query button {
   align-self: stretch;
@@ -1391,7 +1402,7 @@ button {
   border: 0;
   color: var(--crust);
   background: var(--blue);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -1422,17 +1433,17 @@ button {
 }
 .search-metric small {
   color: var(--overlay);
-  font-size: 7px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 .search-provider-state {
-  max-width: 138px;
+  max-width: 160px;
   display: flex;
   align-items: center;
   padding: 12px 14px;
   color: var(--green);
   background: var(--mantle);
-  font-size: 7px;
+  font-size: 12px;
   line-height: 1.45;
   text-transform: uppercase;
 }
@@ -1460,7 +1471,7 @@ button {
 }
 .search-section-title > span {
   color: var(--overlay);
-  font-size: 8px;
+  font-size: 12px;
 }
 .catalog-result {
   min-width: 0;
@@ -1494,19 +1505,19 @@ button {
 }
 .catalog-result small {
   color: var(--sapphire);
-  font-size: 7px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 .catalog-result strong {
   overflow: hidden;
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .catalog-result em {
   overflow: hidden;
   color: var(--overlay);
-  font-size: 7px;
+  font-size: 12px;
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1520,12 +1531,13 @@ button {
   border-left: 2px solid var(--yellow);
   color: var(--yellow);
   background: rgba(249,226,175,.06);
-  font-size: 8px;
+  font-size: 12px;
 }
 .partial-notice span {
   margin-right: auto;
 }
 .partial-notice button {
+  min-height: 28px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -1534,7 +1546,7 @@ button {
   border: 1px solid rgba(249,226,175,.3);
   color: var(--yellow);
   background: transparent;
-  font-size: 8px;
+  font-size: 12px;
   cursor: pointer;
 }
 .search-type-tabs {
@@ -1553,7 +1565,7 @@ button {
   border-radius: 2px;
   color: var(--muted);
   background: var(--mantle);
-  font-size: 8px;
+  font-size: 12px;
   cursor: pointer;
 }
 .search-type-tabs button span {
@@ -1590,7 +1602,7 @@ button {
 .search-no-results p {
   margin: 0;
   color: var(--overlay);
-  font-size: 9px;
+  font-size: 12px;
 }
 .search-catalog-error button {
   display: inline-flex;
@@ -1601,7 +1613,7 @@ button {
   border: 1px solid rgba(243,139,168,.35);
   color: var(--red);
   background: transparent;
-  font-size: 8px;
+  font-size: 12px;
   cursor: pointer;
 }
 .search-no-results {
@@ -1673,12 +1685,12 @@ button {
   align-items: center;
   gap: 6px;
   margin: 0 0 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .catalog-group h3 span {
   margin-left: auto;
   color: var(--overlay);
-  font-size: 8px;
+  font-size: 12px;
 }
 .catalog-results {
   display: grid;
@@ -1703,7 +1715,7 @@ button {
   align-items: center;
   gap: 3px;
   color: var(--blue);
-  font-size: 7px;
+  font-size: 12px;
 }
 .already-added {
   color: var(--green);
@@ -1886,6 +1898,9 @@ button {
   background: var(--surface);
   font-size: 12px;
 }
+.detail-credits-group {
+  grid-column: 1 / -1;
+}
 .detail-credits {
   display: grid;
   gap: 9px;
@@ -1906,7 +1921,6 @@ button {
   font-size: 13px;
 }
 .detail-credits dd {
-  max-width: 48%;
   overflow-wrap: anywhere;
   margin: 0;
   color: var(--overlay);
@@ -1962,11 +1976,15 @@ button {
 .detail-refresh-button .spinning {
   animation: spin .8s linear infinite;
 }
+.detail-metadata-status,
 .detail-metadata-error {
   margin: 8px 0 0;
-  color: var(--red);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.detail-metadata-error {
+  color: var(--red);
 }
 .detail-library-panel,
 .detail-add-panel {
@@ -2157,11 +2175,16 @@ button {
   color: var(--overlay);
   background: var(--mantle);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 8px;
+  font-size: 12px;
 }
 .site-footer .page-container {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  gap: 10px 20px;
+}
+.provider-attribution a {
+  color: var(--blue);
 }
 
 .modal-backdrop {
@@ -2739,7 +2762,7 @@ button {
 }
 .discovery-prompt p {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
 }
 .discovery-search {
   height: 52px;
@@ -2766,13 +2789,13 @@ button {
 }
 .discovery-search > span {
   color: var(--overlay);
-  font-size: 8px;
+  font-size: 12px;
 }
 .discovery-hint,
 .discovery-error {
   padding: 55px 20px;
   color: var(--overlay);
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
 }
 .discovery-error {
@@ -2818,7 +2841,7 @@ button {
 }
 .result-copy strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2826,21 +2849,21 @@ button {
   overflow: hidden;
   margin-top: 3px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .result-copy > span {
   margin-top: 7px;
   color: var(--sapphire);
-  font-size: 8px;
+  font-size: 12px;
 }
 .result-copy p {
   display: -webkit-box;
   overflow: hidden;
   margin: 7px 0 0;
   color: var(--overlay);
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -2856,18 +2879,18 @@ button {
   align-items: center;
   gap: 3px;
   color: var(--yellow);
-  font-size: 8px;
+  font-size: 12px;
 }
 .result-meta small {
   margin-top: 5px;
   color: var(--overlay);
-  font-size: 7px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 .result-meta em {
   margin-top: auto;
   color: var(--blue);
-  font-size: 8px;
+  font-size: 12px;
   font-style: normal;
 }
 .load-more {
@@ -2877,7 +2900,7 @@ button {
   border: 1px solid var(--surface-2);
   color: var(--blue);
   background: transparent;
-  font-size: 9px;
+  font-size: 12px;
   cursor: pointer;
 }
 .discovery-footer {
@@ -2889,13 +2912,20 @@ button {
   padding: 0 24px;
   border-top: 1px solid var(--surface);
   color: var(--overlay);
-  font-size: 9px;
+  font-size: 12px;
 }
 .discovery-footer button {
   border: 0;
   color: var(--blue);
   background: transparent;
   cursor: pointer;
+}
+.discovery-attribution {
+  display: block;
+  margin-top: 14px;
+  color: var(--overlay);
+  font-size: 12px;
+  text-align: right;
 }
 .metadata-preview {
   display: flex;
@@ -2919,7 +2949,7 @@ button {
   display: block;
   overflow: hidden;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2928,10 +2958,16 @@ button {
   overflow: hidden;
   margin: 6px 0 0;
   color: var(--overlay);
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+.metadata-provider-attribution {
+  display: block;
+  margin-top: 7px;
+  color: var(--overlay);
+  font-size: 12px;
 }
 
 @media (max-width: 1050px) {

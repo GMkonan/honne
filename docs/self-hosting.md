@@ -71,16 +71,18 @@ Manual tracking does not require provider credentials. Public discovery uses:
 
 - AniList for anime, manga, and light novels, with Kitsu as an automatic fallback;
 - Open Library for books;
-- TMDB for movies and series.
+- TMDB for movies and series;
+- RAWG for games.
 
-TMDB discovery requires an API Read Access Token. Open Library recommends identifying requests with a contact email:
+TMDB discovery requires an API Read Access Token. RAWG game discovery requires a personal API key from [RAWG API Docs](https://rawg.io/apidocs). Open Library recommends identifying requests with a contact email:
 
 ```dotenv
 TMDB_API_TOKEN=your-api-read-access-token
+RAWG_API_KEY=your-rawg-api-key
 APP_CONTACT_EMAIL=you@example.com
 ```
 
-Provider secrets remain in the backend and are never sent to frontend code. See [AniList synchronization](anilist-sync.md) to configure authenticated list updates.
+The RAWG free plan requires attribution and active RAWG links wherever its data or images appear; Honne renders that attribution automatically. Provider secrets remain in the backend and are never sent to frontend code. See [AniList synchronization](anilist-sync.md) to configure authenticated list updates.
 
 ## Download a backup
 
