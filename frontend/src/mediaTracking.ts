@@ -4,7 +4,8 @@ export type TrackingMediaType =
   | "movie"
   | "book"
   | "manga"
-  | "light_novel";
+  | "light_novel"
+  | "game";
 
 export type TrackingMediaStatus =
   | "planned"
@@ -27,6 +28,7 @@ interface MediaTrackingDefinition {
 
 const rewatchHelp = "Additional completed viewings after the first.";
 const rereadHelp = "Additional completed readings after the first.";
+const replayHelp = "Additional completed playthroughs after the first.";
 
 function tracked(unitLabel: string, reading: boolean): MediaTrackingDefinition {
   const unitPlural = unitLabel.toLowerCase();
@@ -56,6 +58,17 @@ const trackingByType: Record<TrackingMediaType, MediaTrackingDefinition> = {
   book: tracked("Pages", true),
   manga: tracked("Chapters", true),
   light_novel: tracked("Chapters", true),
+  game: {
+    ...tracked("Progress", false),
+    tracksProgress: false,
+    progressLabel: "",
+    totalLabel: "",
+    unitPlural: "",
+    plannedLabel: "Plan to play",
+    inProgressLabel: "Playing",
+    repeatLabel: "Replays",
+    repeatHelp: replayHelp,
+  },
 };
 
 export function mediaTracking(
@@ -74,7 +87,7 @@ export function mediaStatusLabel(
     if (status === "planned") return tracking.plannedLabel;
     if (status === "in_progress") return tracking.inProgressLabel;
   }
-  if (status === "planned") return "Plan to read/watch";
+  if (status === "planned") return "Planned";
   if (status === "in_progress") return "In progress";
   if (status === "completed") return "Completed";
   if (status === "paused") return "Paused";
@@ -88,6 +101,38 @@ export function progressValue(progress: number, total: number): string {
 
 export function optionalNumberInputValue(value: number): number | "" {
   return value === 0 ? "" : value;
+}
+
+export function playtimeHoursInputValue(minutes: number): string {
+  return Number.isFinite(minutes) && minutes > 0
+    ? String(Number((minutes / 60).toFixed(2)))
+    : "";
+}
+
+export function playtimeMinutesFromHours(value: string): number {
+  const hours = Number(value);
+  return Number.isFinite(hours) && hours > 0 ? Math.round(hours * 60) : 0;
+}
+
+export function formatPlaytime(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes <= 0) return "Not tracked";
+  const wholeMinutes = Math.floor(minutes);
+  const hours = Math.floor(wholeMinutes / 60);
+  const remainder = wholeMinutes % 60;
+  if (!hours) return `${remainder}m`;
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+}
+
+export function normalizePersonalPlatforms(value: string): string[] {
+  const seen = new Set<string>();
+  return value.split(",").map((platform) => platform.trim()).filter(
+    (platform) => {
+      const key = platform.toLocaleLowerCase("en");
+      if (!platform || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    },
+  );
 }
 
 export function catalogTotalLabel(

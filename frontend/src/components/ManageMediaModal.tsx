@@ -14,7 +14,10 @@ import {
 import {
   mediaStatusLabel,
   mediaTracking,
+  normalizePersonalPlatforms,
   optionalNumberInputValue,
+  playtimeHoursInputValue,
+  playtimeMinutesFromHours,
 } from "../mediaTracking.ts";
 
 export interface ManagedMediaValues {
@@ -23,6 +26,8 @@ export interface ManagedMediaValues {
   total: number;
   rating: number;
   repeatCount: number;
+  playtimeMinutes: number;
+  playedOnPlatforms: string[];
   notes: string;
 }
 
@@ -67,8 +72,20 @@ export function ManageMediaModal(
     total: item.total,
     rating: item.rating,
     repeatCount: item.repeatCount || 0,
+    playtimeMinutes: item.playtimeMinutes || 0,
+    playedOnPlatforms: Array.isArray(item.playedOnPlatforms)
+      ? item.playedOnPlatforms
+      : [],
     notes: item.notes,
   });
+  const [playtimeHoursInput, setPlaytimeHoursInput] = useState(
+    playtimeHoursInputValue(item.playtimeMinutes || 0),
+  );
+  const [platformsInput, setPlatformsInput] = useState(
+    Array.isArray(item.playedOnPlatforms)
+      ? item.playedOnPlatforms.join(", ")
+      : "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -135,7 +152,11 @@ export function ManageMediaModal(
     setSaving(true);
     setError("");
     try {
-      await onSave(form);
+      await onSave({
+        ...form,
+        playtimeMinutes: playtimeMinutesFromHours(playtimeHoursInput),
+        playedOnPlatforms: normalizePersonalPlatforms(platformsInput),
+      });
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       setSaving(false);
@@ -214,6 +235,33 @@ export function ManageMediaModal(
             />
             <small>{tracking.repeatHelp}</small>
           </label>
+          {item.type === "game" && (
+            <>
+              <label>
+                Playtime (hours)
+                <input
+                  type="number"
+                  name="playtimeHours"
+                  min="0"
+                  step="0.01"
+                  value={playtimeHoursInput}
+                  onChange={(event) =>
+                    setPlaytimeHoursInput(event.target.value)}
+                  placeholder="0"
+                />
+                <small>Your total time played, including replays.</small>
+              </label>
+              <label>
+                Played on
+                <input
+                  value={platformsInput}
+                  onChange={(event) => setPlatformsInput(event.target.value)}
+                  placeholder="PC, PlayStation 5, Switch"
+                />
+                <small>Separate multiple platforms with commas.</small>
+              </label>
+            </>
+          )}
           {tracking.tracksProgress && (
             <>
               <label>

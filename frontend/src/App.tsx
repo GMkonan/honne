@@ -1,6 +1,7 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
   useEffect,
   useRef,
   useState,
@@ -13,6 +14,7 @@ import {
   Clock3,
   Cog,
   Film,
+  Gamepad2,
   Library,
   Link2,
   type LucideIcon,
@@ -42,9 +44,13 @@ import {
 import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
+  formatPlaytime,
   mediaStatusLabel,
   mediaTracking,
+  normalizePersonalPlatforms,
   optionalNumberInputValue,
+  playtimeHoursInputValue,
+  playtimeMinutesFromHours,
   type TrackingMediaStatus,
   type TrackingMediaType,
 } from "./mediaTracking.ts";
@@ -60,6 +66,8 @@ interface MediaInput {
   total: number;
   rating: number;
   repeatCount: number;
+  playtimeMinutes: number;
+  playedOnPlatforms: string[];
   notes: string;
   coverUrl: string;
   provider: string;
@@ -97,6 +105,8 @@ interface ActivityChanges {
   toRating?: number;
   fromRepeatCount?: number;
   toRepeatCount?: number;
+  fromPlaytimeMinutes?: number;
+  toPlaytimeMinutes?: number;
 }
 
 interface ActivityEvent {
@@ -205,10 +215,16 @@ const typeOptions: TypeOption[] = [
     jpLabel: "ライトノベル",
     icon: Clapperboard,
   },
+  {
+    value: "game",
+    label: "Games",
+    jpLabel: "ゲーム",
+    icon: Gamepad2,
+  },
 ];
 
 const statusOptions: { value: MediaStatus; label: string }[] = [
-  { value: "planned", label: "Plan to read/watch" },
+  { value: "planned", label: "Planned" },
   { value: "in_progress", label: "In progress" },
   { value: "completed", label: "Completed" },
   { value: "paused", label: "Paused" },
@@ -223,6 +239,8 @@ const emptyForm: MediaInput = {
   total: 0,
   rating: 0,
   repeatCount: 0,
+  playtimeMinutes: 0,
+  playedOnPlatforms: [],
   notes: "",
   coverUrl: "",
   provider: "",
@@ -310,6 +328,10 @@ function mediaToInput(item: Media): MediaInput {
     total: item.total,
     rating: item.rating,
     repeatCount: item.repeatCount || 0,
+    playtimeMinutes: item.playtimeMinutes || 0,
+    playedOnPlatforms: Array.isArray(item.playedOnPlatforms)
+      ? item.playedOnPlatforms
+      : [],
     notes: item.notes,
     coverUrl: item.coverUrl,
     provider: item.provider,
@@ -379,6 +401,13 @@ function activityDescription(activity: ActivityEvent): string {
       `${mediaTracking(activity.mediaType).repeatLabel} ${
         activity.changes.fromRepeatCount ?? 0
       } → ${activity.changes.toRepeatCount}`,
+    );
+  }
+  if (activity.changes.toPlaytimeMinutes !== undefined) {
+    details.push(
+      `Playtime ${
+        formatPlaytime(activity.changes.fromPlaytimeMinutes ?? 0)
+      } → ${formatPlaytime(activity.changes.toPlaytimeMinutes)}`,
     );
   }
   return details.join(" · ") || "Updated details";
@@ -957,9 +986,9 @@ function App() {
     setModalItem(null);
   }
 
-  function openManualEntry() {
+  function openManualEntry(type?: MediaType) {
     setDiscoveryType(undefined);
-    setDraftItem(undefined);
+    setDraftItem(type ? { ...emptyForm, type } : undefined);
     setModalItem(null);
   }
 
@@ -1345,7 +1374,7 @@ function App() {
           onBack={() => navigate("library")}
           onRetry={() => setSearchGeneration((current) => current + 1)}
           onOpenCatalog={openExternalDetail}
-          onAddManually={openManualEntry}
+          onAddManually={() => openManualEntry()}
         />
       )}
 
@@ -2000,7 +2029,7 @@ function DiscoveryModal(
     initialType: MediaType | null;
     onClose: () => void;
     onSelect: (result: DiscoveryResult) => void;
-    onManual: () => void;
+    onManual: (type?: MediaType) => void;
   },
 ) {
   const [mediaType, setMediaType] = useState<MediaType | null>(initialType);
@@ -2010,10 +2039,21 @@ function DiscoveryModal(
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const dialogRef = useRef<HTMLElement>(null);
+  const initialFocusRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    initialFocusRef.current?.focus();
+    return () => triggerRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
-    if (!mediaType || normalizedQuery.length < 2) {
+    if (!mediaType || mediaType === "game" || normalizedQuery.length < 2) {
       setLoading(false);
       return;
     }
@@ -2051,6 +2091,31 @@ function DiscoveryModal(
     };
   }, [mediaType, query, page]);
 
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]",
+      ) || [],
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   function chooseType(value: MediaType) {
     setMediaType(value);
     setQuery("");
@@ -2073,10 +2138,12 @@ function DiscoveryModal(
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <section
+        ref={dialogRef}
         className="discovery-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="discovery-title"
+        onKeyDown={handleDialogKeyDown}
       >
         <header className="discovery-header">
           <div>
@@ -2088,10 +2155,18 @@ function DiscoveryModal(
           </button>
         </header>
 
-        <div className="discovery-types" aria-label="Media type">
+        <div
+          className="discovery-types"
+          role="group"
+          aria-label="Media type"
+        >
           {typeOptions.map(({ value, label, icon: Icon }) => (
             <button
+              ref={value === (initialType || "anime")
+                ? initialFocusRef
+                : undefined}
               type="button"
+              aria-pressed={mediaType === value}
               className={mediaType === value ? "selected" : ""}
               onClick={() => chooseType(value)}
               key={value}
@@ -2109,6 +2184,14 @@ function DiscoveryModal(
                 <Search size={28} />
                 <h3>What kind of title are you looking for?</h3>
                 <p>Choose a media type so we can search the right catalog.</p>
+              </div>
+            )
+            : mediaType === "game"
+            ? (
+              <div className="discovery-prompt">
+                <Gamepad2 size={28} />
+                <h3>Add a game manually</h3>
+                <p>Game catalog search will be available in a later update.</p>
               </div>
             )
             : (
@@ -2203,7 +2286,12 @@ function DiscoveryModal(
 
         <footer className="discovery-footer">
           <span>Can’t find it?</span>
-          <button type="button" onClick={onManual}>Add manually</button>
+          <button
+            type="button"
+            onClick={() => onManual(mediaType || undefined)}
+          >
+            Add manually
+          </button>
         </footer>
       </section>
     </div>
@@ -2298,6 +2386,19 @@ function MediaCard(
               </div>
             </>
           )
+          : item.type === "game"
+          ? (
+            <>
+              <div className="progress-label">
+                <span>Playtime</span>
+                <strong>{formatPlaytime(item.playtimeMinutes || 0)}</strong>
+              </div>
+              <div
+                className="progress-placeholder with-label"
+                aria-hidden="true"
+              />
+            </>
+          )
           : <div className="progress-placeholder" aria-hidden="true" />}
         {item.notes && <p className="notes">{item.notes}</p>}
         <div className="card-actions">
@@ -2331,6 +2432,14 @@ function MediaModal(
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [playtimeHoursInput, setPlaytimeHoursInput] = useState(
+    playtimeHoursInputValue(
+      item?.playtimeMinutes || initial?.playtimeMinutes || 0,
+    ),
+  );
+  const [platformsInput, setPlatformsInput] = useState(
+    (item?.playedOnPlatforms || initial?.playedOnPlatforms || []).join(", "),
+  );
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -2392,7 +2501,18 @@ function MediaModal(
     setSaving(true);
     setError("");
     try {
-      await onSave(form);
+      const tracksProgress = mediaTracking(form.type).tracksProgress;
+      await onSave({
+        ...form,
+        progress: tracksProgress ? form.progress : item?.progress || 0,
+        total: tracksProgress ? form.total : item?.total || 0,
+        playtimeMinutes: form.type === "game"
+          ? playtimeMinutesFromHours(playtimeHoursInput)
+          : item?.playtimeMinutes || 0,
+        playedOnPlatforms: form.type === "game"
+          ? normalizePersonalPlatforms(platformsInput)
+          : item?.playedOnPlatforms || [],
+      });
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       setSaving(false);
@@ -2499,6 +2619,33 @@ function MediaModal(
             />
             <small>{tracking.repeatHelp}</small>
           </label>
+          {form.type === "game" && (
+            <>
+              <label>
+                Playtime (hours){" "}
+                <input
+                  type="number"
+                  name="playtimeHours"
+                  min="0"
+                  step="0.01"
+                  value={playtimeHoursInput}
+                  onChange={(event) =>
+                    setPlaytimeHoursInput(event.target.value)}
+                  placeholder="0"
+                />
+                <small>Your total time played, including replays.</small>
+              </label>
+              <label>
+                Played on{" "}
+                <input
+                  value={platformsInput}
+                  onChange={(event) => setPlatformsInput(event.target.value)}
+                  placeholder="PC, PlayStation 5, Switch"
+                />
+                <small>Separate multiple platforms with commas.</small>
+              </label>
+            </>
+          )}
           {tracking.tracksProgress && (
             <>
               <label>

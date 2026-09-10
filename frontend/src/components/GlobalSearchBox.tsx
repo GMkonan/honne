@@ -15,7 +15,8 @@ export type SearchMediaType =
   | "movie"
   | "book"
   | "manga"
-  | "light_novel";
+  | "light_novel"
+  | "game";
 
 export interface SearchMediaCredit {
   name: string;
@@ -69,6 +70,7 @@ const typeLabels: Record<SearchMediaType, string> = {
   book: "Book",
   manga: "Manga",
   light_novel: "Light novel",
+  game: "Game",
 };
 
 function roundRobin(results: SearchCatalogResult[]) {

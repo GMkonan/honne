@@ -29,6 +29,7 @@ const typeOrder: SearchMediaType[] = [
   "book",
   "manga",
   "light_novel",
+  "game",
 ];
 
 const typeLabels: Record<SearchMediaType, string> = {
@@ -38,6 +39,7 @@ const typeLabels: Record<SearchMediaType, string> = {
   book: "Books",
   manga: "Manga",
   light_novel: "Light novels",
+  game: "Games",
 };
 
 function coverStyle(coverUrl?: string) {
