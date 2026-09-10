@@ -26,12 +26,12 @@ func TestGlobalDiscoveryAggregatesInTypeOrderCapsAndDeduplicates(t *testing.T) {
 	if len(payload.UnavailableTypes) != 0 {
 		t.Fatalf("unexpected unavailable types: %v", payload.UnavailableTypes)
 	}
-	// Six anime results (the per-type cap), then series, movie, book, and the
-	// manga/light-novel result once despite being returned by both AniList calls.
-	if len(payload.Results) != 10 {
-		t.Fatalf("results = %d, want 10: %+v", len(payload.Results), payload.Results)
+	// Six anime results (the per-type cap), then series, movie, book, the
+	// manga/light-novel result once, and the game result.
+	if len(payload.Results) != 11 {
+		t.Fatalf("results = %d, want 11: %+v", len(payload.Results), payload.Results)
 	}
-	wantTypes := []string{"anime", "anime", "anime", "anime", "anime", "anime", "series", "movie", "book", "manga"}
+	wantTypes := []string{"anime", "anime", "anime", "anime", "anime", "anime", "series", "movie", "book", "manga", "game"}
 	for index, want := range wantTypes {
 		if payload.Results[index].Type != want {
 			t.Fatalf("result %d type = %q, want %q; results=%+v", index, payload.Results[index].Type, want, payload.Results)
@@ -70,6 +70,26 @@ func TestGlobalDiscoveryReturnsPartialResultsAndUnavailableTypes(t *testing.T) {
 	}
 }
 
+func TestGlobalDiscoveryReportsUnconfiguredRAWGAsPartial(t *testing.T) {
+	server := httptest.NewServer(globalDiscoveryProviderHandler(false))
+	defer server.Close()
+	application := globalDiscoveryTestApp(server.URL, "tmdb-token")
+	application.discovery.rawgKey = ""
+
+	response := httptest.NewRecorder()
+	application.searchGlobalDiscovery(response, httptest.NewRequest(http.MethodGet, "/api/discovery/global?q=story", nil))
+	var payload globalDiscoveryResponse
+	if response.Code != http.StatusOK {
+		t.Fatalf("partial RAWG search = %d: %s", response.Code, response.Body.String())
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(payload.UnavailableTypes, ",") != "game" || len(payload.Results) == 0 {
+		t.Fatalf("unexpected RAWG partial response: %+v", payload)
+	}
+}
+
 func TestGlobalDiscoveryFailsOnlyWhenEveryTypeFails(t *testing.T) {
 	server := httptest.NewServer(globalDiscoveryProviderHandler(true))
 	defer server.Close()
@@ -82,15 +102,16 @@ func TestGlobalDiscoveryFailsOnlyWhenEveryTypeFails(t *testing.T) {
 	}
 }
 
-func TestGameIsStorableButNotSearchedWithoutACatalog(t *testing.T) {
-	if !slicesContains(validTypes, "game") || slicesContains(catalogTypes, "game") {
+func TestGameCatalogRequiresRAWGKey(t *testing.T) {
+	if !slicesContains(validTypes, "game") || !slicesContains(catalogTypes, "game") {
 		t.Fatalf("unexpected game capabilities: valid=%v catalog=%v", validTypes, catalogTypes)
 	}
 	application := globalDiscoveryTestApp("http://example.invalid", "")
+	application.discovery.rawgKey = ""
 	response := httptest.NewRecorder()
 	application.searchDiscovery(response, httptest.NewRequest(http.MethodGet, "/api/discovery/search?type=game&q=hades", nil))
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("game catalog search = %d, want 400: %s", response.Code, response.Body.String())
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "RAWG_API_KEY") {
+		t.Fatalf("game catalog search = %d, want configured-key error: %s", response.Code, response.Body.String())
 	}
 }
 
@@ -116,7 +137,10 @@ func globalDiscoveryTestApp(baseURL, tmdbToken string) *app {
 		booksBase:   baseURL,
 		tmdbBase:    baseURL,
 		tmdbToken:   tmdbToken,
+		rawgBase:    baseURL,
+		rawgKey:     "rawg-key",
 		cache:       make(map[string]cachedDiscovery),
+		detailCache: make(map[string]cachedDiscoveryDetail),
 	}}
 }
 
@@ -154,6 +178,9 @@ func globalDiscoveryProviderHandler(fail bool) http.Handler {
 			return
 		case r.URL.Path == "/search/movie":
 			_, _ = w.Write([]byte(`{"total_pages":1,"results":[{"id":202,"title":"Movie","original_title":"Movie","release_date":"2021-01-01","vote_average":7}]}`))
+			return
+		case r.URL.Path == "/games":
+			_, _ = w.Write([]byte(`{"next":null,"results":[{"id":203,"slug":"game","name":"Game","released":"2022-01-01","rating":4}]}`))
 			return
 		}
 		http.NotFound(w, r)

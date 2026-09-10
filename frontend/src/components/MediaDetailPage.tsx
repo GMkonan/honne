@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -60,6 +60,7 @@ export interface DetailLibraryMedia {
   durationMinutes: number;
   catalogTotal: number;
   communityRating: number;
+  catalogPlatforms: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -139,6 +140,7 @@ function DetailCover(
 }
 
 function providerLabel(provider: string): string {
+  if (provider === "rawg") return "RAWG";
   return provider
     ? provider.replaceAll("_", " ").replace(
       /\b\w/gu,
@@ -273,6 +275,16 @@ export function MediaDetailPage(
     onDelete,
   }: MediaDetailPageProps,
 ) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const focusIdentity = selection?.kind === "local"
+    ? `local:${selection.mediaId}`
+    : selection?.kind === "external"
+    ? `external:${selection.result.provider}:${selection.result.providerId}`
+    : "";
+  useEffect(() => {
+    if (!loading && focusIdentity) titleRef.current?.focus();
+  }, [focusIdentity, loading, media?.id]);
+
   if (!selection || (selection.kind === "local" && !media)) {
     const waitingForLibrary = loading && selection?.kind === "local";
     return (
@@ -306,6 +318,11 @@ export function MediaDetailPage(
     )
       .slice(0, 12)
     : [];
+  const catalogPlatforms = Array.isArray(source.catalogPlatforms)
+    ? source.catalogPlatforms.filter((platform): platform is string =>
+      typeof platform === "string"
+    ).slice(0, 12)
+    : [];
   const credits = Array.isArray(source.credits)
     ? source.credits.filter((credit): credit is SearchMediaCredit =>
       Boolean(
@@ -317,7 +334,9 @@ export function MediaDetailPage(
   const catalogFacts = [
     type.label,
     source.format ||
-    (selection.kind === "external" ? selection.result.subtitle || "" : ""),
+    (selection.kind === "external" && source.type !== "game"
+      ? selection.result.subtitle || ""
+      : ""),
     releaseStatusLabels[source.releaseStatus || ""] || "",
     releasePeriod || (source.releaseYear ? String(source.releaseYear) : ""),
     catalogTotal > 0 ? catalogTotalLabel(source.type, catalogTotal) : "",
@@ -386,7 +405,7 @@ export function MediaDetailPage(
             <span className="eyebrow">
               {selection.kind === "local" ? "IN YOUR LIBRARY" : "CATALOG TITLE"}
             </span>
-            <h1>{source.title}</h1>
+            <h1 ref={titleRef} tabIndex={-1}>{source.title}</h1>
             {source.originalTitle && source.originalTitle !== source.title && (
               <p className="detail-original">{source.originalTitle}</p>
             )}
@@ -415,8 +434,19 @@ export function MediaDetailPage(
                 <span key={`${fact}-${index}`}>{fact}</span>
               ))}
             </div>
-            {(genres.length > 0 || credits.length > 0) && (
+            {(genres.length > 0 || credits.length > 0 ||
+              catalogPlatforms.length > 0) && (
               <div className="detail-metadata-groups">
+                {catalogPlatforms.length > 0 && (
+                  <section aria-labelledby="detail-platforms-title">
+                    <h3 id="detail-platforms-title">Available on</h3>
+                    <ul className="detail-genres">
+                      {catalogPlatforms.map((platform) => (
+                        <li key={platform}>{platform}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
                 {genres.length > 0 && (
                   <section aria-labelledby="detail-genres-title">
                     <h3 id="detail-genres-title">
@@ -428,7 +458,10 @@ export function MediaDetailPage(
                   </section>
                 )}
                 {credits.length > 0 && (
-                  <section aria-labelledby="detail-credits-title">
+                  <section
+                    className="detail-credits-group"
+                    aria-labelledby="detail-credits-title"
+                  >
                     <h3 id="detail-credits-title">Credits</h3>
                     <dl className="detail-credits">
                       {credits.map((credit, index) => (
@@ -481,9 +514,16 @@ export function MediaDetailPage(
                 )}
               </div>
             )}
-            {selection.kind === "local" && metadataError && (
+            {selection.kind === "external" && metadataRefreshing && (
+              <p className="detail-metadata-status" role="status">
+                Loading full catalog details…
+              </p>
+            )}
+            {metadataError && (
               <p className="detail-metadata-error" role="status">
-                {metadataError}
+                {selection.kind === "external"
+                  ? `Some catalog details could not be loaded. ${metadataError}`
+                  : metadataError}
               </p>
             )}
           </section>
