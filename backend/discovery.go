@@ -573,6 +573,15 @@ func (s *discoveryService) getJSONRequest(ctx context.Context, endpoint, token, 
 	return nil
 }
 
+type providerHTTPError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e *providerHTTPError) Error() string {
+	return fmt.Sprintf("provider returned %s", e.Status)
+}
+
 func (s *discoveryService) postJSON(ctx context.Context, endpoint string, payload, target any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -591,7 +600,7 @@ func (s *discoveryService) postJSON(ctx context.Context, endpoint string, payloa
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("provider returned %s", response.Status)
+		return &providerHTTPError{StatusCode: response.StatusCode, Status: response.Status}
 	}
 	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
 		return fmt.Errorf("decode provider response: %w", err)
