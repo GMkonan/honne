@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -39,6 +40,29 @@ type anilistImportRequest struct {
 	Statuses []string `json:"statuses"`
 }
 
+func writeAniListImportFailure(w http.ResponseWriter, err error) {
+	if isAniListAvailabilityError(err) {
+		writeError(w, http.StatusServiceUnavailable, "AniList is currently unavailable; try again later")
+		return
+	}
+	writeError(w, http.StatusBadGateway, "could not load this AniList profile; check the username and profile visibility")
+}
+
+func isAniListAvailabilityError(err error) bool {
+	var responseErr *providerHTTPError
+	if errors.As(err, &responseErr) {
+		return responseErr.StatusCode == http.StatusUnauthorized ||
+			responseErr.StatusCode == http.StatusForbidden ||
+			responseErr.StatusCode == http.StatusTooManyRequests ||
+			responseErr.StatusCode >= http.StatusInternalServerError
+	}
+	if !strings.HasPrefix(err.Error(), "AniList:") {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return !strings.Contains(message, "not found") && !strings.Contains(message, "private")
+}
+
 func (a *app) previewAniListImport(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.URL.Query().Get("username"))
 	if len([]rune(username)) < 2 || len([]rune(username)) > 50 {
@@ -54,7 +78,7 @@ func (a *app) previewAniListImport(w http.ResponseWriter, r *http.Request) {
 	preview, err := a.discovery.fetchAniListList(r.Context(), username)
 	if err != nil {
 		logProviderError("anilist_import", err)
-		writeError(w, http.StatusBadGateway, "could not load this public AniList profile")
+		writeAniListImportFailure(w, err)
 		return
 	}
 
@@ -113,7 +137,7 @@ func (a *app) importAniList(w http.ResponseWriter, r *http.Request) {
 	preview, err := a.discovery.fetchAniListList(r.Context(), input.Username)
 	if err != nil {
 		logProviderError("anilist_import", err)
-		writeError(w, http.StatusBadGateway, "could not load this public AniList profile")
+		writeAniListImportFailure(w, err)
 		return
 	}
 	allowedTypes := stringSet(input.Types)
