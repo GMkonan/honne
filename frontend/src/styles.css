@@ -445,7 +445,7 @@ button {
   margin-bottom: 10px;
   color: var(--overlay);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: .1em;
   text-transform: uppercase;
 }
@@ -454,19 +454,19 @@ button {
 }
 .format-options {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 .format-options button {
   min-width: 0;
-  min-height: 96px;
+  min-height: 112px;
   position: relative;
   isolation: isolate;
   display: flex;
   align-items: flex-end;
   gap: 8px;
   overflow: hidden;
-  padding: 11px;
+  padding: 14px;
   border: 1px solid var(--surface);
   border-radius: 4px;
   color: var(--muted);
@@ -742,6 +742,9 @@ button {
   transform: translateY(-3px);
   box-shadow: 0 10px 23px rgba(0,0,0,.38);
 }
+.card-cover {
+  position: relative;
+}
 .cover {
   width: 100%;
   aspect-ratio: 2 / 2.85;
@@ -796,7 +799,6 @@ button {
   font-weight: 600;
   line-height: 1.2;
   text-transform: uppercase;
-  backdrop-filter: blur(5px);
   box-shadow: 0 2px 7px rgba(0,0,0,.3);
 }
 .status::before {
@@ -885,8 +887,12 @@ button {
   line-height: 1.2;
 }
 .progress-label strong {
+  min-width: 0;
+  overflow: hidden;
   color: var(--muted);
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .progress-track {
   height: 2px;
@@ -908,33 +914,68 @@ button {
   display: none;
 }
 .card-actions {
-  height: 0;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  padding-bottom: 14px;
   opacity: 0;
-  transition: height .2s, opacity .2s, margin .2s;
+  background: rgba(17,17,27,.72);
+  pointer-events: none;
+  transition: opacity .18s ease;
 }
 .media-card:hover .card-actions,
-.card-actions:focus-within {
-  height: 22px;
-  margin-top: 7px;
+.media-card:focus-within .card-actions {
   opacity: 1;
 }
 .card-actions button {
-  display: flex;
+  min-height: 36px;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 0;
-  border: 0;
-  color: var(--blue);
-  background: transparent;
-  font-size: 7px;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid rgba(255,255,255,.5);
+  border-radius: 3px;
+  color: #fff;
+  background: rgba(17,17,27,.82);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
   cursor: pointer;
 }
-.card-actions .delete {
-  margin-left: auto;
-  color: var(--red);
+.media-card:hover .card-actions button,
+.media-card:focus-within .card-actions button {
+  pointer-events: auto;
+}
+.card-actions button:hover,
+.card-actions button:focus-visible {
+  border-color: var(--blue);
+  background: var(--base);
+}
+@media (hover: none) {
+  .card-actions {
+    inset: auto 7px 7px auto;
+    padding-bottom: 0;
+    opacity: 1;
+    background: transparent;
+    pointer-events: auto;
+  }
+  .card-actions button {
+    width: 34px;
+    min-height: 34px;
+    justify-content: center;
+    padding: 0;
+    border-color: rgba(255,255,255,.35);
+    pointer-events: auto;
+  }
+  .card-actions button span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 .activity-panel {
@@ -2158,8 +2199,9 @@ button {
 .site-footer .page-container {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 10px 20px;
+  justify-content: center;
+  gap: 10px 28px;
+  text-align: center;
 }
 .provider-attribution a {
   color: var(--blue);
@@ -2955,9 +2997,6 @@ button {
   .media-grid {
     grid-template-columns: repeat(4, 1fr);
   }
-  .format-options {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
   .filter-lower-row {
     align-items: stretch;
     flex-direction: column;
@@ -3252,11 +3291,6 @@ button {
   }
   .media-grid {
     grid-template-columns: repeat(3, 1fr);
-  }
-  .card-actions {
-    height: 22px;
-    margin-top: 7px;
-    opacity: 1;
   }
   .site-footer .page-container {
     align-items: center;
