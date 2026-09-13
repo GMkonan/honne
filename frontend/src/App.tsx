@@ -26,7 +26,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Star,
-  Trash2,
   Tv,
   X,
 } from "lucide-react";
@@ -963,6 +962,17 @@ function App() {
   const catalogSuggestionResults = suggestionResultQuery === globalQuery.trim()
     ? suggestionResults.filter((result) => !isAlreadyInLibrary(result, items))
     : [];
+  const detailUsesRawg = detail?.kind === "external"
+    ? detail.result.provider === "rawg"
+    : detail?.kind === "local"
+    ? items.find((item) => item.id === detail.mediaId)?.provider === "rawg"
+    : false;
+  const pageUsesRawg =
+    catalogSuggestionResults.some((result) => result.provider === "rawg") ||
+    (view === "library" && filtered.some((item) => item.provider === "rawg")) ||
+    (view === "search" &&
+      catalogSearchResults.some((result) => result.provider === "rawg")) ||
+    (view === "detail" && detailUsesRawg);
 
   async function saveItem(values: MediaInput) {
     let saved: Media;
@@ -1164,8 +1174,8 @@ function App() {
             <GlobalSearchBox
               id="mobile-global-search"
               className="mobile-global-search"
-              label="Catalog search"
-              placeholder="Search catalogs"
+              label="Search Honne from menu"
+              placeholder="Search Honne"
               query={globalQuery}
               catalogResults={catalogSuggestionResults}
               unavailableCatalogs={suggestionResultQuery === globalQuery.trim()
@@ -1187,8 +1197,8 @@ function App() {
           <GlobalSearchBox
             id="desktop-global-search"
             className="nav-search"
-            label="Search catalogs"
-            placeholder="Search catalogs"
+            label="Search Honne"
+            placeholder="Search Honne"
             query={globalQuery}
             catalogResults={catalogSuggestionResults}
             unavailableCatalogs={suggestionResultQuery === globalQuery.trim()
@@ -1382,7 +1392,6 @@ function App() {
                           item={item}
                           onOpen={() => openLocalDetail(item.id)}
                           onEdit={() => setManagedItem(item)}
-                          onDelete={() => deleteItem(item)}
                           key={item.id}
                         />
                       ))}
@@ -1496,9 +1505,10 @@ function App() {
 
       <footer className="site-footer">
         <div className="page-container">
-          <span>HONNE / 個人メディア記録</span>
-          <ProviderAttribution className="site-provider-attribution" />
-          <span>LOCAL-FIRST MEDIA LIBRARY</span>
+          <span>Made by Konan</span>
+          {pageUsesRawg && (
+            <ProviderAttribution className="site-provider-attribution" />
+          )}
         </div>
       </footer>
       {integrationOpen && (
@@ -2417,12 +2427,48 @@ function DiscoveryModal(
   );
 }
 
+function gameCardHighlight(item: Media): {
+  label: string;
+  value: string;
+  title?: string;
+} | null {
+  const platforms = item.playedOnPlatforms || [];
+  if (platforms.length > 0) {
+    return {
+      label: "Played on",
+      value: platforms.length <= 2
+        ? platforms.join(" · ")
+        : `${platforms[0]} · +${platforms.length - 1}`,
+      title: platforms.join(" · "),
+    };
+  }
+  return item.repeatCount > 0
+    ? { label: "Replays", value: String(item.repeatCount) }
+    : null;
+}
+
+function movieCardHighlight(item: Media): {
+  label: string;
+  value: string;
+  title?: string;
+} {
+  if (item.repeatCount > 0) {
+    return { label: "Rewatches", value: String(item.repeatCount) };
+  }
+  if (item.durationMinutes > 0) {
+    return { label: "Runtime", value: formatPlaytime(item.durationMinutes) };
+  }
+  if (item.releaseYear > 0) {
+    return { label: "Release", value: String(item.releaseYear) };
+  }
+  return { label: "Rewatches", value: "0" };
+}
+
 function MediaCard(
-  { item, onOpen, onEdit, onDelete }: {
+  { item, onOpen, onEdit }: {
     item: Media;
     onOpen: () => void;
     onEdit: () => void;
-    onDelete: () => void;
   },
 ) {
   const type = typeOptions.find(({ value }) => value === item.type);
@@ -2434,31 +2480,47 @@ function MediaCard(
     : item.status === "completed"
     ? 100
     : 0;
+  const cardHighlight = item.type === "game"
+    ? gameCardHighlight(item)
+    : item.type === "movie"
+    ? movieCardHighlight(item)
+    : null;
 
   return (
     <article className="media-card">
-      <button
-        type="button"
-        className={`cover ${item.coverUrl ? "" : "fallback-cover"}`}
-        style={{
-          backgroundImage: item.coverUrl
-            ? `url("${item.coverUrl.replaceAll('"', "")}")`
-            : undefined,
-        }}
-        onClick={onOpen}
-        aria-label={`View details for ${item.title}. Status: ${
-          mediaStatusLabel(item.status, item.type)
-        }`}
-      >
-        {!item.coverUrl && (
-          <span className="fallback-label">
-            <Icon size={18} /> {type?.label}
+      <div className="card-cover">
+        <button
+          type="button"
+          className={`cover ${item.coverUrl ? "" : "fallback-cover"}`}
+          style={{
+            backgroundImage: item.coverUrl
+              ? `url("${item.coverUrl.replaceAll('"', "")}")`
+              : undefined,
+          }}
+          onClick={onOpen}
+          aria-label={`View details for ${item.title}. Status: ${
+            mediaStatusLabel(item.status, item.type)
+          }`}
+        >
+          {!item.coverUrl && (
+            <span className="fallback-label">
+              <Icon size={18} /> {type?.label}
+            </span>
+          )}
+          <span className={`status ${item.status}`}>
+            {status ? mediaStatusLabel(status.value, item.type) : ""}
           </span>
-        )}
-        <span className={`status ${item.status}`}>
-          {status ? mediaStatusLabel(status.value, item.type) : ""}
-        </span>
-      </button>
+        </button>
+        <div className="card-actions">
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${item.title} Library entry`}
+          >
+            <Pencil size={15} /> <span>Edit Library entry</span>
+          </button>
+        </div>
+      </div>
       <div className="card-content">
         <div className="card-title">
           <div>
@@ -2505,12 +2567,14 @@ function MediaCard(
               </div>
             </>
           )
-          : item.type === "game"
+          : cardHighlight
           ? (
             <>
               <div className="progress-label">
-                <span>Playtime</span>
-                <strong>{formatPlaytime(item.playtimeMinutes || 0)}</strong>
+                <span>{cardHighlight.label}</span>
+                <strong title={cardHighlight.title}>
+                  {cardHighlight.value}
+                </strong>
               </div>
               <div
                 className="progress-placeholder with-label"
@@ -2520,19 +2584,6 @@ function MediaCard(
           )
           : <div className="progress-placeholder" aria-hidden="true" />}
         {item.notes && <p className="notes">{item.notes}</p>}
-        <div className="card-actions">
-          <button type="button" onClick={onEdit}>
-            <Pencil size={15} /> Update
-          </button>
-          <button
-            type="button"
-            className="delete"
-            onClick={onDelete}
-            aria-label={`Delete ${item.title}`}
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
       </div>
     </article>
   );
