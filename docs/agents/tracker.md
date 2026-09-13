@@ -1,11 +1,11 @@
 # Tracker configuration
 
-Ship-it uses GitHub Issues as Honne's shared work tracker.
+Honne uses GitHub Issues when durable product context, coordination, or implementation history is useful. Small coherent changes do not require an issue.
 
 ```yaml
 platform: github-issues
 scope: GMkonan/honne
 product_docs: docs/product/
 base_branch: main
-language: user
+language: en
 ```
