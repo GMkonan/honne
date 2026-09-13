@@ -8,11 +8,9 @@ Honne is distributed as versioned backend and frontend container images. A relea
 mkdir -p ~/honne && cd ~/honne
 curl -fLO https://github.com/GMkonan/honne/releases/latest/download/compose.yaml
 curl -fLO https://github.com/GMkonan/honne/releases/latest/download/env.example
-curl -fLO https://github.com/GMkonan/honne/releases/latest/download/checksums.txt
-if command -v sha256sum >/dev/null; then sha256sum --check checksums.txt; else shasum -a 256 -c checksums.txt; fi
 ```
 
-Continue only when both assets report `OK`. Preserve an existing `.env`; `cp -n` creates it only on the first installation:
+Preserve an existing `.env`; `cp -n` creates it only on the first installation:
 
 ```bash
 cp -n env.example .env
@@ -123,24 +121,37 @@ When restoring over an existing installation, the separate authorization file at
 
 ## Update and roll back
 
-Back up before every important update. Download the Compose file from the same immutable tag as the images, update `HONNE_VERSION`, and recreate the services:
+Back up before every important update. Release Compose files from v0.2.0 onward contain the matching immutable backend and frontend image tags, so updating to the latest release does not require discovering or editing a version:
 
 ```bash
-TARGET_VERSION=v0.2.0
-curl -fL "https://github.com/GMkonan/honne/releases/download/${TARGET_VERSION}/compose.yaml" -o compose.yaml
-curl -fL "https://github.com/GMkonan/honne/releases/download/${TARGET_VERSION}/env.example" -o env.example
-curl -fL "https://github.com/GMkonan/honne/releases/download/${TARGET_VERSION}/checksums.txt" -o checksums.txt
-if command -v sha256sum >/dev/null; then sha256sum --check checksums.txt; else shasum -a 256 -c checksums.txt; fi
-```
-
-Continue only after both assets report `OK`. Review the new settings and set `HONNE_VERSION` in `.env` to the same value as `TARGET_VERSION`, then run:
-
-```bash
+cd ~/honne
+curl -fL \
+  https://github.com/GMkonan/honne/releases/latest/download/compose.yaml \
+  -o compose.yaml.next
+docker compose -f compose.yaml.next config --quiet
+mv compose.yaml.next compose.yaml
 docker compose pull
 docker compose up -d
 ```
 
-After the containers are healthy, reload every open Honne tab so it uses the frontend contract shipped with the new backend. Use the same process with the previous tag for a rollback; do not combine an older image with a newer Compose file. Rolling back containers does not reverse a persistence migration. If the newer release changed the persistence version, restore the matching pre-update backup before starting the older containers.
+The temporary file keeps the current Compose file intact if the download or validation fails. The existing `.env`, provider credentials, and `honne-data` volume are not replaced. Explicit host-port and `APP_ORIGIN` values are also preserved, so a v0.1.0 installation remains on port 8080 unless both are intentionally changed. New optional settings use Compose defaults; release notes will call out any future setting that requires manual action.
+
+After the containers are healthy, reload every open Honne tab so it uses the frontend contract shipped with the new backend.
+
+For a rollback, download the Compose asset from the exact previous tag:
+
+```bash
+ROLLBACK_VERSION=v0.2.0
+curl -fL \
+  "https://github.com/GMkonan/honne/releases/download/${ROLLBACK_VERSION}/compose.yaml" \
+  -o compose.yaml.next
+docker compose -f compose.yaml.next config --quiet
+mv compose.yaml.next compose.yaml
+docker compose pull
+docker compose up -d
+```
+
+The v0.1.0 Compose asset predates embedded image tags. When rolling back specifically to v0.1.0, also set `HONNE_VERSION=v0.1.0` in `.env`. A rollback from v0.2.0 to v0.1.0 always requires following the [restore procedure](#restore-a-downloaded-backup) with the matching pre-update backup before starting v0.1.0: the older backend cannot read the persistence-v5 snapshot. Do not combine an older image with a newer Compose file.
 
 ## Migrate a source installation
 
