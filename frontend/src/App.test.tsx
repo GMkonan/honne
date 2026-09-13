@@ -265,8 +265,15 @@ describe("Library characterization", () => {
       }),
     );
     const personal = screen.getByRole("region", { name: "Your Library" });
-    const repeatLabel = within(personal).getByText("Rewatches");
-    expect(repeatLabel.nextElementSibling?.textContent).toBe("4");
+    await user.click(
+      within(personal).getByRole("button", { name: "Manage title" }),
+    );
+    const manager = screen.getByRole("dialog", { name: "Manage Cowboy Bebop" });
+    expect(
+      (within(manager).getByRole("spinbutton", {
+        name: /Rewatches Additional completed viewings/u,
+      }) as HTMLInputElement).value,
+    ).toBe("4");
   });
 
   it("downloads a restorable backup from Settings", async () => {
@@ -913,7 +920,11 @@ describe("Library characterization", () => {
       .toBeNull();
     expect(screen.getByText("PlayStation 5")).not.toBeNull();
     expect(screen.getByText("Supergiant Games")).not.toBeNull();
-    expect(screen.getByRole("link", { name: /View on RAWG/u })).not.toBeNull();
+    const providerLink = screen.getByRole("link", { name: /View on RAWG/u });
+    expect(
+      screen.getByRole("region", { name: "Synopsis" }).contains(providerLink),
+    )
+      .toBe(true);
     await user.click(screen.getByRole("button", { name: "Add to Library" }));
     const addDialog = screen.getByRole("dialog", { name: "Add media" });
     expect(within(addDialog).getByRole("link", { name: "RAWG" })).not
@@ -1076,12 +1087,9 @@ describe("Library characterization", () => {
     );
     const personal = screen.getByRole("region", { name: "Your Library" });
     expect(within(personal).getByText("Plan to play")).not.toBeNull();
-    expect(within(personal).getByText("1h 30m")).not.toBeNull();
-    expect(within(personal).getByText("PC · Switch")).not.toBeNull();
-    expect(
-      within(personal).getByText("Replays").nextElementSibling?.textContent,
-    )
-      .toBe("2");
+    expect(within(personal).queryByText("1h 30m")).toBeNull();
+    expect(within(personal).queryByText("PC · Switch")).toBeNull();
+    expect(within(personal).queryByText("Replays")).toBeNull();
 
     await user.click(
       within(personal).getByRole("button", { name: "Manage title" }),
@@ -1183,9 +1191,11 @@ describe("Library characterization", () => {
     render(<App />);
 
     const addPanel = await screen.findByRole("region", {
-      name: "Add to your Library",
+      name: "Add to Library",
     });
     expect(within(addPanel).queryByText(/progress/u)).toBeNull();
+    expect(within(addPanel).queryByText(/start tracking/u)).toBeNull();
+    expect(within(addPanel).queryByText(/add to your library/u)).toBeNull();
     expect(screen.queryByText("1 parts")).toBeNull();
     expect(screen.getByText("116 min")).not.toBeNull();
     await user.click(
@@ -1210,6 +1220,45 @@ describe("Library characterization", () => {
     });
   });
 
+  it("suggests the catalog total in both Library editors", async () => {
+    const router = createFetchRouter();
+    bootstrap(router, [{
+      ...mediaItems[0],
+      total: 0,
+      catalogTotal: 26,
+    }]);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const cowboyCard = (await screen.findByRole("button", {
+      name: /^View details for Cowboy Bebop/u,
+    })).closest("article");
+    if (!cowboyCard) throw new Error("Cowboy Bebop card not found");
+    await user.click(
+      within(cowboyCard).getByRole("button", { name: "Update" }),
+    );
+    const manager = screen.getByRole("dialog", {
+      name: "Manage Cowboy Bebop",
+    });
+    expect(
+      (within(manager).getByRole("spinbutton", {
+        name: /Total episodes/u,
+      }) as HTMLInputElement).value,
+    ).toBe("26");
+
+    await user.click(
+      within(manager).getByRole("button", { name: "Edit title details" }),
+    );
+    const editor = screen.getByRole("dialog", { name: "Update media" });
+    const total = within(editor).getByRole("spinbutton", {
+      name: /Total episodes/u,
+    }) as HTMLInputElement;
+    expect(total.value).toBe("26");
+    await user.clear(total);
+    await user.type(total, "24");
+    expect(total.value).toBe("24");
+  });
+
   it("keeps media details reachable from a Library card", async () => {
     const router = createFetchRouter();
     bootstrap(router);
@@ -1224,21 +1273,39 @@ describe("Library characterization", () => {
 
     expect(await screen.findByRole("heading", { name: "Cowboy Bebop" })).not
       .toBeNull();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Synopsis" })).not.toBeNull();
+    expect(screen.queryByText("About this title")).toBeNull();
+    expect(screen.queryByText("IN YOUR LIBRARY")).toBeNull();
+    expect(screen.queryByText("CATALOG INFORMATION")).toBeNull();
+    const basicFacts = screen.getByLabelText("Catalog facts");
+    expect(within(basicFacts).getByText("Type").nextElementSibling?.textContent)
+      .toBe("Anime");
     expect(
-      screen.getByRole("region", { name: "About this title" }),
-    ).not.toBeNull();
+      within(basicFacts).getByText("Source").nextElementSibling?.textContent,
+    ).toBe("Local entry");
+    expect(within(basicFacts).queryByText("Format")).toBeNull();
     const personal = screen.getByRole("region", { name: "Your Library" });
+    const cover = screen.getByRole("img", { name: /Cowboy Bebop/ });
+    expect(cover.closest(".detail-cover-column")?.contains(personal)).toBe(
+      true,
+    );
     expect(within(personal).getByText("Watching")).not.toBeNull();
-    expect(within(personal).getByText("Episodes watched")).not.toBeNull();
-    expect(within(personal).getByText("8 of 26")).not.toBeNull();
-    expect(within(personal).getByText("9/10")).not.toBeNull();
-    const repeatLabel = within(personal).getByText("Rewatches");
-    expect(repeatLabel.nextElementSibling?.textContent).toBe("0");
+    expect(within(personal).queryByText("Episodes watched")).toBeNull();
+    expect(within(personal).queryByText("8 of 26")).toBeNull();
+    expect(within(personal).queryByText("9/10")).toBeNull();
+    expect(within(personal).queryByText("Rewatches")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove from Library" }))
+      .toBeNull();
 
     const manageTrigger = screen.getByRole("button", { name: "Manage title" });
     await user.click(manageTrigger);
+    const manager = screen.getByRole("dialog", { name: "Manage Cowboy Bebop" });
+    expect(
+      within(manager).getByRole("button", { name: "Remove from Library" }),
+    ).not.toBeNull();
     await user.click(
-      screen.getByRole("button", { name: "Edit title details" }),
+      within(manager).getByRole("button", { name: "Edit title details" }),
     );
     const editor = screen.getByRole("dialog", { name: "Update media" });
     const titleInput = within(editor).getByRole("textbox", { name: "Title" });
@@ -1261,6 +1328,34 @@ describe("Library characterization", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Update media" })).toBeNull();
     expect(document.activeElement).toBe(manageTrigger);
+  });
+
+  it("removes a Library title from its management dialog", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("DELETE", "/api/media/1", null);
+    const confirm = vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    await user.click(
+      screen.getByRole("button", { name: "Remove from Library" }),
+    );
+
+    expect(confirm).toHaveBeenCalledWith(
+      "Remove “Cowboy Bebop” from your collection?",
+    );
+    expect(await screen.findByRole("heading", { name: "My Library" })).not
+      .toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^View details for Cowboy Bebop/ }),
+    ).toBeNull();
   });
 
   it("automatically enriches an existing provider title on first detail view", async () => {
@@ -1297,7 +1392,24 @@ describe("Library characterization", () => {
     expect(screen.getByText("Sunrise")).not.toBeNull();
     expect(screen.getByText("25 min / episode")).not.toBeNull();
     expect(screen.getByText("8.2/10 community")).not.toBeNull();
-    expect(screen.getByText("8 of 26")).not.toBeNull();
+    expect(screen.queryByText("8 of 26")).toBeNull();
+    expect(screen.getByRole("region", { name: "Your Library" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Catalog details" })).not
+      .toBeNull();
+    const facts = screen.getByLabelText("Catalog facts");
+    expect(within(facts).getByText("Type").nextElementSibling?.textContent)
+      .toBe("Anime");
+    expect(within(facts).getByText("Format").nextElementSibling?.textContent)
+      .toBe("TV");
+    expect(
+      within(facts).getByText("Release status").nextElementSibling?.textContent,
+    ).toBe("Finished");
+    expect(within(facts).getByText("Length").nextElementSibling?.textContent)
+      .toBe("26 episodes");
+    expect(within(facts).getByText("Duration").nextElementSibling?.textContent)
+      .toBe("25 min / episode");
+    expect(within(facts).getByText("Source").nextElementSibling?.textContent)
+      .toBe("AniList");
     expect(router.fetch).toHaveBeenCalledWith(
       "/api/media/1/refresh-metadata",
       expect.objectContaining({ method: "POST" }),
@@ -1395,12 +1507,11 @@ describe("Library characterization", () => {
       catalogTotal: 26,
       communityRating: 8.2,
     });
-    expect(await screen.findByText("Completed")).not.toBeNull();
-    expect(screen.getByText("26 of 26")).not.toBeNull();
-    expect(screen.getByText("A timeless finale.")).not.toBeNull();
     const personal = screen.getByRole("region", { name: "Your Library" });
-    expect(within(personal).getByText("Rewatches")).not.toBeNull();
-    expect(within(personal).getByText("1")).not.toBeNull();
+    expect(await within(personal).findByText("Completed")).not.toBeNull();
+    expect(within(personal).queryByText("26 of 26")).toBeNull();
+    expect(within(personal).queryByText("A timeless finale.")).toBeNull();
+    expect(within(personal).queryByText("Rewatches")).toBeNull();
   });
 
   it("saves cleared optional numbers as zero and keeps them visually empty", async () => {
@@ -1700,13 +1811,14 @@ describe("Library characterization", () => {
   });
 
   it("opens quick management when a catalog title already exists by title", async () => {
+    const longDescription = "Catalog synopsis ".repeat(30).trim();
     const result = {
       provider: "kitsu",
       providerId: "46474",
       providerUrl: "https://kitsu.io/anime/46474",
       type: "anime",
       title: "Cowboy Bebop",
-      description: "Catalog synopsis",
+      description: longDescription,
       subtitle: "TV",
       genres: ["Action", "Sci-Fi"],
       credits: [
@@ -1739,7 +1851,16 @@ describe("Library characterization", () => {
     expect(screen.getByText("26 episodes")).not.toBeNull();
     expect(screen.getByText("25 min / episode")).not.toBeNull();
     expect(screen.getByText("8.2/10 community")).not.toBeNull();
+    const readMore = screen.getByRole("button", { name: "Read more" });
+    expect(readMore.getAttribute("aria-expanded")).toBe("false");
+    await user.click(readMore);
+    const readLess = screen.getByRole("button", { name: "Read less" });
+    expect(readLess.getAttribute("aria-expanded")).toBe("true");
+    await user.click(readLess);
+    expect(screen.getByRole("button", { name: "Read more" })).not.toBeNull();
     const genres = screen.getByRole("region", { name: "Genres" });
+    expect(screen.getByRole("region", { name: "Synopsis" }).contains(genres))
+      .toBe(true);
     expect(within(genres).getByText("Action")).not.toBeNull();
     expect(within(genres).getByText("Sci-Fi")).not.toBeNull();
     const credits = screen.getByRole("region", { name: "Credits" });
@@ -1803,7 +1924,12 @@ describe("Library characterization", () => {
     expect(
       screen.getByText("No synopsis is available from this provider."),
     ).not.toBeNull();
-    await user.click(screen.getByRole("button", { name: "Add to Library" }));
+    const addPanel = screen.getByRole("region", { name: "Add to Library" });
+    expect(within(addPanel).queryByText(/start tracking/u)).toBeNull();
+    expect(within(addPanel).queryByText(/add to your library/u)).toBeNull();
+    await user.click(
+      within(addPanel).getByRole("button", { name: "Add to Library" }),
+    );
     const dialog = screen.getByRole("dialog", { name: "Add media" });
     expect(
       (within(dialog).getByRole("textbox", {

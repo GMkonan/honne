@@ -8,6 +8,7 @@ import {
   optionalNumberInputValue,
   playtimeHoursInputValue,
   playtimeMinutesFromHours,
+  suggestedTrackingTotal,
 } from "./mediaTracking.ts";
 
 describe("media tracking rules", () => {
@@ -76,6 +77,13 @@ describe("media tracking rules", () => {
         Array.from({ length: 13 }, (_, index) => `Platform ${index}`).join(","),
       ),
     ).toHaveLength(13);
+  });
+
+  it("suggests safe catalog totals without overriding personal totals", () => {
+    expect(suggestedTrackingTotal("anime", 8, 0, 26)).toBe(26);
+    expect(suggestedTrackingTotal("book", 10, 412, 500)).toBe(412);
+    expect(suggestedTrackingTotal("manga", 30, 0, 20)).toBe(0);
+    expect(suggestedTrackingTotal("movie", 0, 0, 1)).toBe(0);
   });
 
   it("renders zero as an empty numeric input value", () => {
