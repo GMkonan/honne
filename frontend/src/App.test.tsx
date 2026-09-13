@@ -1821,6 +1821,50 @@ describe("Library characterization", () => {
     ).toBe("1");
   });
 
+  it.each([
+    {
+      scenario: "a current RAWG game",
+      items: [{
+        ...mediaItems[0],
+        id: 11,
+        title: "Hades",
+        type: "game",
+        provider: "rawg",
+        providerId: "12020",
+      }],
+      action: "updated",
+      mediaId: 11,
+    },
+    {
+      scenario: "a deleted game whose provider is no longer available",
+      items: [],
+      action: "deleted",
+      mediaId: undefined,
+    },
+  ])("shows RAWG attribution in Activity for $scenario", async (sample) => {
+    globalThis.history.replaceState(null, "", "/#activity");
+    const router = createFetchRouter();
+    bootstrap(router, sample.items);
+    router.json("GET", "/api/activity?limit=100", [{
+      id: 1,
+      mediaId: sample.mediaId,
+      title: "Hades",
+      mediaType: "game",
+      action: sample.action,
+      changes: {},
+      occurredAt: "2026-01-05T00:00:00Z",
+    }]);
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Activity" })).not
+      .toBeNull();
+    expect(
+      within(screen.getByRole("contentinfo")).getByRole("link", {
+        name: "RAWG",
+      }),
+    ).not.toBeNull();
+  });
+
   it("labels Activity progress with the media-specific unit", async () => {
     globalThis.history.replaceState(null, "", "/#activity");
     const router = createFetchRouter();
