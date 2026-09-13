@@ -99,6 +99,19 @@ export function progressValue(progress: number, total: number): string {
   return progress > 0 ? String(progress) : "Not started";
 }
 
+export function suggestedTrackingTotal(
+  type: TrackingMediaType,
+  progress: number,
+  personalTotal: number,
+  catalogTotal: number,
+): number {
+  if (
+    !mediaTracking(type).tracksProgress || personalTotal > 0 ||
+    catalogTotal <= 0 || catalogTotal < progress
+  ) return personalTotal;
+  return catalogTotal;
+}
+
 export function optionalNumberInputValue(value: number): number | "" {
   return value === 0 ? "" : value;
 }

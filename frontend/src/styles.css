@@ -1761,6 +1761,9 @@ button {
 .detail-page {
   max-width: 1120px;
 }
+.detail-page .eyebrow {
+  font-size: 12px;
+}
 .back-button {
   min-height: 32px;
   display: inline-flex;
@@ -1777,13 +1780,22 @@ button {
 .back-button:hover {
   color: var(--text);
 }
-.detail-hero {
+.detail-layout {
   display: grid;
-  grid-template-columns: minmax(250px, 330px) minmax(0, 1fr);
-  gap: clamp(30px, 5vw, 64px);
+  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  grid-template-areas:
+    "cover title"
+    "cover overview"
+    "cover catalog"
+    "cover metadata";
   align-items: start;
+  gap: 22px 38px;
 }
-.detail-sidebar {
+.detail-cover-column {
+  min-width: 0;
+  grid-area: cover;
+}
+.detail-record-rail {
   min-width: 0;
 }
 .detail-cover {
@@ -1807,19 +1819,17 @@ button {
   display: grid;
   place-items: center;
 }
-.detail-content {
-  min-width: 0;
-}
 .detail-title-block {
-  padding: 9px 0 30px;
-  border-bottom: 1px solid var(--surface);
+  min-width: 0;
+  grid-area: title;
+  padding-top: 4px;
 }
-.detail-content h1 {
+.detail-title-block h1 {
   overflow-wrap: anywhere;
-  margin: 10px 0 6px;
-  font-size: clamp(36px, 6vw, 66px);
-  line-height: .98;
-  letter-spacing: -.055em;
+  margin: 0 0 6px;
+  font-size: clamp(30px, 3.7vw, 42px);
+  line-height: 1.06;
+  letter-spacing: -.035em;
 }
 .detail-original {
   overflow-wrap: anywhere;
@@ -1828,20 +1838,18 @@ button {
   font-size: 13px;
   line-height: 1.5;
 }
+.detail-title-block .detail-community-rating {
+  margin-top: 12px;
+}
 .detail-catalog {
-  padding: 30px 0;
-  border-bottom: 1px solid var(--surface);
+  min-width: 0;
+  grid-area: catalog;
+  padding-top: 16px;
+  border-top: 2px solid var(--blue);
 }
-.detail-section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-}
-.detail-section-heading h2,
-.detail-add-panel h2 {
-  margin: 5px 0 0;
-  font-size: 21px;
+.detail-section-heading h2 {
+  margin: 0;
+  font-size: 20px;
   letter-spacing: -.025em;
 }
 .detail-community-rating {
@@ -1854,26 +1862,75 @@ button {
   font-size: 12px;
   white-space: nowrap;
 }
-.detail-meta {
+.detail-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0 18px;
+  margin: 14px 0 0;
+}
+.detail-facts > div {
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--surface);
+}
+.detail-facts dt {
+  color: var(--overlay);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.detail-facts dd {
+  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.detail-overview {
+  min-width: 0;
+  grid-area: overview;
+  padding-top: 2px;
+}
+.detail-description {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-line;
+}
+.detail-description.collapsed {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+.detail-description.empty {
+  color: var(--overlay);
+  font-style: italic;
+}
+.detail-description-toggle {
+  margin-top: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.detail-overview-footer {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
   margin-top: 18px;
 }
-.detail-meta span {
-  padding: 7px 9px;
-  border: 1px solid var(--surface);
-  color: var(--muted);
-  background: var(--mantle);
-  font-size: 12px;
+.detail-genres-section {
+  min-width: 0;
 }
-.detail-metadata-groups {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 26px;
-  margin-top: 26px;
+.detail-overview-footer .detail-provider-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-top: 0;
 }
-.detail-metadata-groups h3 {
+.detail-genres-section h2,
+.detail-metadata-groups h2 {
   margin: 0 0 10px;
   color: var(--overlay);
   font-family: 'IBM Plex Mono', monospace;
@@ -1897,6 +1954,17 @@ button {
   color: var(--text);
   background: var(--surface);
   font-size: 12px;
+}
+.detail-supporting-metadata {
+  min-width: 0;
+  grid-area: metadata;
+  padding-top: 20px;
+  border-top: 1px solid var(--surface);
+}
+.detail-metadata-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px;
 }
 .detail-credits-group {
   grid-column: 1 / -1;
@@ -1926,18 +1994,6 @@ button {
   color: var(--overlay);
   font-size: 12px;
   text-align: right;
-}
-.detail-description {
-  max-width: 680px;
-  margin: 22px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.75;
-  white-space: pre-line;
-}
-.detail-description.empty {
-  color: var(--overlay);
-  font-style: italic;
 }
 .detail-provider-actions {
   display: flex;
@@ -1986,125 +2042,47 @@ button {
 .detail-metadata-error {
   color: var(--red);
 }
-.detail-library-panel,
-.detail-add-panel {
-  margin-top: 14px;
-  padding: 16px;
-  border: 1px solid var(--surface-2);
-  border-top: 2px solid var(--mauve);
-  border-radius: 3px;
-  background: var(--mantle);
-}
-.detail-add-panel {
-  border-top-color: var(--blue);
-}
-.detail-record-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.detail-add-panel p {
-  max-width: 520px;
-  margin: 10px 0 20px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-.detail-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-.detail-status > span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--mauve);
-}
-.detail-status.in_progress > span {
-  background: var(--blue);
-}
-.detail-status.completed > span {
-  background: var(--green);
-}
-.detail-status.paused > span {
-  background: var(--yellow);
-}
-.detail-status.dropped > span {
-  background: var(--red);
-}
-.detail-personal-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  margin: 14px 0;
-  background: var(--surface);
-}
-.detail-personal-stats > div {
-  min-width: 0;
-  padding: 10px;
-  background: var(--base);
-}
-.detail-personal-stats > .detail-repeat-stat,
-.detail-personal-stats > .detail-game-stat {
-  grid-column: 1 / -1;
-}
-.detail-personal-stats dt,
-.detail-review > span,
-.detail-platforms > span {
-  color: var(--overlay);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-.detail-personal-stats dd {
-  overflow-wrap: anywhere;
-  margin: 5px 0 0;
-  color: var(--text);
-  font-size: 16px;
-  font-weight: 700;
-}
-.detail-review,
-.detail-platforms {
-  margin: 0 0 14px;
-}
-.detail-review p,
-.detail-platforms p {
-  overflow: hidden;
-  display: -webkit-box;
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-line;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-.detail-library-panel .primary-button,
-.detail-add-panel .primary-button {
-  width: 100%;
-  min-height: 40px;
-  justify-content: center;
-  font-size: 12px;
-}
-.detail-remove-button {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+.detail-library-panel {
   margin-top: 18px;
-  padding: 0;
+}
+.detail-add-panel {
+  margin-top: 18px;
+}
+.detail-manage-button {
+  width: 100%;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
   border: 0;
-  color: var(--red);
-  background: transparent;
-  font-size: 12px;
+  border-radius: 3px;
+  color: var(--crust);
+  background: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
 }
-
+.detail-manage-button.planned {
+  background: var(--mauve);
+}
+.detail-manage-button.completed {
+  background: var(--green);
+}
+.detail-manage-button.paused {
+  background: var(--yellow);
+}
+.detail-manage-button.dropped {
+  background: var(--red);
+}
+.detail-add-panel .primary-button {
+  width: 100%;
+  min-height: 46px;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
 .error-banner {
   display: flex;
   justify-content: space-between;
@@ -2323,10 +2301,6 @@ button {
 .manage-media-modal .form-error {
   font-size: 12px;
 }
-.manage-media-actions .edit-details-button {
-  margin-right: auto;
-  color: var(--blue);
-}
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -2338,6 +2312,13 @@ button {
   color: var(--muted);
   background: transparent;
   cursor: pointer;
+}
+.manage-media-actions .edit-details-button {
+  margin-right: auto;
+  color: var(--blue);
+}
+.manage-media-actions .delete-media-button {
+  color: var(--red);
 }
 .form-error {
   margin: 0;
@@ -3085,9 +3066,17 @@ button {
   .search-skeleton {
     grid-template-columns: repeat(2, 1fr);
   }
-  .detail-hero {
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 30px;
+  .detail-layout {
+    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-areas:
+      "cover title"
+      "cover overview"
+      "cover catalog"
+      "cover metadata";
+    gap: 22px 30px;
+  }
+  .detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .activity-panel {
     position: static;
@@ -3205,11 +3194,18 @@ button {
   .search-manual button {
     justify-content: center;
   }
-  .detail-hero {
-    grid-template-columns: 1fr;
+  .detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "title"
+      "cover"
+      "overview"
+      "catalog"
+      "metadata";
+    gap: 24px;
   }
-  .detail-sidebar {
-    width: min(100%, 330px);
+  .detail-cover-column {
+    width: min(100%, 300px);
     margin-inline: auto;
   }
   .detail-cover {
@@ -3218,8 +3214,18 @@ button {
   .detail-title-block {
     padding-top: 0;
   }
-  .detail-section-heading {
+  .detail-title-block h1 {
+    font-size: clamp(28px, 9vw, 36px);
+  }
+  .detail-facts {
+    grid-template-columns: 1fr;
+  }
+  .detail-overview-footer {
+    align-items: flex-start;
     flex-direction: column;
+  }
+  .detail-overview-footer .detail-provider-actions {
+    justify-content: flex-start;
   }
   .detail-community-rating {
     white-space: normal;

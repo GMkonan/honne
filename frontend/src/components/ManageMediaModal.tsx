@@ -18,6 +18,7 @@ import {
   optionalNumberInputValue,
   playtimeHoursInputValue,
   playtimeMinutesFromHours,
+  suggestedTrackingTotal,
 } from "../mediaTracking.ts";
 
 export interface ManagedMediaValues {
@@ -36,6 +37,7 @@ interface ManageMediaModalProps {
   onClose: () => void;
   onEditDetails: () => void;
   onSave: (values: ManagedMediaValues) => Promise<void>;
+  onDelete: () => Promise<boolean>;
 }
 
 const statuses: DetailMediaStatus[] = [
@@ -64,12 +66,18 @@ function errorMessage(error: unknown): string {
 }
 
 export function ManageMediaModal(
-  { item, onClose, onEditDetails, onSave }: ManageMediaModalProps,
+  { item, onClose, onEditDetails, onSave, onDelete }: ManageMediaModalProps,
 ) {
+  const tracking = mediaTracking(item.type);
   const [form, setForm] = useState<ManagedMediaValues>({
     status: item.status,
     progress: item.progress,
-    total: item.total,
+    total: suggestedTrackingTotal(
+      item.type,
+      item.progress,
+      item.total,
+      item.catalogTotal,
+    ),
     rating: item.rating,
     repeatCount: item.repeatCount || 0,
     playtimeMinutes: item.playtimeMinutes || 0,
@@ -87,6 +95,7 @@ export function ManageMediaModal(
       : "",
   );
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLSelectElement>(null);
@@ -141,14 +150,28 @@ export function ManageMediaModal(
   }
 
   function handleEditDetails() {
+    if (saving || deleting) return;
     restoreFocus.current = false;
     triggerRef.current?.focus();
     onEditDetails();
   }
 
+  async function handleDelete() {
+    if (saving || deleting) return;
+    setDeleting(true);
+    setError("");
+    try {
+      const deleted = await onDelete();
+      if (!deleted) setDeleting(false);
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      setDeleting(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || deleting) return;
     setSaving(true);
     setError("");
     try {
@@ -164,7 +187,6 @@ export function ManageMediaModal(
   }
 
   const cover = safeHTTPURL(item.coverUrl.replaceAll('"', ""));
-  const tracking = mediaTracking(item.type);
   return (
     <div
       className="modal-backdrop"
@@ -205,7 +227,7 @@ export function ManageMediaModal(
           </button>
         </header>
 
-        <form onSubmit={handleSubmit} aria-busy={saving}>
+        <form onSubmit={handleSubmit} aria-busy={saving || deleting}>
           <label>
             Status
             <select
@@ -324,15 +346,26 @@ export function ManageMediaModal(
             <button
               type="button"
               className="edit-details-button"
+              aria-disabled={saving || deleting}
               onClick={handleEditDetails}
             >
               Edit title details
             </button>
-            <button type="button" onClick={onClose}>Cancel</button>
+            <button
+              type="button"
+              className="delete-media-button"
+              aria-disabled={saving || deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? "Removing…" : "Remove from Library"}
+            </button>
+            <button type="button" onClick={onClose} disabled={deleting}>
+              Cancel
+            </button>
             <button
               type="submit"
               className="primary-button"
-              aria-disabled={saving}
+              aria-disabled={saving || deleting}
             >
               <Pencil size={15} /> {saving ? "Saving…" : "Save changes"}
             </button>

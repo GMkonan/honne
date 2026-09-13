@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
   BookOpen,
   CirclePlus,
   Clapperboard,
@@ -13,7 +12,6 @@ import {
   RefreshCw,
   Sparkles,
   Star,
-  Trash2,
   Tv,
 } from "lucide-react";
 import {
@@ -23,10 +21,7 @@ import {
 } from "./GlobalSearchBox.tsx";
 import {
   catalogTotalLabel,
-  formatPlaytime,
   mediaStatusLabel,
-  mediaTracking,
-  progressValue,
   type TrackingMediaStatus,
 } from "../mediaTracking.ts";
 
@@ -80,7 +75,6 @@ interface MediaDetailPageProps {
   onAdd: (result: SearchCatalogResult) => void;
   onRefreshMetadata: (item: DetailLibraryMedia) => void;
   onManage: (item: DetailLibraryMedia) => void;
-  onDelete: (item: DetailLibraryMedia) => void;
 }
 
 const typeDetails: Record<
@@ -140,13 +134,14 @@ function DetailCover(
 }
 
 function providerLabel(provider: string): string {
-  if (provider === "rawg") return "RAWG";
-  return provider
-    ? provider.replaceAll("_", " ").replace(
-      /\b\w/gu,
-      (letter) => letter.toUpperCase(),
-    )
-    : "Local entry";
+  const labels: Record<string, string> = {
+    anilist: "AniList",
+    kitsu: "Kitsu",
+    open_library: "Open Library",
+    rawg: "RAWG",
+    tmdb: "TMDB",
+  };
+  return labels[provider] || "Local entry";
 }
 
 const releaseStatusLabels: Record<string, string> = {
@@ -198,6 +193,39 @@ function durationLabel(type: SearchMediaType, minutes: number): string {
     : `${minutes} min`;
 }
 
+function ExpandableDescription(
+  { description, provider }: { description?: string; provider?: string },
+) {
+  const text = description ||
+    (provider
+      ? "No synopsis is available from this provider."
+      : "No synopsis is available for this title.");
+  const [expanded, setExpanded] = useState(false);
+  const canExpand = Boolean(description && description.length > 360);
+
+  return (
+    <>
+      <p
+        className={`detail-description ${description ? "" : "empty"} ${
+          canExpand && !expanded ? "collapsed" : ""
+        }`}
+      >
+        {text}
+      </p>
+      {canExpand && (
+        <button
+          type="button"
+          className="detail-provider-link detail-description-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? "Read less" : "Read more"}
+        </button>
+      )}
+    </>
+  );
+}
+
 function LibraryPanel(
   { item, actionLabel, onManage }: {
     item: DetailLibraryMedia;
@@ -205,56 +233,16 @@ function LibraryPanel(
     onManage: (item: DetailLibraryMedia) => void;
   },
 ) {
-  const tracking = mediaTracking(item.type);
   return (
     <section className="detail-library-panel" aria-label="Your Library">
-      <div className="detail-record-heading">
-        <span className="eyebrow">PERSONAL RECORD</span>
-        <span className={`detail-status ${item.status}`}>
-          <span aria-hidden="true" />
-          {mediaStatusLabel(item.status, item.type)}
-        </span>
-      </div>
-      <dl className="detail-personal-stats">
-        {item.type === "game" && (
-          <div className="detail-game-stat">
-            <dt>Playtime</dt>
-            <dd>{formatPlaytime(item.playtimeMinutes || 0)}</dd>
-          </div>
-        )}
-        {tracking.tracksProgress && (
-          <div>
-            <dt>{tracking.progressLabel}</dt>
-            <dd>{progressValue(item.progress, item.total)}</dd>
-          </div>
-        )}
-        <div>
-          <dt>Your rating</dt>
-          <dd>{item.rating > 0 ? `${item.rating}/10` : "Not rated"}</dd>
-        </div>
-        <div className={tracking.tracksProgress ? "detail-repeat-stat" : ""}>
-          <dt>{tracking.repeatLabel}</dt>
-          <dd>{item.repeatCount ?? 0}</dd>
-        </div>
-      </dl>
-      {item.type === "game" && item.playedOnPlatforms?.length > 0 && (
-        <div className="detail-platforms">
-          <span>Played on</span>
-          <p>{item.playedOnPlatforms.join(" · ")}</p>
-        </div>
-      )}
-      {item.notes && (
-        <div className="detail-review">
-          <span>Review / notes</span>
-          <p title={item.notes}>{item.notes}</p>
-        </div>
-      )}
       <button
         type="button"
-        className="primary-button"
+        className={`detail-manage-button ${item.status}`}
+        aria-label={actionLabel}
         onClick={() => onManage(item)}
       >
-        <Pencil size={16} /> {actionLabel}
+        <Pencil size={16} />
+        <span>{mediaStatusLabel(item.status, item.type)}</span>
       </button>
     </section>
   );
@@ -272,7 +260,6 @@ export function MediaDetailPage(
     onAdd,
     onRefreshMetadata,
     onManage,
-    onDelete,
   }: MediaDetailPageProps,
 ) {
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -332,128 +319,174 @@ export function MediaDetailPage(
     ).slice(0, 12)
     : [];
   const catalogFacts = [
-    type.label,
-    source.format ||
-    (selection.kind === "external" && source.type !== "game"
-      ? selection.result.subtitle || ""
-      : ""),
-    releaseStatusLabels[source.releaseStatus || ""] || "",
-    releasePeriod || (source.releaseYear ? String(source.releaseYear) : ""),
-    catalogTotal > 0 ? catalogTotalLabel(source.type, catalogTotal) : "",
-    durationLabel(source.type, source.durationMinutes || 0),
-    providerLabel(source.provider),
-  ].filter(Boolean);
+    { label: "Type", value: type.label },
+    {
+      label: "Format",
+      value: source.type === "game" ? "" : source.format,
+    },
+    {
+      label: "Release status",
+      value: releaseStatusLabels[source.releaseStatus || ""] || "",
+    },
+    {
+      label: "Release",
+      value: releasePeriod ||
+        (source.releaseYear ? String(source.releaseYear) : ""),
+    },
+    {
+      label: "Length",
+      value: catalogTotal > 0
+        ? catalogTotalLabel(source.type, catalogTotal)
+        : "",
+    },
+    {
+      label: "Duration",
+      value: durationLabel(source.type, source.durationMinutes || 0),
+    },
+    { label: "Source", value: providerLabel(source.provider) },
+  ].filter((fact) => fact.value);
 
   return (
     <main className="page-container standalone-page detail-page">
-      <button type="button" className="back-button" onClick={onBack}>
-        <ArrowLeft size={16} /> Back
-      </button>
+      <article className="detail-layout">
+        <header className="detail-title-block">
+          <h1 ref={titleRef} tabIndex={-1}>{source.title}</h1>
+          {source.originalTitle && source.originalTitle !== source.title && (
+            <p className="detail-original">{source.originalTitle}</p>
+          )}
+          {source.communityRating
+            ? (
+              <span className="detail-community-rating">
+                <Star size={14} fill="currentColor" />
+                {source.communityRating.toFixed(1)}/10 community
+              </span>
+            )
+            : null}
+        </header>
 
-      <article className="detail-hero">
-        <aside className="detail-sidebar">
+        <div className="detail-cover-column">
           <DetailCover
             title={source.title}
             coverURL={source.coverUrl}
             icon={TypeIcon}
           />
-
-          {localItem
-            ? (
-              <LibraryPanel
-                item={localItem}
-                actionLabel={selection.kind === "local"
-                  ? "Manage title"
-                  : "Manage in Library"}
-                onManage={onManage}
-              />
-            )
-            : selection.kind === "external"
-            ? (
-              <section className="detail-add-panel" aria-labelledby="add-title">
-                <span className="eyebrow">START TRACKING</span>
-                <h2 id="add-title">Add to your Library</h2>
-                <p>
-                  {mediaTracking(source.type).tracksProgress
-                    ? "Track your status, progress, personal rating, and notes for this title."
-                    : "Track your status, personal rating, and notes for this title."}
-                </p>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => onAdd(selection.result)}
+          <aside className="detail-record-rail">
+            {localItem
+              ? (
+                <LibraryPanel
+                  item={localItem}
+                  actionLabel={selection.kind === "local"
+                    ? "Manage title"
+                    : "Manage in Library"}
+                  onManage={onManage}
+                />
+              )
+              : selection.kind === "external"
+              ? (
+                <section
+                  className="detail-add-panel"
+                  aria-label="Add to Library"
                 >
-                  <CirclePlus size={16} /> Add to Library
-                </button>
-              </section>
-            )
-            : null}
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => onAdd(selection.result)}
+                  >
+                    <CirclePlus size={16} /> Add to Library
+                  </button>
+                </section>
+              )
+              : null}
+          </aside>
+        </div>
 
-          {selection.kind === "local" && media && (
-            <button
-              type="button"
-              className="detail-remove-button"
-              onClick={() => onDelete(media)}
-            >
-              <Trash2 size={15} /> Remove from Library
-            </button>
+        <section className="detail-overview" aria-label="Synopsis">
+          <ExpandableDescription
+            key={`${focusIdentity}:${source.description || ""}`}
+            description={source.description}
+            provider={source.provider}
+          />
+          {(genres.length > 0 || providerURL || localMedia?.provider) && (
+            <div className="detail-overview-footer">
+              {genres.length > 0 && (
+                <section
+                  className="detail-genres-section"
+                  aria-labelledby="detail-genres-title"
+                >
+                  <h2 id="detail-genres-title">
+                    {source.type === "book" ? "Genres & subjects" : "Genres"}
+                  </h2>
+                  <ul className="detail-genres">
+                    {genres.map((genre) => <li key={genre}>{genre}</li>)}
+                  </ul>
+                </section>
+              )}
+              {(providerURL || localMedia?.provider) && (
+                <div className="detail-provider-actions">
+                  {providerURL && (
+                    <a
+                      className="detail-provider-link"
+                      href={providerURL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View on {providerLabel(source.provider)}{" "}
+                      <ExternalLink size={14} />
+                    </a>
+                  )}
+                  {localMedia?.provider && (
+                    <button
+                      type="button"
+                      className="detail-refresh-button"
+                      onClick={() => onRefreshMetadata(localMedia)}
+                      disabled={metadataRefreshing}
+                    >
+                      <RefreshCw
+                        size={14}
+                        className={metadataRefreshing ? "spinning" : ""}
+                      />
+                      {metadataRefreshing ? "Refreshing…" : "Refresh metadata"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
-        </aside>
+        </section>
 
-        <div className="detail-content">
-          <header className="detail-title-block">
-            <span className="eyebrow">
-              {selection.kind === "local" ? "IN YOUR LIBRARY" : "CATALOG TITLE"}
-            </span>
-            <h1 ref={titleRef} tabIndex={-1}>{source.title}</h1>
-            {source.originalTitle && source.originalTitle !== source.title && (
-              <p className="detail-original">{source.originalTitle}</p>
-            )}
-          </header>
-
-          <section
-            className="detail-catalog"
-            aria-labelledby="catalog-data-title"
-          >
-            <div className="detail-section-heading">
-              <div>
-                <span className="eyebrow">CATALOG INFORMATION</span>
-                <h2 id="catalog-data-title">About this title</h2>
+        <section
+          className="detail-catalog"
+          aria-labelledby="catalog-data-title"
+        >
+          <div className="detail-section-heading">
+            <h2 id="catalog-data-title">Catalog details</h2>
+          </div>
+          <dl className="detail-facts" aria-label="Catalog facts">
+            {catalogFacts.map((fact) => (
+              <div key={fact.label}>
+                <dt>{fact.label}</dt>
+                <dd>{fact.value}</dd>
               </div>
-              {source.communityRating
-                ? (
-                  <span className="detail-community-rating">
-                    <Star size={14} fill="currentColor" />
-                    {source.communityRating.toFixed(1)}/10 community
-                  </span>
-                )
-                : null}
-            </div>
-            <div className="detail-meta" aria-label="Catalog facts">
-              {catalogFacts.map((fact, index) => (
-                <span key={`${fact}-${index}`}>{fact}</span>
-              ))}
-            </div>
-            {(genres.length > 0 || credits.length > 0 ||
-              catalogPlatforms.length > 0) && (
+            ))}
+          </dl>
+        </section>
+
+        {(credits.length > 0 || catalogPlatforms.length > 0 ||
+          (selection.kind === "external" && metadataRefreshing) ||
+          metadataError) && (
+          <section
+            className="detail-supporting-metadata"
+            aria-label="More details"
+          >
+            {(credits.length > 0 || catalogPlatforms.length > 0) && (
               <div className="detail-metadata-groups">
                 {catalogPlatforms.length > 0 && (
                   <section aria-labelledby="detail-platforms-title">
-                    <h3 id="detail-platforms-title">Available on</h3>
+                    <h2 id="detail-platforms-title">Available on</h2>
                     <ul className="detail-genres">
                       {catalogPlatforms.map((platform) => (
                         <li key={platform}>{platform}</li>
                       ))}
-                    </ul>
-                  </section>
-                )}
-                {genres.length > 0 && (
-                  <section aria-labelledby="detail-genres-title">
-                    <h3 id="detail-genres-title">
-                      {source.type === "book" ? "Genres & subjects" : "Genres"}
-                    </h3>
-                    <ul className="detail-genres">
-                      {genres.map((genre) => <li key={genre}>{genre}</li>)}
                     </ul>
                   </section>
                 )}
@@ -462,7 +495,7 @@ export function MediaDetailPage(
                     className="detail-credits-group"
                     aria-labelledby="detail-credits-title"
                   >
-                    <h3 id="detail-credits-title">Credits</h3>
+                    <h2 id="detail-credits-title">Credits</h2>
                     <dl className="detail-credits">
                       {credits.map((credit, index) => (
                         <div key={`${credit.name}-${credit.role}-${index}`}>
@@ -472,45 +505,6 @@ export function MediaDetailPage(
                       ))}
                     </dl>
                   </section>
-                )}
-              </div>
-            )}
-            <p
-              className={`detail-description ${
-                source.description ? "" : "empty"
-              }`}
-            >
-              {source.description ||
-                (source.provider
-                  ? "No synopsis is available from this provider."
-                  : "No synopsis is available for this title.")}
-            </p>
-            {(providerURL || localMedia?.provider) && (
-              <div className="detail-provider-actions">
-                {providerURL && (
-                  <a
-                    className="detail-provider-link"
-                    href={providerURL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View on {providerLabel(source.provider)}{" "}
-                    <ExternalLink size={14} />
-                  </a>
-                )}
-                {localMedia?.provider && (
-                  <button
-                    type="button"
-                    className="detail-refresh-button"
-                    onClick={() => onRefreshMetadata(localMedia)}
-                    disabled={metadataRefreshing}
-                  >
-                    <RefreshCw
-                      size={14}
-                      className={metadataRefreshing ? "spinning" : ""}
-                    />
-                    {metadataRefreshing ? "Refreshing…" : "Refresh metadata"}
-                  </button>
                 )}
               </div>
             )}
@@ -527,7 +521,7 @@ export function MediaDetailPage(
               </p>
             )}
           </section>
-        </div>
+        )}
       </article>
     </main>
   );

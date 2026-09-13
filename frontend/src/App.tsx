@@ -53,6 +53,7 @@ import {
   optionalNumberInputValue,
   playtimeHoursInputValue,
   playtimeMinutesFromHours,
+  suggestedTrackingTotal,
   type TrackingMediaStatus,
   type TrackingMediaType,
 } from "./mediaTracking.ts";
@@ -1486,9 +1487,6 @@ function App() {
           onAdd={reviewDiscovery}
           onRefreshMetadata={refreshMediaMetadata}
           onManage={(item) => setManagedItem(item)}
-          onDelete={async (item) => {
-            if (await deleteItem(item)) navigate("library");
-          }}
         />
       )}
 
@@ -1536,6 +1534,16 @@ function App() {
             setManagedItem(undefined);
           }}
           onSave={(values) => saveManagedItem(managedItem, values)}
+          onDelete={async () => {
+            const leaveLocalDetail = detail?.kind === "local" &&
+              detail.mediaId === managedItem.id;
+            const deleted = await deleteItem(managedItem);
+            if (deleted) {
+              setManagedItem(undefined);
+              if (leaveLocalDetail) navigate("library");
+            }
+            return deleted;
+          }}
         />
       )}
       {modalItem !== undefined && (
@@ -2534,9 +2542,18 @@ function MediaModal(
     onSave: (values: MediaInput) => Promise<void>;
   },
 ) {
-  const [form, setForm] = useState<MediaInput>(
-    item ? mediaToInput(item) : initial || emptyForm,
-  );
+  const [form, setForm] = useState<MediaInput>(() => {
+    const source = item ? mediaToInput(item) : initial || emptyForm;
+    return {
+      ...source,
+      total: suggestedTrackingTotal(
+        source.type,
+        source.progress,
+        source.total,
+        source.catalogTotal,
+      ),
+    };
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [playtimeHoursInput, setPlaytimeHoursInput] = useState(
