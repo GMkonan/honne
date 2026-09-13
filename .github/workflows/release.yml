@@ -97,10 +97,29 @@ jobs:
       - name: Create release assets
         run: |
           mkdir release
-          cp deploy/compose.yaml release/compose.yaml
-          sed "s/^HONNE_VERSION=.*/HONNE_VERSION=$GITHUB_REF_NAME/" \
-            deploy/.env.example > release/env.example
-          (cd release && sha256sum compose.yaml env.example > checksums.txt)
+          python3 - "$GITHUB_REF_NAME" <<'PY'
+          from pathlib import Path
+          import sys
+
+          version = sys.argv[1]
+          compose = Path("deploy/compose.yaml").read_text()
+          marker = "${HONNE_VERSION:?Set HONNE_VERSION in .env}"
+          if compose.count(marker) != 2:
+              raise SystemExit("expected two version markers in release Compose")
+          Path("release/compose.yaml").write_text(compose.replace(marker, version))
+
+          environment = Path("deploy/.env.example").read_text().splitlines()
+          environment = [
+              line for line in environment
+              if line != "# Keep backend and frontend on the same immutable release tag."
+              and not line.startswith("HONNE_VERSION=")
+          ]
+          Path("release/env.example").write_text("\n".join(environment).lstrip() + "\n")
+          PY
+          ! grep -q 'HONNE_VERSION' release/compose.yaml
+          grep -Fq "ghcr.io/gmkonan/honne-backend:$GITHUB_REF_NAME" release/compose.yaml
+          grep -Fq "ghcr.io/gmkonan/honne-frontend:$GITHUB_REF_NAME" release/compose.yaml
+          docker compose --env-file release/env.example -f release/compose.yaml config --quiet
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
