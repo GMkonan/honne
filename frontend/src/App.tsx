@@ -1108,7 +1108,10 @@ function App() {
     return result;
   }
 
-  async function deleteItem(item: Media): Promise<boolean> {
+  async function deleteItem(
+    item: Media,
+    propagateFailure = false,
+  ): Promise<boolean> {
     const hasRemoteSync = !!item.providerListEntryId ||
       ["waiting_auth", "pending", "synced", "error"].includes(
         item.syncStatus || "",
@@ -1127,6 +1130,7 @@ function App() {
       return true;
     } catch (caught: unknown) {
       setError(errorMessage(caught));
+      if (propagateFailure) throw caught;
       return false;
     }
   }
@@ -1547,7 +1551,7 @@ function App() {
           onDelete={async () => {
             const leaveLocalDetail = detail?.kind === "local" &&
               detail.mediaId === managedItem.id;
-            const deleted = await deleteItem(managedItem);
+            const deleted = await deleteItem(managedItem, true);
             if (deleted) {
               setManagedItem(undefined);
               if (leaveLocalDetail) navigate("library");

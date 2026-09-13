@@ -115,7 +115,7 @@ export function ManageMediaModal(
   function handleDialogKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      onClose();
+      if (!saving && !deleting) onClose();
       return;
     }
     if (event.key !== "Tab") return;
@@ -190,7 +190,9 @@ export function ManageMediaModal(
   return (
     <div
       className="modal-backdrop"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      onMouseDown={(event) =>
+        !saving && !deleting && event.target === event.currentTarget &&
+        onClose()}
     >
       <div
         ref={dialogRef}
@@ -221,6 +223,7 @@ export function ManageMediaModal(
           <button
             type="button"
             onClick={onClose}
+            disabled={saving || deleting}
             aria-label="Close management dialog"
           >
             <X />
@@ -359,7 +362,11 @@ export function ManageMediaModal(
             >
               {deleting ? "Removing…" : "Remove from Library"}
             </button>
-            <button type="button" onClick={onClose} disabled={deleting}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving || deleting}
+            >
               Cancel
             </button>
             <button
