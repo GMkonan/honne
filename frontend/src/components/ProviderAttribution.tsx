@@ -7,7 +7,7 @@ export function ProviderAttribution(
 ) {
   return (
     <span className={`provider-attribution ${className}`.trim()}>
-      Game data and images provided by{" "}
+      Game data &amp; images:{"  "}
       <a href="https://rawg.io/" target="_blank" rel="noopener noreferrer">
         RAWG
       </a>
