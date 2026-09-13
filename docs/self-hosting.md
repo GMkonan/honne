@@ -138,7 +138,7 @@ The temporary file keeps the current Compose file intact if the download or vali
 
 After the containers are healthy, reload every open Honne tab so it uses the frontend contract shipped with the new backend.
 
-For a rollback, download the Compose asset from the exact previous tag:
+For a rollback to v0.2.0 or newer, download the Compose asset from the exact previous tag:
 
 ```bash
 ROLLBACK_VERSION=v0.2.0
@@ -151,7 +151,37 @@ docker compose pull
 docker compose up -d
 ```
 
-The v0.1.0 Compose asset predates embedded image tags. When rolling back specifically to v0.1.0, also set `HONNE_VERSION=v0.1.0` in `.env`. A rollback from v0.2.0 to v0.1.0 always requires following the [restore procedure](#restore-a-downloaded-backup) with the matching pre-update backup before starting v0.1.0: the older backend cannot read the persistence-v5 snapshot. Do not combine an older image with a newer Compose file.
+Do not use that sequence for v0.1.0. Its Compose asset predates embedded image tags, and its backend cannot read the persistence-v5 snapshot written by v0.2.0. Before validating or starting v0.1.0:
+
+1. locate the matching pre-v0.2.0 JSON backup;
+2. set `HONNE_VERSION=v0.1.0` in `.env`;
+3. download and validate the v0.1.0 Compose asset;
+4. pull the v0.1.0 images without starting them;
+5. stop the current backend and preserve its data directory;
+6. restore the matching backup while the backend remains stopped;
+7. replace the Compose file and start v0.1.0.
+
+```bash
+ROLLBACK_VERSION=v0.1.0
+BACKUP=./honne-backup-before-v0.2.0.json
+# Set HONNE_VERSION=v0.1.0 in .env before continuing.
+test -f "$BACKUP"
+curl -fL \
+  "https://github.com/GMkonan/honne/releases/download/${ROLLBACK_VERSION}/compose.yaml" \
+  -o compose.yaml.next
+docker compose -f compose.yaml.next config --quiet
+docker compose -f compose.yaml.next pull
+docker compose stop backend
+mkdir -p ./pre-rollback-data
+docker compose cp backend:/data/. ./pre-rollback-data/
+docker compose cp "$BACKUP" backend:/data/media.json
+docker compose run --rm --no-deps --user root --entrypoint sh backend \
+  -c 'chown honne:honne /data/media.json && chmod 600 /data/media.json'
+mv compose.yaml.next compose.yaml
+docker compose up -d
+```
+
+Do not combine an older image with a newer Compose file or start v0.1.0 before restoring compatible data.
 
 ## Migrate a source installation
 
