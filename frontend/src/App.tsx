@@ -972,7 +972,12 @@ function App() {
     (view === "library" && filtered.some((item) => item.provider === "rawg")) ||
     (view === "search" &&
       catalogSearchResults.some((result) => result.provider === "rawg")) ||
-    (view === "detail" && detailUsesRawg);
+    (view === "detail" && detailUsesRawg) ||
+    (view === "activity" &&
+      activities.some((activity) =>
+        activity.mediaType === "game" ||
+        items.find((item) => item.id === activity.mediaId)?.provider === "rawg"
+      ));
 
   async function saveItem(values: MediaInput) {
     let saved: Media;
