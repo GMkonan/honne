@@ -83,6 +83,13 @@ describe("Library characterization", () => {
     expect(duneCard.getAttribute("aria-label")).toContain(
       "Status: Plan to read",
     );
+    expect(
+      screen.getByRole("button", {
+        name: "Edit Cowboy Bebop Library entry",
+      }),
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Delete Cowboy Bebop/u }))
+      .toBeNull();
   });
 
   it("renders the configured profile and falls back to the default kanji mark", async () => {
@@ -388,7 +395,7 @@ describe("Library characterization", () => {
     await screen.findByRole("button", { name: /^View details for Dune/ });
 
     await user.type(
-      screen.getByRole("combobox", { name: "Search catalogs" }),
+      screen.getByRole("combobox", { name: "Search Honne" }),
       "Dun",
     );
     expect(
@@ -430,7 +437,7 @@ describe("Library characterization", () => {
 
     await user.type(
       screen.getByRole("combobox", {
-        name: "Search catalogs",
+        name: "Search Honne",
       }),
       "Nar",
     );
@@ -489,7 +496,7 @@ describe("Library characterization", () => {
 
     await user.type(
       screen.getByRole("combobox", {
-        name: "Search catalogs",
+        name: "Search Honne",
       }),
       "Mix",
     );
@@ -537,7 +544,7 @@ describe("Library characterization", () => {
 
     expect(screen.queryByRole("button", { name: "Add title" })).toBeNull();
     await user.type(
-      screen.getByLabelText("Search catalogs"),
+      screen.getByLabelText("Search Honne"),
       "Missing{Enter}",
     );
 
@@ -1074,7 +1081,14 @@ describe("Library characterization", () => {
       playtimeMinutes: 90,
       playedOnPlatforms: ["PC", "Switch"],
     });
-    expect(screen.getByText("1h 30m")).not.toBeNull();
+    const celesteCard = screen.getByRole("button", {
+      name: /^View details for Celeste/u,
+    }).closest("article");
+    if (!celesteCard) throw new Error("Celeste card not found");
+    expect(within(celesteCard).getByText("Played on")).not.toBeNull();
+    expect(within(celesteCard).getByText("PC · Switch")).not.toBeNull();
+    expect(within(celesteCard).queryByText("Playtime")).toBeNull();
+    expect(within(celesteCard).queryByText("1h 30m")).toBeNull();
     const gamesFilter = screen.getByRole("button", {
       name: /Games.*ゲーム.*1/u,
     });
@@ -1149,6 +1163,88 @@ describe("Library characterization", () => {
       within(reopenedManager).getByRole("button", { name: "Save changes" }),
     );
     await waitFor(() => expect(updated?.playtimeMinutes).toBe(0));
+  });
+
+  it("uses personal platforms and replays as game card highlights", async () => {
+    const router = createFetchRouter();
+    const game = {
+      ...mediaItems[0],
+      type: "game",
+      status: "completed",
+      progress: 0,
+      total: 0,
+      playtimeMinutes: 90,
+      catalogPlatforms: [],
+    };
+    bootstrap(router, [
+      {
+        ...game,
+        id: 11,
+        title: "Control",
+        playedOnPlatforms: ["Steam Deck", "PC", "PlayStation 5"],
+        repeatCount: 3,
+      },
+      {
+        ...game,
+        id: 12,
+        title: "Hades",
+        playedOnPlatforms: [],
+        repeatCount: 2,
+      },
+      {
+        ...game,
+        id: 13,
+        title: "Journey",
+        playedOnPlatforms: [],
+        repeatCount: 0,
+      },
+    ]);
+    render(<App />);
+
+    const controlCard = (await screen.findByRole("button", {
+      name: /^View details for Control/u,
+    })).closest("article");
+    const hadesCard = screen.getByRole("button", {
+      name: /^View details for Hades/u,
+    }).closest("article");
+    const journeyCard = screen.getByRole("button", {
+      name: /^View details for Journey/u,
+    }).closest("article");
+    if (!controlCard || !hadesCard || !journeyCard) {
+      throw new Error("game cards not found");
+    }
+
+    expect(within(controlCard).getByText("Played on")).not.toBeNull();
+    expect(within(controlCard).getByText("Steam Deck · +2")).not.toBeNull();
+    expect(within(hadesCard).getByText("Replays")).not.toBeNull();
+    expect(within(hadesCard).getByText("2")).not.toBeNull();
+    expect(within(journeyCard).queryByText("Played on")).toBeNull();
+    expect(within(journeyCard).queryByText("Replays")).toBeNull();
+    expect(screen.queryByText("Playtime")).toBeNull();
+    expect(screen.queryByText("1h 30m")).toBeNull();
+  });
+
+  it("uses movie metadata instead of an empty progress area", async () => {
+    const router = createFetchRouter();
+    bootstrap(router, [{
+      ...mediaItems[0],
+      id: 11,
+      title: "The Odyssey",
+      type: "movie",
+      status: "completed",
+      progress: 0,
+      total: 0,
+      durationMinutes: 0,
+      releaseYear: 2026,
+    }]);
+    render(<App />);
+
+    const movieCard = (await screen.findByRole("button", {
+      name: /^View details for The Odyssey/u,
+    })).closest("article");
+    if (!movieCard) throw new Error("movie card not found");
+    expect(within(movieCard).getByText("Release")).not.toBeNull();
+    expect(within(movieCard).getByText("2026")).not.toBeNull();
   });
 
   it("keeps catalog movie metadata separate from personal progress", async () => {
@@ -1230,12 +1326,10 @@ describe("Library characterization", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const cowboyCard = (await screen.findByRole("button", {
-      name: /^View details for Cowboy Bebop/u,
-    })).closest("article");
-    if (!cowboyCard) throw new Error("Cowboy Bebop card not found");
     await user.click(
-      within(cowboyCard).getByRole("button", { name: "Update" }),
+      await screen.findByRole("button", {
+        name: "Edit Cowboy Bebop Library entry",
+      }),
     );
     const manager = screen.getByRole("dialog", {
       name: "Manage Cowboy Bebop",
