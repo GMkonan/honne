@@ -266,7 +266,9 @@ describe("Library characterization", () => {
     );
     const personal = screen.getByRole("region", { name: "Your Library" });
     await user.click(
-      within(personal).getByRole("button", { name: "Manage title" }),
+      within(personal).getByRole("button", {
+        name: /^Manage title, current status:/u,
+      }),
     );
     const manager = screen.getByRole("dialog", { name: "Manage Cowboy Bebop" });
     expect(
@@ -1092,7 +1094,9 @@ describe("Library characterization", () => {
     expect(within(personal).queryByText("Replays")).toBeNull();
 
     await user.click(
-      within(personal).getByRole("button", { name: "Manage title" }),
+      within(personal).getByRole("button", {
+        name: /^Manage title, current status:/u,
+      }),
     );
     const manager = screen.getByRole("dialog", { name: "Manage Celeste" });
     const playtime = within(manager).getByRole("spinbutton", {
@@ -1135,7 +1139,9 @@ describe("Library characterization", () => {
     });
 
     await user.click(
-      within(personal).getByRole("button", { name: "Manage title" }),
+      within(personal).getByRole("button", {
+        name: /^Manage title, current status:/u,
+      }),
     );
     const reopenedManager = screen.getByRole("dialog", {
       name: "Manage Celeste",
@@ -1298,7 +1304,9 @@ describe("Library characterization", () => {
     expect(screen.queryByRole("button", { name: "Remove from Library" }))
       .toBeNull();
 
-    const manageTrigger = screen.getByRole("button", { name: "Manage title" });
+    const manageTrigger = screen.getByRole("button", {
+      name: "Manage title, current status: Watching",
+    });
     await user.click(manageTrigger);
     const manager = screen.getByRole("dialog", { name: "Manage Cowboy Bebop" });
     expect(
@@ -1343,7 +1351,9 @@ describe("Library characterization", () => {
         name: /^View details for Cowboy Bebop/,
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    await user.click(
+      screen.getByRole("button", { name: /^Manage title, current status:/u }),
+    );
     await user.click(
       screen.getByRole("button", { name: "Remove from Library" }),
     );
@@ -1356,6 +1366,48 @@ describe("Library characterization", () => {
     expect(
       screen.queryByRole("button", { name: /^View details for Cowboy Bebop/ }),
     ).toBeNull();
+  });
+
+  it("keeps the management dialog open and reports failed removal", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json(
+      "DELETE",
+      "/api/media/1",
+      { error: "The title could not be removed." },
+      500,
+    );
+    vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/u,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /^Manage title, current status:/u }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Remove from Library" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Manage Cowboy Bebop" });
+    expect((await within(dialog).findByRole("alert")).textContent).toBe(
+      "The title could not be removed.",
+    );
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Close management dialog",
+      }),
+    );
+    await user.click(screen.getByRole("link", { name: "Library" }));
+    expect(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/u,
+      }),
+    ).not.toBeNull();
   });
 
   it("automatically enriches an existing provider title on first detail view", async () => {
@@ -1448,7 +1500,9 @@ describe("Library characterization", () => {
         name: /^View details for Cowboy Bebop/,
       }),
     );
-    const trigger = screen.getByRole("button", { name: "Manage title" });
+    const trigger = screen.getByRole("button", {
+      name: /^Manage title, current status:/u,
+    });
     await user.click(trigger);
 
     const dialog = screen.getByRole("dialog", {
@@ -1535,7 +1589,9 @@ describe("Library characterization", () => {
         name: /^View details for Cowboy Bebop/,
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    await user.click(
+      screen.getByRole("button", { name: /^Manage title, current status:/u }),
+    );
     const dialog = screen.getByRole("dialog", {
       name: "Manage Cowboy Bebop",
     });
@@ -1555,7 +1611,9 @@ describe("Library characterization", () => {
 
     await waitFor(() => expect(submitted).toBeDefined());
     expect(submitted).toMatchObject({ rating: 0, repeatCount: 0 });
-    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    await user.click(
+      screen.getByRole("button", { name: /^Manage title, current status:/u }),
+    );
     const reopened = screen.getByRole("dialog", {
       name: "Manage Cowboy Bebop",
     });
@@ -1607,7 +1665,9 @@ describe("Library characterization", () => {
     );
     const personal = screen.getByRole("region", { name: "Your Library" });
     expect(within(personal).queryByText(/Progress|watched|read/u)).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    await user.click(
+      screen.getByRole("button", { name: /^Manage title, current status:/u }),
+    );
 
     const dialog = screen.getByRole("dialog", {
       name: "Manage Spirited Away",
@@ -1641,7 +1701,9 @@ describe("Library characterization", () => {
       repeatCount: 2,
     });
 
-    await user.click(screen.getByRole("button", { name: "Manage title" }));
+    await user.click(
+      screen.getByRole("button", { name: /^Manage title, current status:/u }),
+    );
     await user.click(
       screen.getByRole("button", { name: "Edit title details" }),
     );
@@ -1760,7 +1822,9 @@ describe("Library characterization", () => {
         name: /^View details for Cowboy Bebop/,
       }),
     );
-    const trigger = screen.getByRole("button", { name: "Manage title" });
+    const trigger = screen.getByRole("button", {
+      name: /^Manage title, current status:/u,
+    });
     await user.click(trigger);
     const notes = screen.getByRole("textbox", { name: "Review / notes" });
     await user.type(notes, "Keep this draft");
@@ -1868,7 +1932,9 @@ describe("Library characterization", () => {
     expect(within(credits).getByText("Director")).not.toBeNull();
 
     await user.click(
-      screen.getByRole("button", { name: "Manage in Library" }),
+      screen.getByRole("button", {
+        name: /^Manage in Library, current status:/u,
+      }),
     );
     expect(
       screen.getByRole("dialog", { name: "Manage Cowboy Bebop" }),

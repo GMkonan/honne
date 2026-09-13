@@ -238,7 +238,9 @@ function LibraryPanel(
       <button
         type="button"
         className={`detail-manage-button ${item.status}`}
-        aria-label={actionLabel}
+        aria-label={`${actionLabel}, current status: ${
+          mediaStatusLabel(item.status, item.type)
+        }`}
         onClick={() => onManage(item)}
       >
         <Pencil size={16} />
