@@ -128,9 +128,10 @@
 
 ## Git e pull requests
 
-- Crie branches a partir do ID da card ou issue e nunca implemente diretamente em `main`.
+- Use uma branch descritiva e nunca implemente diretamente em `main`; inclua o ID da card ou issue quando uma existir, mas não exija tracker para mudanças pequenas e coerentes.
+- Escreva em inglês todo conteúdo publicado no GitHub, incluindo issues/cards, branches, commits, pull requests, reviews e comentários; a conversa com o usuário permanece em pt-BR.
 - Use commits pequenos com Conventional Commits (`feat:`, `fix:`, `test:`, `docs:` ou `chore:`).
-- Vincule todo PR à card/issue correspondente e descreva contexto, mudanças e comandos de validação.
+- Quando houver uma card ou issue associada, vincule o PR; sempre descreva contexto, mudanças e comandos de validação.
 - Limite cada PR a 500 linhas de produção alteradas; obtenha aprovação e documente a justificativa antes de exceder o limite.
 - Nunca faça force-push, ignore hooks ou aprove/mescle o próprio PR.
 
