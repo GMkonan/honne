@@ -1068,7 +1068,7 @@ function App() {
       originalTitle: result.originalTitle || "",
       description: result.description || "",
       releaseYear: result.releaseYear || 0,
-      format: result.format || result.subtitle || "",
+      format: result.format || "",
       genres: Array.isArray(result.genres) ? result.genres : [],
       credits: Array.isArray(result.credits) ? result.credits : [],
       releaseStatus: result.releaseStatus || "",
