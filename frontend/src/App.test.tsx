@@ -725,6 +725,64 @@ describe("Library characterization", () => {
     ).not.toBeNull();
   });
 
+  it("does not persist an Open Library author subtitle as format", async () => {
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router, []);
+    router.json(
+      "GET",
+      "/api/discovery/search?type=book&q=Moonwalking&page=1",
+      {
+        results: [{
+          provider: "open_library",
+          providerId: "OL45883W",
+          providerUrl: "https://openlibrary.org/works/OL45883W",
+          type: "book",
+          title: "Moonwalking with Einstein",
+          subtitle:
+            "Joshua Foer, additional contributors from collected editions",
+          releaseYear: 2011,
+          total: 307,
+          catalogTotal: 307,
+        }],
+        page: 1,
+        hasMore: false,
+      },
+    );
+    router.json("POST", "/api/media", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json({
+        ...mediaItems[0],
+        ...submitted,
+        id: 1,
+        createdAt: "2026-01-05T00:00:00Z",
+        updatedAt: "2026-01-05T00:00:00Z",
+      }, { status: 201 });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Books" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Search for books" }),
+      "Moonwalking",
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Moonwalking with Einstein/u }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Add media" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted?.format).toBe("");
+    expect(submitted?.total).toBe(307);
+  });
+
   it("ignores a stale game result after the discovery type changes", async () => {
     const router = createFetchRouter();
     let resolveSearch: ((response: Response) => void) | undefined;
