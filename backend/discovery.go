@@ -50,6 +50,17 @@ type discoveryResult struct {
 	CatalogPlatforms []string      `json:"catalogPlatforms,omitempty"`
 }
 
+type discoveryRelation struct {
+	Relation string          `json:"relation"`
+	Result   discoveryResult `json:"result"`
+}
+
+type discoveryDetail struct {
+	discoveryResult
+	AlternativeTitles []string            `json:"alternativeTitles"`
+	Relations         []discoveryRelation `json:"relations"`
+}
+
 type discoveryResponse struct {
 	Results []discoveryResult `json:"results"`
 	Page    int               `json:"page"`
@@ -74,6 +85,7 @@ type providerDate struct {
 type anilistMedia struct {
 	ID           int      `json:"id"`
 	SiteURL      string   `json:"siteUrl"`
+	MediaType    string   `json:"type"`
 	Description  string   `json:"description"`
 	Episodes     int      `json:"episodes"`
 	Chapters     int      `json:"chapters"`
@@ -81,7 +93,9 @@ type anilistMedia struct {
 	Status       string   `json:"status"`
 	Duration     int      `json:"duration"`
 	Genres       []string `json:"genres"`
+	Synonyms     []string `json:"synonyms"`
 	AverageScore int      `json:"averageScore"`
+	IsAdult      bool     `json:"isAdult"`
 	Title        struct {
 		Romaji  string `json:"romaji"`
 		English string `json:"english"`
@@ -105,6 +119,14 @@ type anilistMedia struct {
 			} `json:"node"`
 		} `json:"edges"`
 	} `json:"staff"`
+	Relations struct {
+		Edges []anilistRelationEdge `json:"edges"`
+	} `json:"relations"`
+}
+
+type anilistRelationEdge struct {
+	RelationType string       `json:"relationType"`
+	Node         anilistMedia `json:"node"`
 }
 
 type cachedDiscovery struct {
@@ -113,7 +135,7 @@ type cachedDiscovery struct {
 }
 
 type cachedDiscoveryDetail struct {
-	result    discoveryResult
+	result    discoveryDetail
 	expiresAt time.Time
 }
 

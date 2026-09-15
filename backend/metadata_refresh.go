@@ -39,10 +39,10 @@ func (a *app) refreshMediaMetadata(w http.ResponseWriter, r *http.Request) {
 	exact := false
 	var discoveryErr error
 	if snapshot.Provider == "rawg" && snapshot.Type == "game" {
-		var result discoveryResult
-		result, discoveryErr = a.discovery.detail(r.Context(), snapshot.Provider, snapshot.Type, snapshot.ProviderID)
+		var detail discoveryDetail
+		detail, discoveryErr = a.discovery.detail(r.Context(), snapshot.Provider, snapshot.Type, snapshot.ProviderID)
 		if discoveryErr == nil {
-			matched, exact = &result, true
+			matched, exact = &detail.discoveryResult, true
 		}
 	} else {
 		var response discoveryResponse
