@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export interface PublicProfile {
   name: string;
@@ -22,12 +22,11 @@ export function LibraryHero(
     inProgress,
   }: LibraryHeroProps,
 ) {
-  const [avatarFailed, setAvatarFailed] = useState(false);
-
-  useEffect(() => setAvatarFailed(false), [profile.avatarUrl]);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
 
   const displayName = profileLoading ? "Your library" : profile.name;
-  const showAvatar = !profileLoading && profile.avatarUrl && !avatarFailed;
+  const showAvatar = !profileLoading && profile.avatarUrl &&
+    profile.avatarUrl !== failedAvatarUrl;
 
   return (
     <section
@@ -43,7 +42,7 @@ export function LibraryHero(
               <img
                 src={profile.avatarUrl}
                 alt={`${profile.name} profile`}
-                onError={() => setAvatarFailed(true)}
+                onError={() => setFailedAvatarUrl(profile.avatarUrl)}
               />
             )
             : (
