@@ -1562,6 +1562,237 @@ describe("Library characterization", () => {
     ).not.toBeNull();
   });
 
+  it("shows AniList alternative titles and opens related Library media", async () => {
+    const router = createFetchRouter();
+    const linkedItem = {
+      ...mediaItems[0],
+      provider: "anilist",
+      providerId: "1",
+      providerUrl: "https://anilist.co/anime/1",
+      format: "TV",
+    };
+    const relatedItem = {
+      ...mediaItems[2],
+      id: 4,
+      title: "Space Dandy",
+      type: "anime",
+      provider: "anilist",
+      providerId: "2",
+      providerUrl: "https://anilist.co/anime/2",
+      format: "TV",
+    };
+    bootstrap(router, [linkedItem, relatedItem]);
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=anilist&type=anime&id=1",
+      {
+        ...linkedItem,
+        alternativeTitles: [
+          "Cowboy Bebop: The Complete Sessions",
+          "カウボーイビバップ",
+        ],
+        relations: [{
+          relation: "sequel",
+          result: {
+            provider: "anilist",
+            providerId: "2",
+            providerUrl: "https://anilist.co/anime/2",
+            type: "anime",
+            title: "Space Dandy",
+            releaseYear: 2014,
+          },
+        }],
+      },
+    );
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=anilist&type=anime&id=2",
+      {
+        ...relatedItem,
+        alternativeTitles: ["スペース☆ダンディ"],
+        relations: [],
+      },
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Alternative titles" }),
+    ).not.toBeNull();
+    expect(screen.getByText(/Cowboy Bebop: The Complete Sessions/u)).not
+      .toBeNull();
+    const related = await screen.findByRole("button", {
+      name: "Open Space Dandy, sequel, in your Library",
+    });
+    await user.click(related);
+
+    expect(
+      await screen.findByRole("heading", { name: "Space Dandy" }),
+    ).not.toBeNull();
+    expect(await screen.findByText("スペース☆ダンディ")).not.toBeNull();
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/discovery/detail?provider=anilist&type=anime&id=2",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(
+      screen.getByRole("button", { name: /^Manage in Library/u }),
+    ).not.toBeNull();
+    expect(globalThis.location.hash).toBe("#catalog/anilist/anime/2");
+  });
+
+  it("waits for exact AniList details before adding related media", async () => {
+    const router = createFetchRouter();
+    const linkedItem = {
+      ...mediaItems[0],
+      provider: "anilist",
+      providerId: "1",
+      providerUrl: "https://anilist.co/anime/1",
+      format: "TV",
+    };
+    bootstrap(router, [linkedItem]);
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=anilist&type=anime&id=1",
+      {
+        ...linkedItem,
+        alternativeTitles: [],
+        relations: [{
+          relation: "sequel",
+          result: {
+            provider: "anilist",
+            providerId: "2",
+            providerUrl: "https://anilist.co/anime/2",
+            type: "anime",
+            title: "Space Dandy",
+          },
+        }],
+      },
+    );
+    let resolveDetail: (response: Response) => void = () => {};
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=anilist&type=anime&id=2",
+      () => new Promise<Response>((resolve) => resolveDetail = resolve),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open Space Dandy, sequel",
+      }),
+    );
+
+    const pendingAdd = await screen.findByRole("button", {
+      name: "Loading details…",
+    });
+    expect(pendingAdd.hasAttribute("disabled")).toBe(true);
+
+    resolveDetail(Response.json({
+      provider: "anilist",
+      providerId: "2",
+      providerUrl: "https://anilist.co/anime/2",
+      type: "anime",
+      title: "Space Dandy",
+      description: "A space comedy.",
+      format: "TV",
+      alternativeTitles: [],
+      relations: [],
+    }));
+    expect(
+      await screen.findByRole("button", { name: "Add to Library" }),
+    ).not.toBeNull();
+  });
+
+  it("keeps AniList detail usable when related context fails and retries", async () => {
+    const router = createFetchRouter();
+    const linkedItem = {
+      ...mediaItems[0],
+      provider: "anilist",
+      providerId: "1",
+      providerUrl: "https://anilist.co/anime/1",
+      format: "TV",
+    };
+    bootstrap(router, [linkedItem]);
+    let attempts = 0;
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=anilist&type=anime&id=1",
+      () => {
+        attempts++;
+        return attempts === 1
+          ? Response.json({ error: "AniList is currently unavailable" }, {
+            status: 503,
+          })
+          : Response.json({
+            ...linkedItem,
+            alternativeTitles: ["カウボーイビバップ"],
+            relations: [],
+          });
+      },
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    expect(
+      await screen.findByText("Related media could not be loaded."),
+    ).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Cowboy Bebop" })).not
+      .toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("カウボーイビバップ")).not.toBeNull();
+    await waitFor(() => expect(attempts).toBe(2));
+  });
+
+  it("cancels obsolete AniList detail requests", async () => {
+    const router = createFetchRouter();
+    const linkedItem = {
+      ...mediaItems[0],
+      provider: "anilist",
+      providerId: "1",
+      providerUrl: "https://anilist.co/anime/1",
+      format: "TV",
+    };
+    bootstrap(router, [linkedItem]);
+    let detailSignal: AbortSignal | undefined;
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=anilist&type=anime&id=1",
+      (request: Request) => {
+        detailSignal = request.signal;
+        return new Promise<Response>(() => {});
+      },
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Cowboy Bebop/,
+      }),
+    );
+    await waitFor(() => expect(detailSignal).toBeDefined());
+    await user.click(screen.getByRole("link", { name: "Library" }));
+    await waitFor(() => expect(detailSignal?.aborted).toBe(true));
+  });
+
   it("automatically enriches an existing provider title on first detail view", async () => {
     const router = createFetchRouter();
     const linkedItem = {

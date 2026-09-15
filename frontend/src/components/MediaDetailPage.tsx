@@ -15,6 +15,8 @@ import {
   Tv,
 } from "lucide-react";
 import {
+  catalogCoverStyle,
+  type CatalogRelation,
   type SearchCatalogResult,
   type SearchMediaCredit,
   type SearchMediaType,
@@ -64,6 +66,10 @@ type DetailSelection =
   | { kind: "local"; mediaId: number }
   | { kind: "external"; result: SearchCatalogResult };
 
+interface DetailCatalogRelation extends CatalogRelation {
+  existing?: DetailLibraryMedia;
+}
+
 interface MediaDetailPageProps {
   selection: DetailSelection | null;
   loading: boolean;
@@ -71,9 +77,15 @@ interface MediaDetailPageProps {
   existing?: DetailLibraryMedia;
   metadataRefreshing: boolean;
   metadataError: string;
+  alternativeTitles: string[];
+  relations: DetailCatalogRelation[];
+  catalogContextLoading: boolean;
+  catalogContextError: string;
   onBack: () => void;
   onAdd: (result: SearchCatalogResult) => void;
   onRefreshMetadata: (item: DetailLibraryMedia) => void;
+  onRetryCatalogContext: () => void;
+  onOpenRelated: (result: SearchCatalogResult) => void;
   onManage: (item: DetailLibraryMedia) => void;
 }
 
@@ -258,9 +270,15 @@ export function MediaDetailPage(
     existing,
     metadataRefreshing,
     metadataError,
+    alternativeTitles,
+    relations,
+    catalogContextLoading,
+    catalogContextError,
     onBack,
     onAdd,
     onRefreshMetadata,
+    onRetryCatalogContext,
+    onOpenRelated,
     onManage,
   }: MediaDetailPageProps,
 ) {
@@ -353,9 +371,16 @@ export function MediaDetailPage(
       <article className="detail-layout">
         <header className="detail-title-block">
           <h1 ref={titleRef} tabIndex={-1}>{source.title}</h1>
-          {source.originalTitle && source.originalTitle !== source.title && (
-            <p className="detail-original">{source.originalTitle}</p>
-          )}
+          {alternativeTitles.length > 0
+            ? (
+              <div className="detail-alternative-titles">
+                <h2>Alternative titles</h2>
+                <p>{alternativeTitles.join(" · ")}</p>
+              </div>
+            )
+            : source.originalTitle && source.originalTitle !== source.title
+            ? <p className="detail-original">{source.originalTitle}</p>
+            : null}
           {source.communityRating
             ? (
               <span className="detail-community-rating">
@@ -393,8 +418,12 @@ export function MediaDetailPage(
                     type="button"
                     className="primary-button"
                     onClick={() => onAdd(selection.result)}
+                    disabled={catalogContextLoading}
                   >
-                    <CirclePlus size={16} /> Add to Library
+                    <CirclePlus size={16} />
+                    {catalogContextLoading
+                      ? "Loading details…"
+                      : "Add to Library"}
                   </button>
                 </section>
               )
@@ -472,6 +501,60 @@ export function MediaDetailPage(
             ))}
           </dl>
         </section>
+
+        {(relations.length > 0 || catalogContextLoading ||
+          catalogContextError) && (
+          <section className="detail-related" aria-labelledby="related-title">
+            <div className="detail-section-heading">
+              <h2 id="related-title">Related media</h2>
+            </div>
+            {catalogContextLoading && relations.length === 0 && (
+              <p className="detail-metadata-status" role="status">
+                Loading related media…
+              </p>
+            )}
+            {catalogContextError && (
+              <div className="detail-related-error" role="status">
+                <span>Related media could not be loaded.</span>
+                <button type="button" onClick={onRetryCatalogContext}>
+                  <RefreshCw size={13} /> Try again
+                </button>
+              </div>
+            )}
+            {relations.length > 0 && (
+              <div className="detail-related-grid">
+                {relations.map((
+                  { relation, result, existing: relatedItem },
+                ) => (
+                  <button
+                    type="button"
+                    className="detail-related-item"
+                    aria-label={`Open ${result.title}, ${relation}${
+                      relatedItem ? ", in your Library" : ""
+                    }`}
+                    onClick={() => onOpenRelated(result)}
+                    key={`${result.provider}:${result.type}:${result.providerId}`}
+                  >
+                    <span
+                      className="detail-related-cover"
+                      style={catalogCoverStyle(result.coverUrl)}
+                      aria-hidden="true"
+                    />
+                    <span className="detail-related-copy">
+                      <small>{relation}</small>
+                      <strong>{result.title}</strong>
+                      <em>
+                        {typeDetails[result.type]?.label || "Media"}
+                        {result.releaseYear ? ` · ${result.releaseYear}` : ""}
+                        {relatedItem ? " · In Library" : ""}
+                      </em>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {(credits.length > 0 || catalogPlatforms.length > 0 ||
           (selection.kind === "external" && metadataRefreshing) ||
