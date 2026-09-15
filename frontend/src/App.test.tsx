@@ -460,6 +460,132 @@ describe("Library characterization", () => {
     );
   });
 
+  it("scopes suggestions by media type and shares the choice with the menu", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/discovery/search?type=anime&q=Nar&page=1", {
+      results: [{
+        provider: "anilist",
+        providerId: "20",
+        providerUrl: "https://anilist.co/anime/20",
+        type: "anime",
+        title: "Naruto",
+      }],
+      page: 1,
+      hasMore: false,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: /^View details for Dune/ });
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Search media type" }),
+      "anime",
+    );
+    expect(
+      (screen.getByRole("combobox", {
+        name: "Search media type from menu",
+      }) as HTMLSelectElement).value,
+    ).toBe("anime");
+    await user.type(
+      screen.getByRole("combobox", { name: "Search Honne" }),
+      "Nar",
+    );
+
+    expect(
+      await screen.findByRole("option", { name: /Naruto.*Catalog/u }),
+    ).not.toBeNull();
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/discovery/search?type=anime&q=Nar&page=1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(
+      router.fetch.mock.calls.some(([path]) =>
+        path === "/api/discovery/global?q=Nar"
+      ),
+    ).toBe(false);
+
+    await user.keyboard("{Enter}");
+    expect(
+      await screen.findByRole("heading", { name: "Results for “Nar”" }),
+    ).not.toBeNull();
+    expect(globalThis.location.hash).toBe("#search/anime/Nar");
+  });
+
+  it("cancels suggestions and hides stale results when the scope changes", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    let allMediaSignal: AbortSignal | undefined;
+    router.json("GET", "/api/discovery/global?q=Nar", (request: Request) => {
+      allMediaSignal = request.signal;
+      return new Promise<Response>(() => {});
+    });
+    router.json("GET", "/api/discovery/search?type=anime&q=Nar&page=1", {
+      results: [{
+        provider: "anilist",
+        providerId: "20",
+        providerUrl: "https://anilist.co/anime/20",
+        type: "anime",
+        title: "Naruto",
+      }],
+      page: 1,
+      hasMore: false,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: /^View details for Dune/ });
+
+    await user.type(
+      screen.getByRole("combobox", { name: "Search Honne" }),
+      "Nar",
+    );
+    await waitFor(() => expect(allMediaSignal).toBeDefined(), {
+      timeout: 1500,
+    });
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Search media type" }),
+      "anime",
+    );
+
+    await waitFor(() => expect(allMediaSignal?.aborted).toBe(true));
+    expect(
+      await screen.findByRole("option", { name: /Naruto.*Catalog/u }),
+    ).not.toBeNull();
+  });
+
+  it("preserves scoped search routes and preselects manual entry", async () => {
+    globalThis.history.replaceState(null, "", "/#search/book/Dune");
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/discovery/search?type=book&q=Dune&page=1", {
+      results: [],
+      page: 1,
+      hasMore: false,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Results for “Dune”" }),
+    ).not.toBeNull();
+    expect(
+      (screen.getByRole("combobox", {
+        name: "Refine search media type",
+      }) as HTMLSelectElement).value,
+    ).toBe("book");
+    expect(globalThis.location.hash).toBe("#search/book/Dune");
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/discovery/search?type=book&q=Dune&page=1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add manually" }));
+    expect(
+      (screen.getByRole("combobox", { name: /Type/u }) as HTMLSelectElement)
+        .value,
+    ).toBe("book");
+  });
+
   it("groups full search results, filters types, and retries partial catalogs", async () => {
     const router = createFetchRouter();
     bootstrap(router);
