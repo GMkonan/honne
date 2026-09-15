@@ -32,53 +32,6 @@ type rawgGame struct {
 	} `json:"platforms"`
 }
 
-func (a *app) getDiscoveryDetail(w http.ResponseWriter, r *http.Request) {
-	provider := r.URL.Query().Get("provider")
-	mediaType := r.URL.Query().Get("type")
-	providerID := r.URL.Query().Get("id")
-	id, err := strconv.Atoi(providerID)
-	if provider != "rawg" || mediaType != "game" || err != nil || id < 1 || strconv.Itoa(id) != providerID {
-		writeError(w, http.StatusBadRequest, "invalid catalog identity")
-		return
-	}
-	result, err := a.discovery.detail(r.Context(), provider, mediaType, providerID)
-	if errors.Is(err, errProviderUnavailable) {
-		writeError(w, http.StatusServiceUnavailable, "game details require RAWG_API_KEY")
-		return
-	}
-	if err != nil {
-		logProviderError(mediaType, err)
-		writeError(w, http.StatusBadGateway, "the metadata provider is temporarily unavailable")
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (s *discoveryService) detail(ctx context.Context, provider, mediaType, providerID string) (discoveryResult, error) {
-	if provider != "rawg" || mediaType != "game" {
-		return discoveryResult{}, fmt.Errorf("unsupported catalog identity")
-	}
-	key := provider + "|" + mediaType + "|" + providerID
-	s.mu.Lock()
-	if cached, ok := s.detailCache[key]; ok && time.Now().Before(cached.expiresAt) {
-		s.mu.Unlock()
-		return cached.result, nil
-	}
-	s.mu.Unlock()
-
-	result, err := s.fetchRAWGDetail(ctx, providerID)
-	if err != nil {
-		return discoveryResult{}, err
-	}
-	s.mu.Lock()
-	if s.detailCache == nil {
-		s.detailCache = make(map[string]cachedDiscoveryDetail)
-	}
-	s.detailCache[key] = cachedDiscoveryDetail{result: result, expiresAt: time.Now().Add(10 * time.Minute)}
-	s.mu.Unlock()
-	return result, nil
-}
-
 func (s *discoveryService) searchRAWG(ctx context.Context, query string, page int) (discoveryResponse, error) {
 	values := url.Values{
 		"search":    {query},
