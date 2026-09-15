@@ -128,7 +128,8 @@
 
 ## Git e pull requests
 
-- Com aprovação do owner, mudanças pequenas, coerentes, reversíveis e de baixo risco podem ser implementadas e commitadas diretamente em uma `main` sincronizada após validação completa e self-review.
+- Mudanças pequenas, coerentes, reversíveis e de baixo risco podem ser implementadas e commitadas diretamente em uma `main` local sincronizada após validação completa e self-review.
+- Um commit na `main` local não autoriza `push`. Não faça `push` de nenhuma branch nem abra ou atualize uma pull request sem autorização explícita do owner para essa ação na mudança atual; permissão geral para commits locais não é autorização remota permanente.
 - Use uma branch descritiva e pull request para mudanças maiores ou de maior risco; inclua o ID da card ou issue quando uma existir, mas não exija tracker para mudanças pequenas e coerentes.
 - Escreva em inglês todo conteúdo publicado no GitHub, incluindo issues/cards, branches, commits, pull requests, reviews e comentários; a conversa com o usuário permanece em pt-BR.
 - Use commits pequenos com Conventional Commits (`feat:`, `fix:`, `test:`, `docs:` ou `chore:`).
