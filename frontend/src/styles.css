@@ -1856,6 +1856,7 @@ button {
     "cover title"
     "cover overview"
     "cover catalog"
+    "cover related"
     "cover metadata";
   align-items: start;
   gap: 22px 38px;
@@ -1906,6 +1907,24 @@ button {
   color: var(--overlay);
   font-size: 13px;
   line-height: 1.5;
+}
+.detail-alternative-titles {
+  margin-top: 10px;
+}
+.detail-alternative-titles h2 {
+  margin: 0 0 4px;
+  color: var(--overlay);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+.detail-alternative-titles p {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .detail-title-block .detail-community-rating {
   margin-top: 12px;
@@ -2023,6 +2042,90 @@ button {
   color: var(--text);
   background: var(--surface);
   font-size: 12px;
+}
+.detail-related {
+  min-width: 0;
+  grid-area: related;
+  padding-top: 20px;
+  border-top: 1px solid var(--surface);
+}
+.detail-related-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.detail-related-item {
+  min-width: 0;
+  min-height: 88px;
+  display: flex;
+  align-items: stretch;
+  gap: 11px;
+  padding: 8px;
+  border: 1px solid var(--surface-2);
+  color: var(--text);
+  background: var(--mantle);
+  text-align: left;
+  cursor: pointer;
+}
+.detail-related-item:hover {
+  border-color: var(--blue);
+}
+.detail-related-cover {
+  width: 48px;
+  flex: 0 0 48px;
+  border-radius: 2px;
+  background: var(--surface) center / cover no-repeat;
+}
+.detail-related-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.detail-related-copy small {
+  color: var(--sapphire);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.detail-related-copy strong,
+.detail-related-copy em {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.detail-related-copy strong {
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.detail-related-copy em {
+  -webkit-line-clamp: 1;
+  color: var(--overlay);
+  font-size: 12px;
+  font-style: normal;
+}
+.detail-related-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--red);
+  font-size: 12px;
+}
+.detail-related-error button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  color: var(--blue);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
 }
 .detail-supporting-metadata {
   min-width: 0;
@@ -3142,6 +3245,7 @@ button {
       "cover title"
       "cover overview"
       "cover catalog"
+      "cover related"
       "cover metadata";
     gap: 22px 30px;
   }
@@ -3271,6 +3375,7 @@ button {
       "cover"
       "overview"
       "catalog"
+      "related"
       "metadata";
     gap: 24px;
   }
@@ -3300,6 +3405,7 @@ button {
   .detail-community-rating {
     white-space: normal;
   }
+  .detail-related-grid,
   .detail-metadata-groups {
     grid-template-columns: 1fr;
   }

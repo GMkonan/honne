@@ -36,6 +36,16 @@ export interface SearchMediaCredit {
   role: string;
 }
 
+export interface CatalogRelation {
+  relation: string;
+  result: SearchCatalogResult;
+}
+
+export interface CatalogDetailResponse extends SearchCatalogResult {
+  alternativeTitles: string[];
+  relations: CatalogRelation[];
+}
+
 export interface SearchCatalogResult {
   provider: string;
   providerId: string;
