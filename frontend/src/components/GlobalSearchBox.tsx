@@ -18,6 +18,19 @@ export type SearchMediaType =
   | "light_novel"
   | "game";
 
+export type SearchScope = "all" | SearchMediaType;
+
+export const searchScopeOptions: { value: SearchScope; label: string }[] = [
+  { value: "all", label: "All media" },
+  { value: "anime", label: "Anime" },
+  { value: "series", label: "Series" },
+  { value: "movie", label: "Movies" },
+  { value: "book", label: "Books" },
+  { value: "manga", label: "Manga" },
+  { value: "light_novel", label: "Light novels" },
+  { value: "game", label: "Games" },
+];
+
 export interface SearchMediaCredit {
   name: string;
   role: string;
@@ -53,11 +66,14 @@ interface GlobalSearchBoxProps {
   label: string;
   placeholder: string;
   query: string;
+  scope: SearchScope;
+  scopeLabel: string;
   catalogResults: SearchCatalogResult[];
   unavailableCatalogs: number;
   catalogLoading: boolean;
   catalogError: string;
   onQueryChange: (query: string) => void;
+  onScopeChange: (scope: SearchScope) => void;
   onActivate: (query: string) => void;
   onDeactivate: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -113,11 +129,14 @@ export function GlobalSearchBox({
   label,
   placeholder,
   query,
+  scope,
+  scopeLabel,
   catalogResults,
   unavailableCatalogs,
   catalogLoading,
   catalogError,
   onQueryChange,
+  onScopeChange,
   onActivate,
   onDeactivate,
   onSubmit,
@@ -146,7 +165,7 @@ export function GlobalSearchBox({
     return () => document.removeEventListener("pointerdown", closeFromOutside);
   }, [open]);
 
-  useEffect(() => setActiveIndex(-1), [query, suggestionKeys]);
+  useEffect(() => setActiveIndex(-1), [query, scope, suggestionKeys]);
 
   function close() {
     setOpen(false);
@@ -205,7 +224,23 @@ export function GlobalSearchBox({
         onSubmit(event);
       }}
     >
-      <Search size={15} />
+      <Search size={15} aria-hidden="true" />
+      <select
+        className="search-scope-select"
+        aria-label={scopeLabel}
+        value={scope}
+        onChange={(event) => {
+          onScopeChange(event.target.value as SearchScope);
+          onActivate(query);
+          if (validQuery) setOpen(true);
+        }}
+      >
+        {searchScopeOptions.map((option) => (
+          <option value={option.value} key={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
       <input
         value={query}
         maxLength={100}
@@ -274,7 +309,9 @@ export function GlobalSearchBox({
           </div>
           <div className="suggestion-status" role="status" aria-live="polite">
             {catalogLoading
-              ? "Searching catalogs…"
+              ? scope === "all"
+                ? "Searching catalogs…"
+                : `Searching ${typeLabels[scope]}…`
               : catalogError
               ? "Catalog suggestions unavailable."
               : unavailableCatalogs > 0

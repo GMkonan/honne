@@ -4,6 +4,8 @@ import {
   catalogCoverStyle,
   type SearchCatalogResult,
   type SearchMediaType,
+  type SearchScope,
+  searchScopeOptions,
 } from "./GlobalSearchBox.tsx";
 
 type TypeFilter = "all" | SearchMediaType;
@@ -11,11 +13,14 @@ type TypeFilter = "all" | SearchMediaType;
 interface GlobalSearchPageProps {
   query: string;
   input: string;
+  scope: SearchScope;
+  inputScope: SearchScope;
   catalogResults: SearchCatalogResult[];
   unavailableTypes: SearchMediaType[];
   loading: boolean;
   error: string;
   onInput: (value: string) => void;
+  onScopeChange: (scope: SearchScope) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onBack: () => void;
   onRetry: () => void;
@@ -46,11 +51,14 @@ const typeLabels: Record<SearchMediaType, string> = {
 export function GlobalSearchPage({
   query,
   input,
+  scope,
+  inputScope,
   catalogResults,
   unavailableTypes,
   loading,
   error,
   onInput,
+  onScopeChange,
   onSubmit,
   onBack,
   onRetry,
@@ -70,7 +78,7 @@ export function GlobalSearchPage({
     : availableTypes.filter((type) => type === activeType);
   const allProvidersUnavailable = Boolean(error) && catalogResults.length === 0;
 
-  useEffect(() => setActiveType("all"), [query]);
+  useEffect(() => setActiveType("all"), [query, scope]);
   useEffect(() => {
     if (activeType !== "all" && !availableTypes.includes(activeType)) {
       setActiveType("all");
@@ -90,6 +98,19 @@ export function GlobalSearchPage({
           <p>Find titles from the available metadata catalogs.</p>
           <form className="search-page-query" role="search" onSubmit={onSubmit}>
             <Search size={17} aria-hidden="true" />
+            <select
+              className="search-scope-select"
+              aria-label="Refine search media type"
+              value={inputScope}
+              onChange={(event) =>
+                onScopeChange(event.target.value as SearchScope)}
+            >
+              {searchScopeOptions.map((option) => (
+                <option value={option.value} key={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <input
               value={input}
               maxLength={100}
@@ -126,7 +147,9 @@ export function GlobalSearchPage({
               : unavailableTypes.length
               ? `${unavailableTypes.length} catalogs unavailable`
               : loading
-              ? "Searching catalogs…"
+              ? scope === "all"
+                ? "Searching catalogs…"
+                : `Searching ${typeLabels[scope]}…`
               : "Catalog search complete"}
           </span>
         </div>

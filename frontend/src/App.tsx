@@ -35,6 +35,7 @@ import {
   GlobalSearchBox,
   type SearchCatalogResult,
   type SearchMediaCredit,
+  type SearchScope,
 } from "./components/GlobalSearchBox.tsx";
 import { GlobalSearchPage } from "./components/GlobalSearchPage.tsx";
 import {
@@ -289,6 +290,25 @@ function errorMessage(error: unknown): string {
     : "Something went wrong. Please try again.";
 }
 
+async function requestCatalogSearch(
+  query: string,
+  scope: SearchScope,
+  signal: AbortSignal,
+): Promise<GlobalDiscoveryResponse> {
+  if (scope === "all") {
+    return await request<GlobalDiscoveryResponse>(
+      `/api/discovery/global?q=${encodeURIComponent(query)}`,
+      { signal },
+    );
+  }
+  const params = new URLSearchParams({ type: scope, q: query, page: "1" });
+  const response = await request<DiscoveryResponse>(
+    `/api/discovery/search?${params}`,
+    { signal },
+  );
+  return { results: response.results, unavailableTypes: [] };
+}
+
 function findExistingLibraryItem(
   result: DiscoveryResult,
   items: Media[],
@@ -435,14 +455,41 @@ function relativeTime(value: string): string {
     .format(new Date(value));
 }
 
-function searchFromHash(): string {
-  const match = globalThis.location.hash.match(/^#search\/(.+)$/);
-  if (!match) return "";
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return "";
+interface SearchRoute {
+  query: string;
+  scope: SearchScope;
+}
+
+function searchFromHash(): SearchRoute {
+  const hash = globalThis.location.hash;
+  const scopedMatch = hash.match(/^#search\/([^/]+)\/(.+)$/);
+  if (
+    scopedMatch &&
+    typeOptions.some((option) => option.value === scopedMatch[1])
+  ) {
+    try {
+      return {
+        query: decodeURIComponent(scopedMatch[2]),
+        scope: scopedMatch[1] as MediaType,
+      };
+    } catch {
+      return { query: "", scope: "all" };
+    }
   }
+  const match = hash.match(/^#search\/(.+)$/);
+  if (!match) return { query: "", scope: "all" };
+  try {
+    return { query: decodeURIComponent(match[1]), scope: "all" };
+  } catch {
+    return { query: "", scope: "all" };
+  }
+}
+
+function searchHash(query: string, scope: SearchScope): string {
+  const encodedQuery = encodeURIComponent(query);
+  return scope === "all"
+    ? `#search/${encodedQuery}`
+    : `#search/${scope}/${encodedQuery}`;
 }
 
 function routeFromHash(): AppView {
@@ -596,8 +643,18 @@ function App() {
   const [detailOrigin, setDetailOrigin] = useState<
     "library" | "activity" | "search"
   >("library");
-  const [globalQuery, setGlobalQuery] = useState(searchFromHash);
-  const [submittedQuery, setSubmittedQuery] = useState(searchFromHash);
+  const [globalQuery, setGlobalQuery] = useState(
+    () => searchFromHash().query,
+  );
+  const [submittedQuery, setSubmittedQuery] = useState(
+    () => searchFromHash().query,
+  );
+  const [globalSearchScope, setGlobalSearchScope] = useState<SearchScope>(
+    () => searchFromHash().scope,
+  );
+  const [submittedSearchScope, setSubmittedSearchScope] = useState<SearchScope>(
+    () => searchFromHash().scope,
+  );
   const [globalResults, setGlobalResults] = useState<DiscoveryResult[]>([]);
   const [unavailableTypes, setUnavailableTypes] = useState<MediaType[]>([]);
   const [globalLoading, setGlobalLoading] = useState(false);
@@ -608,6 +665,9 @@ function App() {
     DiscoveryResult[]
   >([]);
   const [suggestionResultQuery, setSuggestionResultQuery] = useState("");
+  const [suggestionResultScope, setSuggestionResultScope] = useState<
+    SearchScope
+  >("all");
   const [suggestionUnavailableTypes, setSuggestionUnavailableTypes] = useState<
     MediaType[]
   >([]);
@@ -705,10 +765,12 @@ function App() {
         else setDetail(storedExternalDetail());
       }
       if (nextView === "search") {
-        const query = searchFromHash();
-        if (query) {
-          setSubmittedQuery(query);
-          setGlobalQuery(query);
+        const route = searchFromHash();
+        if (route.query) {
+          setSubmittedQuery(route.query);
+          setGlobalQuery(route.query);
+          setSubmittedSearchScope(route.scope);
+          setGlobalSearchScope(route.scope);
         }
       }
       setView(nextView);
@@ -804,15 +866,15 @@ function App() {
     const controller = new AbortController();
     let active = true;
     const timer = setTimeout(() => {
-      request<GlobalDiscoveryResponse>(
-        `/api/discovery/global?q=${encodeURIComponent(query)}`,
-        { signal: controller.signal },
-      ).then((response) => {
-        if (!active) return;
-        setSuggestionResults(response.results);
-        setSuggestionResultQuery(query);
-        setSuggestionUnavailableTypes(response.unavailableTypes);
-      }).catch((caught: unknown) => {
+      requestCatalogSearch(query, globalSearchScope, controller.signal).then(
+        (response) => {
+          if (!active) return;
+          setSuggestionResults(response.results);
+          setSuggestionResultQuery(query);
+          setSuggestionResultScope(globalSearchScope);
+          setSuggestionUnavailableTypes(response.unavailableTypes);
+        },
+      ).catch((caught: unknown) => {
         if (
           !active ||
           (caught instanceof DOMException && caught.name === "AbortError")
@@ -828,7 +890,7 @@ function App() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [suggestionQuery]);
+  }, [suggestionQuery, globalSearchScope]);
 
   useEffect(() => {
     if (Array.from(submittedQuery.trim()).length < 2) return;
@@ -838,9 +900,10 @@ function App() {
     setGlobalError("");
     setGlobalResults([]);
     setUnavailableTypes([]);
-    request<GlobalDiscoveryResponse>(
-      `/api/discovery/global?q=${encodeURIComponent(submittedQuery.trim())}`,
-      { signal: controller.signal },
+    requestCatalogSearch(
+      submittedQuery.trim(),
+      submittedSearchScope,
+      controller.signal,
     ).then((response) => {
       if (!active) return;
       setGlobalResults(response.results);
@@ -858,7 +921,7 @@ function App() {
       active = false;
       controller.abort();
     };
-  }, [submittedQuery, searchGeneration]);
+  }, [submittedQuery, submittedSearchScope, searchGeneration]);
 
   function navigate(next: Exclude<AppView, "detail">) {
     const hash = next === "library" ? "#library" : `#${next}`;
@@ -903,19 +966,21 @@ function App() {
     const query = globalQuery.trim();
     if (Array.from(query).length < 2) return;
     setSubmittedQuery(query);
+    setSubmittedSearchScope(globalSearchScope);
     setSearchGeneration((current) => current + 1);
     setSuggestionQuery("");
     setMenuOpen(false);
-    const hash = `#search/${encodeURIComponent(query)}`;
+    const hash = searchHash(query, globalSearchScope);
     if (globalThis.location.hash === hash) setView("search");
     else globalThis.location.hash = hash;
   }
 
   function leaveDetail() {
     if (detailOrigin === "search" && submittedQuery) {
-      globalThis.location.hash = `#search/${
-        encodeURIComponent(submittedQuery)
-      }`;
+      globalThis.location.hash = searchHash(
+        submittedQuery,
+        submittedSearchScope,
+      );
       return;
     }
     navigate(detailOrigin);
@@ -959,9 +1024,11 @@ function App() {
   const catalogSearchResults = globalResults.filter((result) =>
     !isAlreadyInLibrary(result, items)
   );
-  const catalogSuggestionResults = suggestionResultQuery === globalQuery.trim()
-    ? suggestionResults.filter((result) => !isAlreadyInLibrary(result, items))
-    : [];
+  const catalogSuggestionResults =
+    suggestionResultQuery === globalQuery.trim() &&
+      suggestionResultScope === globalSearchScope
+      ? suggestionResults.filter((result) => !isAlreadyInLibrary(result, items))
+      : [];
   const detailUsesRawg = detail?.kind === "external"
     ? detail.result.provider === "rawg"
     : detail?.kind === "local"
@@ -1182,13 +1249,18 @@ function App() {
               label="Search Honne from menu"
               placeholder="Search Honne"
               query={globalQuery}
+              scope={globalSearchScope}
+              scopeLabel="Search media type from menu"
               catalogResults={catalogSuggestionResults}
-              unavailableCatalogs={suggestionResultQuery === globalQuery.trim()
+              unavailableCatalogs={suggestionResultQuery ===
+                    globalQuery.trim() &&
+                  suggestionResultScope === globalSearchScope
                 ? suggestionUnavailableTypes.length
                 : 0}
               catalogLoading={suggestionsLoading}
               catalogError={suggestionsError}
               onQueryChange={setGlobalQuery}
+              onScopeChange={setGlobalSearchScope}
               onActivate={setSuggestionQuery}
               onDeactivate={() => setSuggestionQuery("")}
               onSubmit={submitGlobalSearch}
@@ -1205,13 +1277,17 @@ function App() {
             label="Search Honne"
             placeholder="Search Honne"
             query={globalQuery}
+            scope={globalSearchScope}
+            scopeLabel="Search media type"
             catalogResults={catalogSuggestionResults}
-            unavailableCatalogs={suggestionResultQuery === globalQuery.trim()
+            unavailableCatalogs={suggestionResultQuery === globalQuery.trim() &&
+                suggestionResultScope === globalSearchScope
               ? suggestionUnavailableTypes.length
               : 0}
             catalogLoading={suggestionsLoading}
             catalogError={suggestionsError}
             onQueryChange={setGlobalQuery}
+            onScopeChange={setGlobalSearchScope}
             onActivate={setSuggestionQuery}
             onDeactivate={() => setSuggestionQuery("")}
             onSubmit={submitGlobalSearch}
@@ -1467,16 +1543,22 @@ function App() {
         <GlobalSearchPage
           query={submittedQuery}
           input={globalQuery}
+          scope={submittedSearchScope}
+          inputScope={globalSearchScope}
           catalogResults={catalogSearchResults}
           unavailableTypes={unavailableTypes}
           loading={globalLoading}
           error={globalError}
           onInput={setGlobalQuery}
+          onScopeChange={setGlobalSearchScope}
           onSubmit={submitGlobalSearch}
           onBack={() => navigate("library")}
           onRetry={() => setSearchGeneration((current) => current + 1)}
           onOpenCatalog={openExternalDetail}
-          onAddManually={() => openManualEntry()}
+          onAddManually={() =>
+            openManualEntry(
+              submittedSearchScope === "all" ? undefined : submittedSearchScope,
+            )}
         />
       )}
 
