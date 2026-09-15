@@ -2673,10 +2673,18 @@ function MediaModal(
     >,
   ) {
     const { name, value, type } = event.target;
-    setForm((current) => ({
-      ...current,
-      [name]: type === "number" ? Number(value) : value,
-    }));
+    setForm((current) => {
+      const next = {
+        ...current,
+        [name]: type === "number" ? Number(value) : value,
+      };
+      if (item || !mediaTracking(next.type).tracksProgress) return next;
+      if (
+        (name === "status" && next.status === "completed" && next.total > 0) ||
+        (name === "total" && next.status === "completed")
+      ) next.progress = next.total;
+      return next;
+    });
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {

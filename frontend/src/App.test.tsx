@@ -578,6 +578,63 @@ describe("Library characterization", () => {
     expect(screen.getByRole("dialog", { name: "Add media" })).not.toBeNull();
   });
 
+  it("fills a completed new entry with all known tracking units", async () => {
+    const router = createFetchRouter();
+    let submitted: Record<string, unknown> | undefined;
+    bootstrap(router, []);
+    router.json("POST", "/api/media", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json(
+        {
+          ...mediaItems[0],
+          ...submitted,
+          id: 1,
+          createdAt: "2026-01-05T00:00:00Z",
+          updatedAt: "2026-01-05T00:00:00Z",
+        },
+        { status: 201 },
+      );
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add your first title" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Add manually" }));
+    const dialog = screen.getByRole("dialog", { name: "Add media" });
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Title" }),
+      "Completed anime",
+    );
+    const progress = within(dialog).getByRole("spinbutton", {
+      name: /Episodes watched/u,
+    }) as HTMLInputElement;
+    const total = within(dialog).getByRole("spinbutton", {
+      name: /Total episodes/u,
+    }) as HTMLInputElement;
+    await user.type(total, "12");
+    await user.selectOptions(
+      within(dialog).getByRole("combobox", { name: "Status" }),
+      "completed",
+    );
+    expect(progress.value).toBe("12");
+
+    await user.clear(total);
+    await user.type(total, "24");
+    expect(progress.value).toBe("24");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add to collection" }),
+    );
+
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toMatchObject({
+      status: "completed",
+      progress: 24,
+      total: 24,
+    });
+  });
+
   it("creates movies without numeric progress fields", async () => {
     const router = createFetchRouter();
     let submitted: Record<string, unknown> | undefined;
