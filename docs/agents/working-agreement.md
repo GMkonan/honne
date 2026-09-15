@@ -17,6 +17,14 @@ The code should remain understandable, intentional, and consistent with how the 
 7. Self-review the full diff for correctness, security, accessibility, compatibility, scope, and unnecessary complexity.
 8. Prepare English Git and GitHub artifacts when the owner requests delivery.
 
+## Delivery paths
+
+With owner approval, a small, coherent, reversible, low-risk change may be committed directly to a synchronized `main` after complete validation and self-review. A direct commit to `main` does not authorize a release.
+
+Use a descriptive branch without an immediate pull request for experiments or work that is still under evaluation.
+
+Use a descriptive branch and pull request for larger changes and for persistence migrations, authentication, public exposure, provider integrations, new dependencies, release changes, security-sensitive behavior, and other high-risk work. Direct commits must not bypass planning, validation, review, scope limits, or authorization for irreversible actions.
+
 ## Planning and tracking
 
 GitHub issues are optional for small, coherent changes. Use the shared tracker when an idea needs durable product context, unresolved decisions, multiple delivery slices, coordination, or explicit history.

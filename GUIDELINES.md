@@ -102,16 +102,16 @@
 ## Testes e validação
 
 - Mantenha testes backend determinísticos e autocontidos com `testing`, `httptest` e `t.TempDir`; nunca contate provedores reais.
-- Execute o backend com `go test -race ./...` e `go vet ./...` antes de abrir um PR.
+- Execute o backend com `go test -race ./...` e `go vet ./...` antes de entregar uma mudança por commit direto ou pull request.
 - Adicione testes de restart, rollback, concorrência e compatibilidade a toda alteração de persistência ou outbox.
 - Cubra timeouts, respostas inválidas, falhas parciais e idempotência ao alterar integrações externas.
 - Adicione testes automatizados para fluxos frontend críticos de navegação, busca, modal e acessibilidade após a aprovação da stack de testes frontend.
 - Documente validação manual reproduzível para comportamento frontend enquanto essa stack ainda não existir.
-- Execute lint, typecheck, build frontend e validação do Docker Compose antes de abrir um PR.
+- Execute lint, typecheck, build frontend e validação do Docker Compose antes de entregar uma mudança por commit direto ou pull request.
 
 ## Acessibilidade frontend
 
-- Atenda aos critérios WCAG 2.2 AA aplicáveis em toda interface nova ou alterada e documente a validação manual ou automatizada no PR.
+- Atenda aos critérios WCAG 2.2 AA aplicáveis em toda interface nova ou alterada e registre a validação manual ou automatizada no artefato de entrega, seja commit direto ou pull request.
 - Garanta operação completa por teclado e nunca comunique estado somente por cor.
 - Não use texto essencial abaixo de 12 px nem controles cujo alvo interativo seja menor que 24 por 24 px sem justificar e validar uma alternativa acessível.
 - Gerencie foco inicial, contenção, Escape e restauração de foco em modais.
@@ -128,7 +128,8 @@
 
 ## Git e pull requests
 
-- Use uma branch descritiva e nunca implemente diretamente em `main`; inclua o ID da card ou issue quando uma existir, mas não exija tracker para mudanças pequenas e coerentes.
+- Com aprovação do owner, mudanças pequenas, coerentes, reversíveis e de baixo risco podem ser implementadas e commitadas diretamente em uma `main` sincronizada após validação completa e self-review.
+- Use uma branch descritiva e pull request para mudanças maiores ou de maior risco; inclua o ID da card ou issue quando uma existir, mas não exija tracker para mudanças pequenas e coerentes.
 - Escreva em inglês todo conteúdo publicado no GitHub, incluindo issues/cards, branches, commits, pull requests, reviews e comentários; a conversa com o usuário permanece em pt-BR.
 - Use commits pequenos com Conventional Commits (`feat:`, `fix:`, `test:`, `docs:` ou `chore:`).
 - Quando houver uma card ou issue associada, vincule o PR; sempre descreva contexto, mudanças e comandos de validação.
