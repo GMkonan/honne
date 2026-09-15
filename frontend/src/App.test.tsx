@@ -478,15 +478,25 @@ describe("Library characterization", () => {
     render(<App />);
     await screen.findByRole("button", { name: /^View details for Dune/ });
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Search media type" }),
-      "anime",
+    const scope = screen.getByRole("button", {
+      name: "Search media type: All media",
+    });
+    scope.focus();
+    await user.keyboard("{ArrowDown}");
+    const scopeOptions = screen.getByRole("listbox", {
+      name: "Search media type",
+    });
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(scopeOptions).getByRole("option", { name: "All media" }),
+      )
     );
+    await user.keyboard("{ArrowDown}{Enter}");
     expect(
-      (screen.getByRole("combobox", {
-        name: "Search media type from menu",
-      }) as HTMLSelectElement).value,
-    ).toBe("anime");
+      screen.getByRole("button", {
+        name: "Search media type from menu: Anime",
+      }),
+    ).not.toBeNull();
     await user.type(
       screen.getByRole("combobox", { name: "Search Honne" }),
       "Nar",
@@ -542,9 +552,12 @@ describe("Library characterization", () => {
     await waitFor(() => expect(allMediaSignal).toBeDefined(), {
       timeout: 1500,
     });
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Search media type" }),
-      "anime",
+    await user.click(
+      screen.getByRole("button", { name: "Search media type: All media" }),
+    );
+    await user.click(
+      within(screen.getByRole("listbox", { name: "Search media type" }))
+        .getByRole("option", { name: "Anime" }),
     );
 
     await waitFor(() => expect(allMediaSignal?.aborted).toBe(true));

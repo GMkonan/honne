@@ -164,8 +164,8 @@ button {
   display: none;
 }
 .nav-search {
-  width: 320px;
-  height: 34px;
+  width: 350px;
+  height: 38px;
   position: relative;
   margin-left: auto;
   display: flex;
@@ -180,29 +180,88 @@ button {
 .nav-search:focus-within {
   border-color: var(--surface-2);
 }
-.search-scope-select {
-  min-width: 0;
-  max-width: 104px;
-  height: 26px;
-  flex: 0 1 auto;
-  padding: 0 7px 0 0;
+.search-scope-control {
+  width: 116px;
+  height: 30px;
+  position: relative;
+  flex: 0 0 116px;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--overlay);
+}
+.search-scope-trigger {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 9px 0 2px;
   border: 0;
-  border-right: 1px solid var(--surface-2);
   outline: 0;
-  color: var(--subtext);
-  background: var(--crust);
+  color: var(--text);
+  background: transparent;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
-.search-scope-select:focus-visible {
+.search-scope-trigger:hover,
+.search-scope-trigger[aria-expanded='true'] {
   color: var(--blue);
-  border-right-color: var(--blue);
-  outline: 2px solid var(--blue);
-  outline-offset: 1px;
 }
-.search-scope-select option {
-  color: var(--text);
+.search-scope-trigger:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+.search-scope-chevron {
+  flex: 0 0 auto;
+  color: var(--subtext);
+  pointer-events: none;
+}
+.search-scope-control:focus-within .search-scope-chevron {
+  color: var(--blue);
+}
+.search-scope-options {
+  width: calc(100% + 10px);
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 7px);
+  left: -10px;
+  display: grid;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--surface-2);
+  border-radius: 4px;
   background: var(--mantle);
+  box-shadow: 0 12px 28px rgba(0,0,0,.44);
+}
+.search-scope-options button {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  color: var(--subtext);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.search-scope-options button:hover,
+.search-scope-options button:focus-visible {
+  color: var(--text);
+  background: var(--surface);
+}
+.search-scope-options button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+.search-scope-options button.selected {
+  color: var(--blue);
+  background: rgba(137,180,250,.1);
 }
 .nav-search input {
   min-width: 0;
@@ -211,7 +270,7 @@ button {
   outline: 0;
   color: var(--text);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
 }
 .search-suggestions {
   width: min(420px, calc(100vw - 28px));
@@ -1452,9 +1511,9 @@ button {
 .search-page-query:focus-within {
   border-color: var(--blue);
 }
-.search-page-query .search-scope-select {
-  max-width: 112px;
-  background: var(--mantle);
+.search-page-query .search-scope-control {
+  width: 124px;
+  flex-basis: 124px;
 }
 .search-page-query input {
   min-width: 0;
@@ -3167,7 +3226,7 @@ button {
     padding: 0 8px;
   }
   .mobile-global-search {
-    min-height: 39px;
+    min-height: 44px;
     position: relative;
     display: flex;
     align-items: center;
@@ -3189,8 +3248,9 @@ button {
   .mobile-global-search .search-suggestions [role='listbox'] {
     max-height: min(280px, 34vh);
   }
-  .mobile-global-search .search-scope-select {
-    max-width: 105px;
+  .mobile-global-search .search-scope-control {
+    width: 116px;
+    flex-basis: 116px;
   }
   .mobile-global-search input {
     min-width: 0;
@@ -3199,7 +3259,7 @@ button {
     outline: 0;
     color: var(--text);
     background: transparent;
-    font-size: 10px;
+    font-size: 12px;
   }
   .nav-import {
     min-height: 40px;

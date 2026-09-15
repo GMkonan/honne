@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Search } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 export type SearchMediaType =
   | "anime"
@@ -153,11 +153,17 @@ export function GlobalSearchBox({
   onOpenCatalog,
 }: GlobalSearchBoxProps) {
   const formRef = useRef<HTMLFormElement>(null);
+  const scopeButtonRef = useRef<HTMLButtonElement>(null);
+  const scopeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const composingRef = useRef(false);
   const [open, setOpen] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const queryLength = Array.from(query.trim()).length;
   const validQuery = queryLength >= 3;
+  const selectedScopeLabel =
+    searchScopeOptions.find((option) => option.value === scope)?.label ||
+    "All media";
   const suggestions = useMemo(
     () => validQuery ? roundRobin(catalogResults) : [],
     [catalogResults, validQuery],
@@ -167,20 +173,71 @@ export function GlobalSearchBox({
   ).join("|");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !scopeOpen) return;
     function closeFromOutside(event: PointerEvent) {
       if (!formRef.current?.contains(event.target as Node)) close();
     }
     document.addEventListener("pointerdown", closeFromOutside);
     return () => document.removeEventListener("pointerdown", closeFromOutside);
-  }, [open]);
+  }, [open, scopeOpen]);
 
   useEffect(() => setActiveIndex(-1), [query, scope, suggestionKeys]);
 
   function close() {
     setOpen(false);
+    setScopeOpen(false);
     setActiveIndex(-1);
     onDeactivate();
+  }
+
+  function focusScopeOption(index: number) {
+    requestAnimationFrame(() => scopeOptionRefs.current[index]?.focus());
+  }
+
+  function openScopeOptions(index: number) {
+    setOpen(false);
+    setActiveIndex(-1);
+    setScopeOpen(true);
+    focusScopeOption(index);
+  }
+
+  function selectScope(nextScope: SearchScope) {
+    setScopeOpen(false);
+    onScopeChange(nextScope);
+    onActivate(query);
+    if (validQuery) setOpen(true);
+    scopeButtonRef.current?.focus();
+  }
+
+  function handleScopeOptionKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setScopeOpen(false);
+      scopeButtonRef.current?.focus();
+      return;
+    }
+    if (event.key === "Tab") {
+      setScopeOpen(false);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    const lastIndex = searchScopeOptions.length - 1;
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+      ? lastIndex
+      : event.key === "ArrowDown"
+      ? index === lastIndex ? 0 : index + 1
+      : index === 0
+      ? lastIndex
+      : index - 1;
+    scopeOptionRefs.current[nextIndex]?.focus();
   }
 
   function changeQuery(event: ChangeEvent<HTMLInputElement>) {
@@ -234,23 +291,76 @@ export function GlobalSearchBox({
         onSubmit(event);
       }}
     >
-      <Search size={15} aria-hidden="true" />
-      <select
-        className="search-scope-select"
-        aria-label={scopeLabel}
-        value={scope}
-        onChange={(event) => {
-          onScopeChange(event.target.value as SearchScope);
-          onActivate(query);
-          if (validQuery) setOpen(true);
-        }}
-      >
-        {searchScopeOptions.map((option) => (
-          <option value={option.value} key={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <span className="search-scope-control">
+        <button
+          ref={scopeButtonRef}
+          type="button"
+          className="search-scope-trigger"
+          aria-haspopup="listbox"
+          aria-expanded={scopeOpen}
+          aria-controls={`${id}-scope-options`}
+          onClick={() => {
+            if (scopeOpen) setScopeOpen(false);
+            else {
+              const selectedIndex = searchScopeOptions.findIndex((option) =>
+                option.value === scope
+              );
+              openScopeOptions(Math.max(selectedIndex, 0));
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              const selectedIndex = searchScopeOptions.findIndex((option) =>
+                option.value === scope
+              );
+              openScopeOptions(
+                event.key === "ArrowUp"
+                  ? searchScopeOptions.length - 1
+                  : Math.max(selectedIndex, 0),
+              );
+            } else if (event.key === "Escape") setScopeOpen(false);
+          }}
+        >
+          <span className="sr-only">
+            {`${scopeLabel}: ${selectedScopeLabel}`}
+          </span>
+          <span aria-hidden="true">{selectedScopeLabel}</span>
+          <ChevronDown
+            className="search-scope-chevron"
+            size={15}
+            aria-hidden="true"
+          />
+        </button>
+        {scopeOpen && (
+          <div
+            id={`${id}-scope-options`}
+            className="search-scope-options"
+            role="listbox"
+            aria-label={scopeLabel}
+          >
+            {searchScopeOptions.map((option, index) => (
+              <button
+                ref={(element) => {
+                  scopeOptionRefs.current[index] = element;
+                }}
+                type="button"
+                role="option"
+                aria-selected={option.value === scope}
+                className={option.value === scope ? "selected" : ""}
+                onClick={() => selectScope(option.value)}
+                onKeyDown={(event) => handleScopeOptionKeyDown(event, index)}
+                key={option.value}
+              >
+                <span>{option.label}</span>
+                {option.value === scope && (
+                  <Check size={14} aria-hidden="true" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </span>
       <input
         value={query}
         maxLength={100}
@@ -265,6 +375,7 @@ export function GlobalSearchBox({
         placeholder={placeholder}
         onChange={changeQuery}
         onFocus={() => {
+          setScopeOpen(false);
           onActivate(query);
           if (validQuery) setOpen(true);
         }}
