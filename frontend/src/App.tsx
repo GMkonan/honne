@@ -32,6 +32,8 @@ import {
 import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
 import {
   catalogCoverStyle,
+  type CatalogDetailResponse,
+  type CatalogRelation,
   GlobalSearchBox,
   type SearchCatalogResult,
   type SearchMediaCredit,
@@ -559,6 +561,60 @@ function sanitizeStoredResult(result: DiscoveryResult): DiscoveryResult {
   };
 }
 
+function sanitizeCatalogDetail(
+  response: CatalogDetailResponse,
+  selected: DiscoveryResult,
+): CatalogDetailResponse {
+  if (
+    response.provider !== selected.provider ||
+    response.type !== selected.type ||
+    response.providerId !== selected.providerId
+  ) throw new Error("The metadata provider returned a different title.");
+
+  const result = sanitizeStoredResult(response);
+  const seenTitles = new Set([result.title.toLocaleLowerCase("en")]);
+  const alternativeTitles = Array.isArray(response.alternativeTitles)
+    ? response.alternativeTitles.map((title) => safeStoredText(title, 200))
+      .filter((title): title is string => {
+        if (!title) return false;
+        const key = title.toLocaleLowerCase("en");
+        if (seenTitles.has(key)) return false;
+        seenTitles.add(key);
+        return true;
+      }).slice(0, 12)
+    : [];
+  const allowedRelations = new Set([
+    "sequel",
+    "prequel",
+    "source",
+    "adaptation",
+    "side story",
+    "spin-off",
+    "parent",
+  ]);
+  const seenRelations = new Set<string>();
+  const relations: CatalogRelation[] = [];
+  if (Array.isArray(response.relations)) {
+    for (const relation of response.relations) {
+      if (
+        !relation || !allowedRelations.has(relation.relation) ||
+        !relation.result || typeof relation.result !== "object"
+      ) continue;
+      const related = sanitizeStoredResult(relation.result);
+      const key = `${related.provider}:${related.type}:${related.providerId}`;
+      if (
+        related.provider !== "anilist" ||
+        !["anime", "manga", "light_novel"].includes(related.type) ||
+        !/^[1-9]\d*$/u.test(related.providerId) || seenRelations.has(key)
+      ) continue;
+      seenRelations.add(key);
+      relations.push({ relation: relation.relation, result: related });
+      if (relations.length === 12) break;
+    }
+  }
+  return { ...result, alternativeTitles, relations };
+}
+
 function storedExternalDetail(): DetailSelection | null {
   const match = globalThis.location.hash.match(
     /^#catalog\/([^/]+)\/([^/]+)\/([^/]+)$/,
@@ -641,6 +697,20 @@ function App() {
     loading: false,
     error: "",
   });
+  const [aniListContext, setAniListContext] = useState<{
+    identity: string;
+    loading: boolean;
+    error: string;
+    alternativeTitles: string[];
+    relations: CatalogRelation[];
+  }>({
+    identity: "",
+    loading: false,
+    error: "",
+    alternativeTitles: [],
+    relations: [],
+  });
+  const [aniListContextGeneration, setAniListContextGeneration] = useState(0);
   const [draftItem, setDraftItem] = useState<MediaInput | undefined>(undefined);
   const [discoveryType, setDiscoveryType] = useState<
     MediaType | null | undefined
@@ -736,6 +806,15 @@ function App() {
       detail.result.provider === "rawg" && detail.result.type === "game"
     ? `${detail.result.provider}:${detail.result.type}:${detail.result.providerId}`
     : "";
+  const detailSource = view === "detail"
+    ? detail?.kind === "local"
+      ? items.find((item) => item.id === detail.mediaId)
+      : detail?.result
+    : undefined;
+  const aniListContextIdentity = detailSource?.provider === "anilist" &&
+      ["anime", "manga", "light_novel"].includes(detailSource.type)
+    ? `${detailSource.provider}:${detailSource.type}:${detailSource.providerId}`
+    : "";
 
   useEffect(() => {
     if (!externalDetailIdentity || detail?.kind !== "external") {
@@ -791,6 +870,81 @@ function App() {
     });
     return () => controller.abort();
   }, [externalDetailIdentity]);
+
+  useEffect(() => {
+    if (!aniListContextIdentity || !detailSource) {
+      setAniListContext({
+        identity: "",
+        loading: false,
+        error: "",
+        alternativeTitles: [],
+        relations: [],
+      });
+      return;
+    }
+    const selected = detailSource;
+    const controller = new AbortController();
+    setAniListContext((current) => ({
+      identity: aniListContextIdentity,
+      loading: true,
+      error: "",
+      alternativeTitles: current.identity === aniListContextIdentity
+        ? current.alternativeTitles
+        : [],
+      relations: current.identity === aniListContextIdentity
+        ? current.relations
+        : [],
+    }));
+    const params = new URLSearchParams({
+      provider: selected.provider,
+      type: selected.type,
+      id: selected.providerId,
+    });
+    request<CatalogDetailResponse>(`/api/discovery/detail?${params}`, {
+      signal: controller.signal,
+    }).then((response) => {
+      const context = sanitizeCatalogDetail(response, selected);
+      setAniListContext((current) =>
+        current.identity === aniListContextIdentity
+          ? {
+            identity: current.identity,
+            loading: false,
+            error: "",
+            alternativeTitles: context.alternativeTitles,
+            relations: context.relations,
+          }
+          : current
+      );
+      if (detail?.kind === "external") {
+        const enriched = sanitizeStoredResult({ ...selected, ...context });
+        setDetail((current) =>
+          current?.kind === "external" &&
+            `${current.result.provider}:${current.result.type}:${current.result.providerId}` ===
+              aniListContextIdentity
+            ? { kind: "external", result: enriched }
+            : current
+        );
+        try {
+          globalThis.sessionStorage.setItem(
+            `honne:catalog:${enriched.provider}:${enriched.type}:${enriched.providerId}`,
+            JSON.stringify(enriched),
+          );
+        } catch {
+          // The current view still works when private browsing blocks storage.
+        }
+      }
+    }).catch((caught: unknown) => {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        return;
+      }
+      setAniListContext((current) =>
+        current.identity === aniListContextIdentity
+          ? { ...current, loading: false, error: errorMessage(caught) }
+          : current
+      );
+    });
+    return () => controller.abort();
+  }, [aniListContextIdentity, aniListContextGeneration]);
 
   useEffect(() => {
     const query = suggestionQuery.trim();
@@ -1501,9 +1655,29 @@ function App() {
             : externalMetadata.identity === externalDetailIdentity
             ? externalMetadata.error
             : ""}
+          alternativeTitles={aniListContext.identity ===
+              aniListContextIdentity
+            ? aniListContext.alternativeTitles
+            : []}
+          relations={aniListContext.identity === aniListContextIdentity
+            ? aniListContext.relations.map((relation) => ({
+              ...relation,
+              existing: findExistingLibraryItem(relation.result, items),
+            }))
+            : []}
+          catalogContextLoading={Boolean(aniListContextIdentity) &&
+            (aniListContext.identity !== aniListContextIdentity ||
+              aniListContext.loading)}
+          catalogContextError={aniListContext.identity ===
+              aniListContextIdentity
+            ? aniListContext.error
+            : ""}
           onBack={leaveDetail}
           onAdd={reviewDiscovery}
           onRefreshMetadata={refreshMediaMetadata}
+          onRetryCatalogContext={() =>
+            setAniListContextGeneration((current) => current + 1)}
+          onOpenRelated={openExternalDetail}
           onManage={(item) => setManagedItem(item)}
         />
       )}
