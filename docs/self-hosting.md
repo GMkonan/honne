@@ -46,9 +46,10 @@ Never use `docker compose down --volumes` unless deleting the collection is inte
 ```dotenv
 PROFILE_NAME=My Library
 PROFILE_AVATAR_URL=https://images.example.com/avatar.png
+PROFILE_CAT_ENABLED=false
 ```
 
-The avatar must be an absolute HTTP or HTTPS URL without embedded credentials. Invalid profile values stop the backend during startup.
+The avatar must be an absolute HTTP or HTTPS URL without embedded credentials. Set `PROFILE_CAT_ENABLED=true` to place the decorative Honne cat above the profile image. Invalid profile values stop the backend during startup.
 
 ### Optional login
 

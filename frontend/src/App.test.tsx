@@ -33,7 +33,7 @@ afterEach(() => {
 function bootstrap(
   router: FetchRouter,
   items: unknown[] = mediaItems,
-  profile = { name: "My Library", avatarUrl: "" },
+  profile = { name: "My Library", avatarUrl: "", catEnabled: false },
 ) {
   router
     .json("GET", "/api/profile", profile)
@@ -76,6 +76,7 @@ describe("Library characterization", () => {
       "Spirited Away",
       "Cowboy Bebop",
     ]);
+    expect(document.querySelector('img[src="/profile-cat.svg"]')).toBeNull();
     const duneCard = screen.getByRole("button", {
       name: /^View details for Dune/,
     });
@@ -97,8 +98,9 @@ describe("Library characterization", () => {
     bootstrap(router, mediaItems, {
       name: "Konan Library",
       avatarUrl: "https://images.example.com/avatar.png",
+      catEnabled: true,
     });
-    render(<App />);
+    const { container } = render(<App />);
 
     const avatar = await screen.findByRole("img", {
       name: "Konan Library profile",
@@ -109,6 +111,10 @@ describe("Library characterization", () => {
       name: "Konan Library default profile mark",
     });
     expect(defaultMark.textContent).toBe("本音");
+    const cat = container.querySelector(
+      'img[src="/profile-cat.svg"][aria-hidden="true"]',
+    );
+    expect(cat?.getAttribute("alt")).toBe("");
   });
 
   it("renders a textual badge for every media status", async () => {

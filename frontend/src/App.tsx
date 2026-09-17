@@ -781,6 +781,7 @@ function App() {
   const [profile, setProfile] = useState<PublicProfile>({
     name: "My Library",
     avatarUrl: "",
+    catEnabled: false,
   });
   const [profileLoading, setProfileLoading] = useState(true);
 

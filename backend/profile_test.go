@@ -12,6 +12,7 @@ import (
 func TestProfileConfigDefaults(t *testing.T) {
 	unsetEnv(t, "PROFILE_NAME")
 	t.Setenv("PROFILE_AVATAR_URL", "")
+	unsetEnv(t, "PROFILE_CAT_ENABLED")
 	t.Setenv("APP_USERNAME", "")
 	t.Setenv("APP_PASSWORD", "")
 	t.Setenv("ANILIST_CLIENT_ID", "")
@@ -25,7 +26,7 @@ func TestProfileConfigDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ProfileName != "My Library" || cfg.ProfileAvatarURL != "" || cfg.RAWGAPIURL != "https://api.rawg.io/api" {
+	if cfg.ProfileName != "My Library" || cfg.ProfileAvatarURL != "" || cfg.ProfileCatEnabled || cfg.RAWGAPIURL != "https://api.rawg.io/api" {
 		t.Fatalf("unexpected profile defaults: %+v", cfg)
 	}
 	t.Setenv("RAWG_API_URL", "ftp://example.com")
@@ -37,6 +38,7 @@ func TestProfileConfigDefaults(t *testing.T) {
 func TestProfileConfigAcceptsValidValues(t *testing.T) {
 	t.Setenv("PROFILE_NAME", "  Konan の Library  ")
 	t.Setenv("PROFILE_AVATAR_URL", "https://images.example.com/avatar.png")
+	t.Setenv("PROFILE_CAT_ENABLED", "true")
 
 	name, err := loadProfileName()
 	if err != nil {
@@ -46,8 +48,12 @@ func TestProfileConfigAcceptsValidValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name != "Konan の Library" || avatarURL != "https://images.example.com/avatar.png" {
-		t.Fatalf("unexpected profile: name=%q avatar=%q", name, avatarURL)
+	catEnabled, err := envBool("PROFILE_CAT_ENABLED", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "Konan の Library" || avatarURL != "https://images.example.com/avatar.png" || !catEnabled {
+		t.Fatalf("unexpected profile: name=%q avatar=%q cat=%t", name, avatarURL, catEnabled)
 	}
 }
 
@@ -70,15 +76,21 @@ func TestProfileConfigRejectsInvalidValues(t *testing.T) {
 			t.Errorf("accepted invalid avatar URL %q", value)
 		}
 	}
+
+	t.Setenv("PROFILE_CAT_ENABLED", "sometimes")
+	if _, err := envBool("PROFILE_CAT_ENABLED", false); err == nil {
+		t.Error("accepted invalid profile cat toggle")
+	}
 }
 
 func TestProfileEndpointReturnsOnlyPublicFields(t *testing.T) {
 	application := &app{config: config{
-		ProfileName:      "Konan",
-		ProfileAvatarURL: "https://images.example.com/avatar.png",
-		TMDBAPIToken:     "must-not-leak",
-		RAWGAPIKey:       "must-not-leak",
-		AppPassword:      "must-not-leak",
+		ProfileName:       "Konan",
+		ProfileAvatarURL:  "https://images.example.com/avatar.png",
+		ProfileCatEnabled: true,
+		TMDBAPIToken:      "must-not-leak",
+		RAWGAPIKey:        "must-not-leak",
+		AppPassword:       "must-not-leak",
 	}}
 	response := httptest.NewRecorder()
 
@@ -90,11 +102,11 @@ func TestProfileEndpointReturnsOnlyPublicFields(t *testing.T) {
 	if response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", response.Header().Get("Cache-Control"))
 	}
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body) != 2 || body["name"] != "Konan" || body["avatarUrl"] != "https://images.example.com/avatar.png" {
+	if len(body) != 3 || body["name"] != "Konan" || body["avatarUrl"] != "https://images.example.com/avatar.png" || body["catEnabled"] != true {
 		t.Fatalf("unexpected response: %#v", body)
 	}
 }

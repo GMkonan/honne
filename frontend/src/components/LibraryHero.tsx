@@ -3,6 +3,7 @@ import { useState } from "react";
 export interface PublicProfile {
   name: string;
   avatarUrl: string;
+  catEnabled: boolean;
 }
 
 interface LibraryHeroProps {
@@ -36,25 +37,35 @@ export function LibraryHero(
     >
       <div className="hero-overlay" />
       <div className="page-container hero-content">
-        <div className="profile-mark">
-          {showAvatar
-            ? (
-              <img
-                src={profile.avatarUrl}
-                alt={`${profile.name} profile`}
-                onError={() => setFailedAvatarUrl(profile.avatarUrl)}
-              />
-            )
-            : (
-              <span
-                role="img"
-                aria-label={profileLoading
-                  ? "Loading Library profile"
-                  : `${profile.name} default profile mark`}
-              >
-                本音
-              </span>
-            )}
+        <div className="profile-avatar">
+          {!profileLoading && profile.catEnabled && (
+            <img
+              className="profile-cat"
+              src="/profile-cat.svg"
+              alt=""
+              aria-hidden="true"
+            />
+          )}
+          <div className="profile-mark">
+            {showAvatar
+              ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt={`${profile.name} profile`}
+                  onError={() => setFailedAvatarUrl(profile.avatarUrl)}
+                />
+              )
+              : (
+                <span
+                  role="img"
+                  aria-label={profileLoading
+                    ? "Loading Library profile"
+                    : `${profile.name} default profile mark`}
+                >
+                  本音
+                </span>
+              )}
+          </div>
         </div>
         <div className="hero-copy">
           <span className="hero-kicker">

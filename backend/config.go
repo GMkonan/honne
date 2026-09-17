@@ -11,13 +11,14 @@ import (
 )
 
 type config struct {
-	Port             string
-	DataPath         string
-	AllowedOrigin    string
-	AppUsername      string
-	AppPassword      string
-	ProfileName      string
-	ProfileAvatarURL string
+	Port              string
+	DataPath          string
+	AllowedOrigin     string
+	AppUsername       string
+	AppPassword       string
+	ProfileName       string
+	ProfileAvatarURL  string
+	ProfileCatEnabled bool
 
 	AniListAPIURL     string
 	KitsuAPIURL       string
@@ -50,6 +51,10 @@ func loadConfig() (config, error) {
 	if err != nil {
 		return config{}, err
 	}
+	profileCatEnabled, err := envBool("PROFILE_CAT_ENABLED", false)
+	if err != nil {
+		return config{}, err
+	}
 
 	dataPath := envOr("DATA_PATH", "data/media.json")
 	cfg := config{
@@ -60,6 +65,7 @@ func loadConfig() (config, error) {
 		AppPassword:          os.Getenv("APP_PASSWORD"),
 		ProfileName:          profileName,
 		ProfileAvatarURL:     profileAvatarURL,
+		ProfileCatEnabled:    profileCatEnabled,
 		AniListAPIURL:        envOr("ANILIST_API_URL", "https://graphql.anilist.co"),
 		KitsuAPIURL:          envOr("KITSU_API_URL", "https://kitsu.io/api/edge"),
 		OpenLibraryAPIURL:    envOr("OPEN_LIBRARY_API_URL", "https://openlibrary.org"),
