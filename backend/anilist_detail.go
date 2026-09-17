@@ -12,7 +12,7 @@ import (
 func (s *discoveryService) fetchAniListDetail(ctx context.Context, mediaType, providerID string) (discoveryDetail, error) {
 	const graphQL = `query ($id: Int!, $type: MediaType!) {
   Media(id: $id, type: $type) {
-    id siteUrl type format status description(asHtml: false) episodes chapters duration genres averageScore isAdult synonyms
+    id siteUrl type format status description(asHtml: false) episodes chapters duration genres averageScore isAdult
     title { romaji english native }
     coverImage { extraLarge }
     startDate { year month day }
@@ -105,8 +105,8 @@ func boundedAniListResult(item anilistMedia, mediaType string) (discoveryResult,
 }
 
 func aniListAlternativeTitles(item anilistMedia, primary string) []string {
-	values := append([]string{item.Title.Romaji, item.Title.English, item.Title.Native}, item.Synonyms...)
-	result := make([]string, 0, min(len(values), 12))
+	values := []string{item.Title.Romaji, item.Title.English, item.Title.Native}
+	result := make([]string, 0, len(values))
 	seen := map[string]bool{strings.ToLower(strings.TrimSpace(primary)): true}
 	for _, value := range values {
 		value = limitedProviderText(value, 200)
@@ -116,9 +116,6 @@ func aniListAlternativeTitles(item anilistMedia, primary string) []string {
 		}
 		seen[key] = true
 		result = append(result, value)
-		if len(result) == 12 {
-			break
-		}
 	}
 	return result
 }

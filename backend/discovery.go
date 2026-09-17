@@ -93,7 +93,6 @@ type anilistMedia struct {
 	Status       string   `json:"status"`
 	Duration     int      `json:"duration"`
 	Genres       []string `json:"genres"`
-	Synonyms     []string `json:"synonyms"`
 	AverageScore int      `json:"averageScore"`
 	IsAdult      bool     `json:"isAdult"`
 	Title        struct {

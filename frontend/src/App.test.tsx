@@ -1783,10 +1783,7 @@ describe("Library characterization", () => {
       "/api/discovery/detail?provider=anilist&type=anime&id=1",
       {
         ...linkedItem,
-        alternativeTitles: [
-          "Cowboy Bebop: The Complete Sessions",
-          "カウボーイビバップ",
-        ],
+        alternativeTitles: ["Kaubōi Bibappu", "カウボーイビバップ"],
         relations: [{
           relation: "sequel",
           result: {
@@ -1821,8 +1818,7 @@ describe("Library characterization", () => {
     expect(
       await screen.findByRole("heading", { name: "Alternative titles" }),
     ).not.toBeNull();
-    expect(screen.getByText(/Cowboy Bebop: The Complete Sessions/u)).not
-      .toBeNull();
+    expect(screen.getByText(/Kaubōi Bibappu/u)).not.toBeNull();
     const related = await screen.findByRole("button", {
       name: "Open Space Dandy, sequel, in your Library",
     });

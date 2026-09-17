@@ -23,7 +23,7 @@ func TestAniListDetailMapsAlternativeTitlesAndRelations(t *testing.T) {
 			t.Fatal(err)
 		}
 		if body.Variables["id"] != float64(21366) || body.Variables["type"] != "ANIME" ||
-			!strings.Contains(body.Query, "relations") || !strings.Contains(body.Query, "synonyms") {
+			!strings.Contains(body.Query, "relations") || strings.Contains(body.Query, "synonyms") {
 			t.Fatalf("unexpected AniList detail request: %+v", body)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -37,7 +37,7 @@ func TestAniListDetailMapsAlternativeTitlesAndRelations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if detail.Title != "March comes in like a lion" || detail.CatalogTotal != 22 ||
-		strings.Join(detail.AlternativeTitles, "|") != "3-gatsu no Lion|３月のライオン|Sangatsu no Lion" {
+		strings.Join(detail.AlternativeTitles, "|") != "3-gatsu no Lion|３月のライオン" {
 		t.Fatalf("unexpected title detail: %+v", detail)
 	}
 	if len(detail.Relations) != 3 || detail.Relations[0].Relation != "sequel" ||
