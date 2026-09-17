@@ -709,11 +709,17 @@ describe("Library characterization", () => {
     expect(
       await screen.findByRole("heading", { name: "Results for “Dune”" }),
     ).not.toBeNull();
+    const resultScope = screen.getByRole("button", {
+      name: "Refine search media type: Books",
+    });
+    await user.click(resultScope);
     expect(
-      (screen.getByRole("combobox", {
+      within(screen.getByRole("listbox", {
         name: "Refine search media type",
-      }) as HTMLSelectElement).value,
-    ).toBe("book");
+      })).getByRole("option", { name: "Books", selected: true }),
+    ).not.toBeNull();
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(resultScope);
     expect(globalThis.location.hash).toBe("#search/book/Dune");
     expect(router.fetch).toHaveBeenCalledWith(
       "/api/discovery/search?type=book&q=Dune&page=1",

@@ -14,7 +14,7 @@ import {
   type SearchCatalogResult,
   type SearchMediaType,
   type SearchScope,
-  searchScopeOptions,
+  SearchScopeControl,
 } from "./GlobalSearchBox.tsx";
 
 type TypeFilter = "all" | SearchMediaType;
@@ -168,20 +168,16 @@ export function GlobalSearchPage({
               onSubmit(event);
             }}
           >
-            <Search size={17} aria-hidden="true" />
-            <select
-              className="search-scope-select"
-              aria-label="Refine search media type"
-              value={inputScope}
-              onChange={(event) =>
-                onScopeChange(event.target.value as SearchScope)}
-            >
-              {searchScopeOptions.map((option) => (
-                <option value={option.value} key={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <SearchScopeControl
+              id="search-page"
+              scope={inputScope}
+              label="Refine search media type"
+              onOpen={() => {
+                setOperatorOpen(false);
+                setActiveOperator(-1);
+              }}
+              onChange={onScopeChange}
+            />
             <span className="search-page-input">
               <input
                 ref={inputRef}

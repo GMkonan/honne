@@ -31,6 +31,155 @@ export const searchScopeOptions: { value: SearchScope; label: string }[] = [
   { value: "game", label: "Games" },
 ];
 
+interface SearchScopeControlProps {
+  id: string;
+  scope: SearchScope;
+  label: string;
+  onChange: (scope: SearchScope) => void;
+  onOpen?: () => void;
+}
+
+export function SearchScopeControl({
+  id,
+  scope,
+  label,
+  onChange,
+  onOpen,
+}: SearchScopeControlProps) {
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [open, setOpen] = useState(false);
+  const selectedLabel =
+    searchScopeOptions.find((option) => option.value === scope)?.label ||
+    "All media";
+
+  useEffect(() => {
+    if (!open) return;
+    function closeFromOutside(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeFromOutside);
+    return () => document.removeEventListener("pointerdown", closeFromOutside);
+  }, [open]);
+
+  function focusOption(index: number) {
+    requestAnimationFrame(() => optionRefs.current[index]?.focus());
+  }
+
+  function openOptions(index: number) {
+    onOpen?.();
+    setOpen(true);
+    focusOption(index);
+  }
+
+  function selectScope(nextScope: SearchScope) {
+    setOpen(false);
+    onChange(nextScope);
+    triggerRef.current?.focus();
+  }
+
+  function handleOptionKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+    if (event.key === "Tab") {
+      setOpen(false);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    const lastIndex = searchScopeOptions.length - 1;
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+      ? lastIndex
+      : event.key === "ArrowDown"
+      ? index === lastIndex ? 0 : index + 1
+      : index === 0
+      ? lastIndex
+      : index - 1;
+    optionRefs.current[nextIndex]?.focus();
+  }
+
+  return (
+    <span ref={rootRef} className="search-scope-control">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="search-scope-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={`${id}-scope-options`}
+        onClick={() => {
+          if (open) setOpen(false);
+          else {
+            const selectedIndex = searchScopeOptions.findIndex((option) =>
+              option.value === scope
+            );
+            openOptions(Math.max(selectedIndex, 0));
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            const selectedIndex = searchScopeOptions.findIndex((option) =>
+              option.value === scope
+            );
+            openOptions(
+              event.key === "ArrowUp"
+                ? searchScopeOptions.length - 1
+                : Math.max(selectedIndex, 0),
+            );
+          } else if (event.key === "Escape") setOpen(false);
+        }}
+      >
+        <span className="sr-only">{`${label}: ${selectedLabel}`}</span>
+        <span aria-hidden="true">{selectedLabel}</span>
+        <ChevronDown
+          className="search-scope-chevron"
+          size={15}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
+        <div
+          id={`${id}-scope-options`}
+          className="search-scope-options"
+          role="listbox"
+          aria-label={label}
+        >
+          {searchScopeOptions.map((option, index) => (
+            <button
+              ref={(element) => {
+                optionRefs.current[index] = element;
+              }}
+              type="button"
+              role="option"
+              aria-selected={option.value === scope}
+              className={option.value === scope ? "selected" : ""}
+              onClick={() => selectScope(option.value)}
+              onKeyDown={(event) => handleOptionKeyDown(event, index)}
+              key={option.value}
+            >
+              <span>{option.label}</span>
+              {option.value === scope && <Check size={14} aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
 export const searchOperatorOptions: {
   operator: string;
   scope: SearchMediaType;
@@ -203,11 +352,8 @@ export function GlobalSearchBox({
 }: GlobalSearchBoxProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const scopeButtonRef = useRef<HTMLButtonElement>(null);
-  const scopeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const composingRef = useRef(false);
   const [open, setOpen] = useState(false);
-  const [scopeOpen, setScopeOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const parsedQuery = parseSearchQuery(query, scope);
   const searchTerm = parsedQuery.query.trim();
@@ -223,81 +369,33 @@ export function GlobalSearchBox({
   );
   const optionCount = operatorSuggestions.length + catalogSuggestions.length;
   const popupOpen = open && (operatorSuggestions.length > 0 || validQuery);
-  const selectedScopeLabel =
-    searchScopeOptions.find((option) => option.value === scope)?.label ||
-    "All media";
   const suggestionKeys = catalogSuggestions.map((result) =>
     `${result.provider}:${result.providerId}`
   ).join("|");
 
   useEffect(() => {
-    if (!open && !scopeOpen) return;
+    if (!open) return;
     function closeFromOutside(event: PointerEvent) {
       if (!formRef.current?.contains(event.target as Node)) close();
     }
     document.addEventListener("pointerdown", closeFromOutside);
     return () => document.removeEventListener("pointerdown", closeFromOutside);
-  }, [open, scopeOpen]);
+  }, [open]);
 
   useEffect(() => setActiveIndex(-1), [query, scope, suggestionKeys]);
 
   function close() {
     setOpen(false);
-    setScopeOpen(false);
     setActiveIndex(-1);
     onDeactivate();
   }
 
-  function focusScopeOption(index: number) {
-    requestAnimationFrame(() => scopeOptionRefs.current[index]?.focus());
-  }
-
-  function openScopeOptions(index: number) {
-    setOpen(false);
-    setActiveIndex(-1);
-    setScopeOpen(true);
-    focusScopeOption(index);
-  }
-
   function selectScope(nextScope: SearchScope) {
     const nextQuery = parsedQuery.operator ? parsedQuery.query : query;
-    setScopeOpen(false);
     if (nextQuery !== query) onQueryChange(nextQuery);
     onScopeChange(nextScope);
     onActivate(nextQuery);
     if (Array.from(nextQuery.trim()).length >= 3) setOpen(true);
-    scopeButtonRef.current?.focus();
-  }
-
-  function handleScopeOptionKeyDown(
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setScopeOpen(false);
-      scopeButtonRef.current?.focus();
-      return;
-    }
-    if (event.key === "Tab") {
-      setScopeOpen(false);
-      return;
-    }
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-      return;
-    }
-    event.preventDefault();
-    const lastIndex = searchScopeOptions.length - 1;
-    const nextIndex = event.key === "Home"
-      ? 0
-      : event.key === "End"
-      ? lastIndex
-      : event.key === "ArrowDown"
-      ? index === lastIndex ? 0 : index + 1
-      : index === 0
-      ? lastIndex
-      : index - 1;
-    scopeOptionRefs.current[nextIndex]?.focus();
   }
 
   function changeQuery(event: ChangeEvent<HTMLInputElement>) {
@@ -382,76 +480,16 @@ export function GlobalSearchBox({
         onSubmit(event);
       }}
     >
-      <span className="search-scope-control">
-        <button
-          ref={scopeButtonRef}
-          type="button"
-          className="search-scope-trigger"
-          aria-haspopup="listbox"
-          aria-expanded={scopeOpen}
-          aria-controls={`${id}-scope-options`}
-          onClick={() => {
-            if (scopeOpen) setScopeOpen(false);
-            else {
-              const selectedIndex = searchScopeOptions.findIndex((option) =>
-                option.value === scope
-              );
-              openScopeOptions(Math.max(selectedIndex, 0));
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              const selectedIndex = searchScopeOptions.findIndex((option) =>
-                option.value === scope
-              );
-              openScopeOptions(
-                event.key === "ArrowUp"
-                  ? searchScopeOptions.length - 1
-                  : Math.max(selectedIndex, 0),
-              );
-            } else if (event.key === "Escape") setScopeOpen(false);
-          }}
-        >
-          <span className="sr-only">
-            {`${scopeLabel}: ${selectedScopeLabel}`}
-          </span>
-          <span aria-hidden="true">{selectedScopeLabel}</span>
-          <ChevronDown
-            className="search-scope-chevron"
-            size={15}
-            aria-hidden="true"
-          />
-        </button>
-        {scopeOpen && (
-          <div
-            id={`${id}-scope-options`}
-            className="search-scope-options"
-            role="listbox"
-            aria-label={scopeLabel}
-          >
-            {searchScopeOptions.map((option, index) => (
-              <button
-                ref={(element) => {
-                  scopeOptionRefs.current[index] = element;
-                }}
-                type="button"
-                role="option"
-                aria-selected={option.value === scope}
-                className={option.value === scope ? "selected" : ""}
-                onClick={() => selectScope(option.value)}
-                onKeyDown={(event) => handleScopeOptionKeyDown(event, index)}
-                key={option.value}
-              >
-                <span>{option.label}</span>
-                {option.value === scope && (
-                  <Check size={14} aria-hidden="true" />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </span>
+      <SearchScopeControl
+        id={id}
+        scope={scope}
+        label={scopeLabel}
+        onOpen={() => {
+          setOpen(false);
+          setActiveIndex(-1);
+        }}
+        onChange={selectScope}
+      />
       <input
         ref={inputRef}
         value={query}
@@ -467,7 +505,6 @@ export function GlobalSearchBox({
         placeholder={placeholder}
         onChange={changeQuery}
         onFocus={() => {
-          setScopeOpen(false);
           onActivate(query);
           if (operatorSuggestions.length > 0 || validQuery) setOpen(true);
         }}

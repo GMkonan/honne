@@ -1567,7 +1567,7 @@ button {
   background: transparent;
   font-size: 12px;
 }
-.search-page-query button {
+.search-page-query > button[type='submit'] {
   align-self: stretch;
   min-width: 78px;
   border: 0;
@@ -1577,7 +1577,7 @@ button {
   font-weight: 600;
   cursor: pointer;
 }
-.search-page-query button:disabled {
+.search-page-query > button[type='submit']:disabled {
   color: var(--overlay);
   background: var(--surface);
   cursor: default;
@@ -3389,6 +3389,23 @@ button {
   .search-skeleton {
     grid-template-columns: repeat(2, 1fr);
   }
+  .search-page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .search-overview {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(100px, .4fr) 1fr;
+  }
+  .search-metric {
+    min-width: 0;
+  }
+  .search-provider-state {
+    max-width: none;
+    min-height: 38px;
+  }
   .detail-layout {
     grid-template-columns: 210px minmax(0, 1fr);
     grid-template-areas:
@@ -3456,23 +3473,6 @@ button {
   .standalone-page,
   .search-page {
     padding-block: 38px 60px;
-  }
-  .search-page-header {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .search-overview {
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(100px, .4fr) 1fr;
-  }
-  .search-metric {
-    min-width: 0;
-  }
-  .search-provider-state {
-    max-width: none;
-    min-height: 38px;
   }
   .library-toolbar {
     height: auto;
