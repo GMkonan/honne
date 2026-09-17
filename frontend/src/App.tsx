@@ -35,6 +35,7 @@ import {
   type CatalogDetailResponse,
   type CatalogRelation,
   GlobalSearchBox,
+  parseSearchQuery,
   type SearchCatalogResult,
   type SearchMediaCredit,
   type SearchScope,
@@ -331,10 +332,6 @@ function findExistingLibraryItem(
       resultTitles.includes((title || "").trim().toLocaleLowerCase("en"))
     )
   );
-}
-
-function isAlreadyInLibrary(result: DiscoveryResult, items: Media[]) {
-  return Boolean(findExistingLibraryItem(result, items));
 }
 
 function hasExpandedMetadata(item: Media): boolean {
@@ -1009,7 +1006,12 @@ function App() {
   }, [aniListContextIdentity, aniListContextGeneration]);
 
   useEffect(() => {
-    const query = suggestionQuery.trim();
+    const parsedSearch = parseSearchQuery(
+      suggestionQuery,
+      globalSearchScope,
+    );
+    const query = parsedSearch.query.trim();
+    const scope = parsedSearch.scope;
     const queryLength = Array.from(query).length;
     setSuggestionResults([]);
     setSuggestionUnavailableTypes([]);
@@ -1020,12 +1022,12 @@ function App() {
     const controller = new AbortController();
     let active = true;
     const timer = setTimeout(() => {
-      requestCatalogSearch(query, globalSearchScope, controller.signal).then(
+      requestCatalogSearch(query, scope, controller.signal).then(
         (response) => {
           if (!active) return;
           setSuggestionResults(response.results);
           setSuggestionResultQuery(query);
-          setSuggestionResultScope(globalSearchScope);
+          setSuggestionResultScope(scope);
           setSuggestionUnavailableTypes(response.unavailableTypes);
         },
       ).catch((caught: unknown) => {
@@ -1115,16 +1117,32 @@ function App() {
     globalThis.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function changeGlobalQuery(query: string) {
+    setGlobalQuery(query);
+    const parsedSearch = parseSearchQuery(query, globalSearchScope);
+    if (parsedSearch.operator) setGlobalSearchScope(parsedSearch.scope);
+  }
+
+  function changeGlobalSearchScope(scope: SearchScope) {
+    const parsedSearch = parseSearchQuery(globalQuery, globalSearchScope);
+    if (parsedSearch.operator) setGlobalQuery(parsedSearch.query);
+    setGlobalSearchScope(scope);
+  }
+
   function submitGlobalSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const query = globalQuery.trim();
+    const parsedSearch = parseSearchQuery(globalQuery, globalSearchScope);
+    const query = parsedSearch.query.trim();
+    const scope = parsedSearch.scope;
     if (Array.from(query).length < 2) return;
+    setGlobalQuery(query);
+    setGlobalSearchScope(scope);
     setSubmittedQuery(query);
-    setSubmittedSearchScope(globalSearchScope);
+    setSubmittedSearchScope(scope);
     setSearchGeneration((current) => current + 1);
     setSuggestionQuery("");
     setMenuOpen(false);
-    const hash = searchHash(query, globalSearchScope);
+    const hash = searchHash(query, scope);
     if (globalThis.location.hash === hash) setView("search");
     else globalThis.location.hash = hash;
   }
@@ -1175,14 +1193,17 @@ function App() {
   const statusScope = activeType === "all"
     ? items
     : items.filter((item) => item.type === activeType);
-  const catalogSearchResults = globalResults.filter((result) =>
-    !isAlreadyInLibrary(result, items)
+  const catalogSearchResults = globalResults;
+  const activeSuggestionSearch = parseSearchQuery(
+    globalQuery,
+    globalSearchScope,
   );
-  const catalogSuggestionResults =
-    suggestionResultQuery === globalQuery.trim() &&
-      suggestionResultScope === globalSearchScope
-      ? suggestionResults.filter((result) => !isAlreadyInLibrary(result, items))
-      : [];
+  const suggestionsAreCurrent =
+    suggestionResultQuery === activeSuggestionSearch.query.trim() &&
+    suggestionResultScope === activeSuggestionSearch.scope;
+  const catalogSuggestionResults = suggestionsAreCurrent
+    ? suggestionResults
+    : [];
   const detailUsesRawg = detail?.kind === "external"
     ? detail.result.provider === "rawg"
     : detail?.kind === "local"
@@ -1406,15 +1427,13 @@ function App() {
               scope={globalSearchScope}
               scopeLabel="Search media type from menu"
               catalogResults={catalogSuggestionResults}
-              unavailableCatalogs={suggestionResultQuery ===
-                    globalQuery.trim() &&
-                  suggestionResultScope === globalSearchScope
+              unavailableCatalogs={suggestionsAreCurrent
                 ? suggestionUnavailableTypes.length
                 : 0}
               catalogLoading={suggestionsLoading}
               catalogError={suggestionsError}
-              onQueryChange={setGlobalQuery}
-              onScopeChange={setGlobalSearchScope}
+              onQueryChange={changeGlobalQuery}
+              onScopeChange={changeGlobalSearchScope}
               onActivate={setSuggestionQuery}
               onDeactivate={() => setSuggestionQuery("")}
               onSubmit={submitGlobalSearch}
@@ -1434,14 +1453,13 @@ function App() {
             scope={globalSearchScope}
             scopeLabel="Search media type"
             catalogResults={catalogSuggestionResults}
-            unavailableCatalogs={suggestionResultQuery === globalQuery.trim() &&
-                suggestionResultScope === globalSearchScope
+            unavailableCatalogs={suggestionsAreCurrent
               ? suggestionUnavailableTypes.length
               : 0}
             catalogLoading={suggestionsLoading}
             catalogError={suggestionsError}
-            onQueryChange={setGlobalQuery}
-            onScopeChange={setGlobalSearchScope}
+            onQueryChange={changeGlobalQuery}
+            onScopeChange={changeGlobalSearchScope}
             onActivate={setSuggestionQuery}
             onDeactivate={() => setSuggestionQuery("")}
             onSubmit={submitGlobalSearch}
@@ -1703,8 +1721,8 @@ function App() {
           unavailableTypes={unavailableTypes}
           loading={globalLoading}
           error={globalError}
-          onInput={setGlobalQuery}
-          onScopeChange={setGlobalSearchScope}
+          onInput={changeGlobalQuery}
+          onScopeChange={changeGlobalSearchScope}
           onSubmit={submitGlobalSearch}
           onBack={() => navigate("library")}
           onRetry={() => setSearchGeneration((current) => current + 1)}

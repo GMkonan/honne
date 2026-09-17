@@ -1,7 +1,16 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ArrowLeft, CircleAlert, Plus, RefreshCw, Search } from "lucide-react";
 import {
   catalogCoverStyle,
+  matchingSearchOperators,
+  parseSearchQuery,
   type SearchCatalogResult,
   type SearchMediaType,
   type SearchScope,
@@ -65,7 +74,13 @@ export function GlobalSearchPage({
   onOpenCatalog,
   onAddManually,
 }: GlobalSearchPageProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const composingRef = useRef(false);
   const [activeType, setActiveType] = useState<TypeFilter>("all");
+  const [operatorOpen, setOperatorOpen] = useState(false);
+  const [activeOperator, setActiveOperator] = useState(-1);
+  const parsedInput = parseSearchQuery(input, inputScope);
+  const operatorSuggestions = matchingSearchOperators(input);
   const availableTypes = useMemo(
     () =>
       typeOrder.filter((type) =>
@@ -79,11 +94,57 @@ export function GlobalSearchPage({
   const allProvidersUnavailable = Boolean(error) && catalogResults.length === 0;
 
   useEffect(() => setActiveType("all"), [query, scope]);
+  useEffect(() => setActiveOperator(-1), [input]);
   useEffect(() => {
     if (activeType !== "all" && !availableTypes.includes(activeType)) {
       setActiveType("all");
     }
   }, [activeType, availableTypes]);
+
+  function selectOperator(index: number) {
+    const option = operatorSuggestions[index];
+    if (!option) return;
+    onScopeChange(option.scope);
+    onInput(`${option.operator}:`);
+    setOperatorOpen(false);
+    setActiveOperator(-1);
+    inputRef.current?.focus();
+  }
+
+  function handleOperatorKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.nativeEvent.isComposing) return;
+    if (
+      event.key === "Tab" && !event.shiftKey && operatorSuggestions.length > 0
+    ) {
+      event.preventDefault();
+      selectOperator(activeOperator >= 0 ? activeOperator : 0);
+      return;
+    }
+    if (event.key === "Escape" || event.key === "Tab") {
+      setOperatorOpen(false);
+      setActiveOperator(-1);
+      return;
+    }
+    if (!operatorOpen || operatorSuggestions.length === 0) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveOperator((current) =>
+        event.key === "ArrowDown"
+          ? current >= operatorSuggestions.length - 1 ? 0 : current + 1
+          : current <= 0
+          ? operatorSuggestions.length - 1
+          : current - 1
+      );
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      setActiveOperator(
+        event.key === "Home" ? 0 : operatorSuggestions.length - 1,
+      );
+    } else if (event.key === "Enter" && activeOperator >= 0) {
+      event.preventDefault();
+      selectOperator(activeOperator);
+    }
+  }
 
   return (
     <main className="page-container page-main search-page">
@@ -96,7 +157,17 @@ export function GlobalSearchPage({
           <span className="eyebrow">Discover</span>
           <h1>Results for “{query}”</h1>
           <p>Find titles from the available metadata catalogs.</p>
-          <form className="search-page-query" role="search" onSubmit={onSubmit}>
+          <form
+            className="search-page-query"
+            role="search"
+            onSubmit={(event) => {
+              if (composingRef.current) {
+                event.preventDefault();
+                return;
+              }
+              onSubmit(event);
+            }}
+          >
             <Search size={17} aria-hidden="true" />
             <select
               className="search-scope-select"
@@ -111,16 +182,67 @@ export function GlobalSearchPage({
                 </option>
               ))}
             </select>
-            <input
-              value={input}
-              maxLength={100}
-              aria-label="Refine catalog search"
-              placeholder="Try another title"
-              onChange={(event) => onInput(event.target.value)}
-            />
+            <span className="search-page-input">
+              <input
+                ref={inputRef}
+                value={input}
+                maxLength={100}
+                role="combobox"
+                aria-label="Refine catalog search"
+                aria-autocomplete="list"
+                aria-expanded={operatorOpen && operatorSuggestions.length > 0}
+                aria-controls="search-page-operator-suggestions"
+                aria-activedescendant={activeOperator >= 0
+                  ? `search-page-operator-${activeOperator}`
+                  : undefined}
+                placeholder="Try another title"
+                onChange={(event) => {
+                  const value = event.target.value;
+                  onInput(value);
+                  setOperatorOpen(matchingSearchOperators(value).length > 0);
+                }}
+                onFocus={() => setOperatorOpen(operatorSuggestions.length > 0)}
+                onBlur={() => setOperatorOpen(false)}
+                onKeyDown={handleOperatorKeyDown}
+                onCompositionStart={() => {
+                  composingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  composingRef.current = false;
+                }}
+              />
+              {operatorOpen && operatorSuggestions.length > 0 && (
+                <div
+                  id="search-page-operator-suggestions"
+                  className="search-page-operator-options"
+                  role="listbox"
+                  aria-label="Refine search operators"
+                >
+                  <span className="suggestion-group-label">
+                    Search by type
+                  </span>
+                  {operatorSuggestions.map((option, index) => (
+                    <button
+                      id={`search-page-operator-${index}`}
+                      type="button"
+                      role="option"
+                      aria-label={`Use ${option.operator}: search operator for ${option.label}`}
+                      aria-selected={activeOperator === index}
+                      className={activeOperator === index ? "active" : ""}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => selectOperator(index)}
+                      key={option.operator}
+                    >
+                      <strong>{option.label}</strong>
+                      <code>{option.operator}:</code>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </span>
             <button
               type="submit"
-              disabled={Array.from(input.trim()).length < 2}
+              disabled={Array.from(parsedInput.query.trim()).length < 2}
             >
               Search
             </button>
@@ -158,7 +280,7 @@ export function GlobalSearchPage({
       <section className="search-section search-discover-section">
         <div className="search-section-title discover-heading">
           <div>
-            <span className="eyebrow">Available elsewhere</span>
+            <span className="eyebrow">From the catalogs</span>
             <h2>Catalog matches</h2>
           </div>
           <span>

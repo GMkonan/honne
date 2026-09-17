@@ -370,24 +370,24 @@ describe("Library characterization", () => {
     expect(router.fetch).toHaveBeenCalledTimes(6);
   });
 
-  it("keeps Library items out of catalog suggestions", async () => {
+  it("keeps Library items in catalog search without promoting them", async () => {
     const router = createFetchRouter();
     bootstrap(router);
     router.json("GET", "/api/discovery/global?q=Dun", {
       results: [
         {
           provider: "openlibrary",
-          providerId: "dune",
-          providerUrl: "https://example.com/dune",
-          type: "book",
-          title: "Dune",
-        },
-        {
-          provider: "openlibrary",
           providerId: "messiah",
           providerUrl: "https://example.com/messiah",
           type: "book",
           title: "Dune Messiah",
+        },
+        {
+          provider: "openlibrary",
+          providerId: "dune",
+          providerUrl: "https://example.com/dune",
+          type: "book",
+          title: "Dune",
         },
       ],
       unavailableTypes: [],
@@ -400,17 +400,33 @@ describe("Library characterization", () => {
       screen.getByRole("combobox", { name: "Search Honne" }),
       "Dun",
     );
+    const suggestions = await screen.findByRole("listbox", {
+      name: "Catalog suggestions",
+    });
     expect(
-      await screen.findByRole("option", { name: /Dune Messiah.*Catalog/u }),
-    ).not.toBeNull();
-    expect(
-      screen.queryByRole("option", { name: /^Dune Book Catalog$/u }),
-    ).toBeNull();
+      (await within(suggestions).findAllByRole("option")).map((option) =>
+        option.textContent
+      ),
+    ).toEqual([
+      "Dune MessiahBookCatalog",
+      "DuneBookCatalog",
+    ]);
 
-    await user.keyboard("{ArrowDown}{Enter}");
+    await user.click(
+      screen.getByRole("button", { name: "View all results for “Dun”" }),
+    );
     expect(
-      await screen.findByRole("heading", { name: "Dune Messiah" }),
+      await screen.findByRole("heading", { name: "Results for “Dun”" }),
     ).not.toBeNull();
+    expect(screen.getByText("From the catalogs")).not.toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: /^Review Dune/u }).map((button) =>
+        button.getAttribute("aria-label")
+      ),
+    ).toEqual([
+      "Review Dune Messiah from Books",
+      "Review Dune from Books",
+    ]);
   });
 
   it("debounces catalog suggestions and limits the dropdown to five", async () => {
@@ -520,6 +536,112 @@ describe("Library characterization", () => {
       await screen.findByRole("heading", { name: "Results for “Nar”" }),
     ).not.toBeNull();
     expect(globalThis.location.hash).toBe("#search/anime/Nar");
+  });
+
+  it("autocompletes media operators and scopes typed searches", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json(
+      "GET",
+      "/api/discovery/search?type=anime&q=sangatsu&page=1",
+      {
+        results: [{
+          provider: "anilist",
+          providerId: "21366",
+          providerUrl: "https://anilist.co/anime/21366",
+          type: "anime",
+          title: "March comes in like a lion",
+        }],
+        page: 1,
+        hasMore: false,
+      },
+    ).json(
+      "GET",
+      "/api/discovery/search?type=series&q=sherlock&page=1",
+      {
+        results: [{
+          provider: "tmdb",
+          providerId: "19885",
+          providerUrl: "https://www.themoviedb.org/tv/19885",
+          type: "series",
+          title: "Sherlock",
+        }],
+        page: 1,
+        hasMore: false,
+      },
+    );
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: /^View details for Dune/ });
+
+    const input = screen.getByRole("combobox", { name: "Search Honne" });
+    await user.type(input, "a");
+    const operators = screen.getByRole("listbox", {
+      name: "Search operators",
+    });
+    expect(
+      within(operators).getByRole("option", {
+        name: "Use anime: search operator for Anime",
+      }),
+    ).not.toBeNull();
+    await user.keyboard("{Tab}");
+    expect((input as HTMLInputElement).value).toBe("anime:");
+    expect(
+      screen.getByRole("button", { name: "Search media type: Anime" }),
+    ).not.toBeNull();
+
+    await user.type(input, "sangatsu");
+    expect(
+      await screen.findByRole("option", {
+        name: /March comes in like a lion.*Catalog/u,
+      }),
+    ).not.toBeNull();
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/discovery/search?type=anime&q=sangatsu&page=1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+
+    await user.keyboard("{Enter}");
+    expect(
+      await screen.findByRole("heading", { name: "Results for “sangatsu”" }),
+    ).not.toBeNull();
+    expect(globalThis.location.hash).toBe("#search/anime/sangatsu");
+    expect((input as HTMLInputElement).value).toBe("sangatsu");
+
+    const refineInput = screen.getByRole("combobox", {
+      name: "Refine catalog search",
+    });
+    fireEvent.compositionStart(refineInput);
+    fireEvent.submit(refineInput.closest("form")!);
+    expect(globalThis.location.hash).toBe("#search/anime/sangatsu");
+    fireEvent.compositionEnd(refineInput);
+
+    await user.clear(refineInput);
+    await user.type(refineInput, "s");
+    expect(
+      within(screen.getByRole("listbox", {
+        name: "Refine search operators",
+      })).getByRole("option", {
+        name: "Use series: search operator for Series",
+      }),
+    ).not.toBeNull();
+    await user.keyboard("{ArrowDown}");
+    fireEvent.compositionStart(refineInput);
+    fireEvent.keyDown(refineInput, { key: "Enter", isComposing: true });
+    expect((refineInput as HTMLInputElement).value).toBe("s");
+    fireEvent.compositionEnd(refineInput);
+    await user.keyboard("{Tab}");
+    await user.type(refineInput, "sherlock");
+    await user.keyboard("{Enter}");
+
+    expect(
+      await screen.findByRole("heading", { name: "Results for “sherlock”" }),
+    ).not.toBeNull();
+    expect(globalThis.location.hash).toBe("#search/series/sherlock");
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/discovery/search?type=series&q=sherlock&page=1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it("cancels suggestions and hides stale results when the scope changes", async () => {

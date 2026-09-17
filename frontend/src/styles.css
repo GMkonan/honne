@@ -320,6 +320,20 @@ button {
 .suggestion-group button[aria-selected='true'] {
   background: rgba(137,180,250,.1);
 }
+.suggestion-group button.operator-suggestion {
+  min-height: 40px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-block: 6px;
+}
+.operator-suggestion code {
+  padding: 4px 6px;
+  border: 1px solid var(--surface-2);
+  border-radius: 2px;
+  color: var(--blue);
+  background: var(--base);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+}
 .suggestion-cover {
   width: 38px;
   height: 50px;
@@ -1498,6 +1512,7 @@ button {
 .search-page-query {
   max-width: 590px;
   height: 42px;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -1514,6 +1529,13 @@ button {
 .search-page-query .search-scope-control {
   width: 124px;
   flex-basis: 124px;
+}
+.search-page-input {
+  min-width: 0;
+  align-self: stretch;
+  flex: 1;
+  display: flex;
+  align-items: center;
 }
 .search-page-query input {
   min-width: 0;
@@ -1538,6 +1560,47 @@ button {
   color: var(--overlay);
   background: var(--surface);
   cursor: default;
+}
+.search-page-operator-options {
+  width: 100%;
+  position: absolute;
+  z-index: 45;
+  top: calc(100% + 8px);
+  left: 0;
+  overflow: hidden;
+  border: 1px solid var(--surface-2);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--mantle);
+  box-shadow: 0 16px 40px rgba(0,0,0,.48);
+}
+.search-page-query .search-page-operator-options button {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  align-self: auto;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+.search-page-query .search-page-operator-options button:hover,
+.search-page-query .search-page-operator-options button.active,
+.search-page-query .search-page-operator-options button[aria-selected='true'] {
+  background: rgba(137,180,250,.1);
+}
+.search-page-operator-options code {
+  padding: 4px 6px;
+  border: 1px solid var(--surface-2);
+  border-radius: 2px;
+  color: var(--blue);
+  background: var(--base);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
 }
 .search-overview {
   flex: 0 0 auto;
