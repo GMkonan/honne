@@ -1641,9 +1641,9 @@ describe("Library characterization", () => {
     expect(within(basicFacts).queryByText("Format")).toBeNull();
     const personal = screen.getByRole("region", { name: "Your Library" });
     const cover = screen.getByRole("img", { name: /Cowboy Bebop/ });
-    expect(cover.closest(".detail-cover-column")?.contains(personal)).toBe(
-      true,
-    );
+    const coverColumn = cover.closest(".detail-cover-column");
+    expect(coverColumn?.contains(personal)).toBe(true);
+    expect(coverColumn?.contains(basicFacts)).toBe(true);
     expect(within(personal).getByText("Watching")).not.toBeNull();
     expect(within(personal).queryByText("Episodes watched")).toBeNull();
     expect(within(personal).queryByText("8 of 26")).toBeNull();

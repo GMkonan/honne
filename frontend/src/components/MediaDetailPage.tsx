@@ -429,6 +429,22 @@ export function MediaDetailPage(
               )
               : null}
           </aside>
+          <section
+            className="detail-catalog"
+            aria-labelledby="catalog-data-title"
+          >
+            <div className="detail-section-heading">
+              <h2 id="catalog-data-title">Catalog details</h2>
+            </div>
+            <dl className="detail-facts" aria-label="Catalog facts">
+              {catalogFacts.map((fact) => (
+                <div key={fact.label}>
+                  <dt>{fact.label}</dt>
+                  <dd>{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
         </div>
 
         <section className="detail-overview" aria-label="Synopsis">
@@ -483,23 +499,6 @@ export function MediaDetailPage(
               )}
             </div>
           )}
-        </section>
-
-        <section
-          className="detail-catalog"
-          aria-labelledby="catalog-data-title"
-        >
-          <div className="detail-section-heading">
-            <h2 id="catalog-data-title">Catalog details</h2>
-          </div>
-          <dl className="detail-facts" aria-label="Catalog facts">
-            {catalogFacts.map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
         </section>
 
         {(relations.length > 0 || catalogContextLoading ||

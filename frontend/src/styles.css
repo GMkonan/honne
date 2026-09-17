@@ -1914,7 +1914,6 @@ button {
   grid-template-areas:
     "cover title"
     "cover overview"
-    "cover catalog"
     "cover related"
     "cover metadata";
   align-items: start;
@@ -1990,9 +1989,16 @@ button {
 }
 .detail-catalog {
   min-width: 0;
-  grid-area: catalog;
+  margin-top: 28px;
   padding-top: 16px;
   border-top: 2px solid var(--blue);
+}
+.detail-cover-column .detail-section-heading h2 {
+  font-size: 17px;
+}
+.detail-cover-column .detail-facts {
+  grid-template-columns: 1fr;
+  gap: 0;
 }
 .detail-section-heading h2 {
   margin: 0;
@@ -3304,7 +3310,6 @@ button {
     grid-template-areas:
       "cover title"
       "cover overview"
-      "cover catalog"
       "cover related"
       "cover metadata";
     gap: 22px 30px;
@@ -3434,17 +3439,17 @@ button {
       "title"
       "cover"
       "overview"
-      "catalog"
       "related"
       "metadata";
     gap: 24px;
   }
   .detail-cover-column {
+    width: 100%;
+  }
+  .detail-cover,
+  .detail-record-rail {
     width: min(100%, 300px);
     margin-inline: auto;
-  }
-  .detail-cover {
-    width: 100%;
   }
   .detail-title-block {
     padding-top: 0;
