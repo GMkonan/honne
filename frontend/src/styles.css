@@ -31,6 +31,7 @@ html {
 body {
   min-width: 320px;
   margin: 0;
+  padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
   background: var(--crust);
 }
 button,
@@ -71,9 +72,10 @@ button {
 }
 
 .topbar {
-  height: 52px;
+  height: calc(52px + env(safe-area-inset-top));
   position: relative;
   z-index: 30;
+  padding-top: env(safe-area-inset-top);
   border-bottom: 1px solid var(--surface-2);
   background: var(--mantle);
 }
@@ -2469,7 +2471,7 @@ button {
   cursor: pointer;
 }
 .site-footer {
-  padding: 22px 0;
+  padding: 22px 0 calc(22px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--surface);
   color: var(--overlay);
   background: var(--mantle);
@@ -2493,13 +2495,19 @@ button {
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
   background: rgba(17,17,27,.86);
   backdrop-filter: blur(5px);
 }
 .modal {
   width: min(680px, 100%);
-  max-height: calc(100vh - 40px);
+  max-height: calc(
+    100dvh - max(20px, env(safe-area-inset-top)) -
+    max(20px, env(safe-area-inset-bottom))
+  );
   overflow-y: auto;
   border: 1px solid var(--surface-2);
   border-radius: 3px;
@@ -3298,7 +3306,7 @@ button {
   .main-nav {
     height: auto;
     position: absolute;
-    top: 52px;
+    top: 100%;
     left: 0;
     right: 0;
     display: none;

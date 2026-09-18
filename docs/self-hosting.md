@@ -218,3 +218,14 @@ APP_ORIGIN=https://lists.example.com
 ```
 
 Proxy `https://lists.example.com` to `http://127.0.0.1:7417`. `APP_ORIGIN` is also the destination after the AniList OAuth callback.
+
+## Install on a phone
+
+When Honne is reached through a stable HTTPS address, it can be installed as a standalone app without publishing the private instance to the internet. Open that address on the phone, then:
+
+- on Android, use the browser's **Install app** action;
+- on iPhone or iPad, use Safari's **Share → Add to Home Screen** action.
+
+Install from the address that will remain available, including any nonstandard port. An installation through Tailscale remains private to the tailnet, but the phone must be connected to Tailscale and the Honne host and containers must be running.
+
+The installed app is currently network-dependent. It does not cache the Library for offline access and does not queue offline changes.
