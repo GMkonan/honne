@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -18,8 +19,9 @@ import (
 )
 
 const (
-	discoveryPageSize = 20
-	kitsuPageSize     = 10
+	discoveryPageSize        = 20
+	kitsuPageSize            = 10
+	maxProviderResponseBytes = 8 << 20
 )
 
 var errProviderUnavailable = errors.New("provider is not configured")
@@ -601,7 +603,14 @@ func (s *discoveryService) getJSONRequest(ctx context.Context, endpoint, token, 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return &providerHTTPError{StatusCode: response.StatusCode, Status: response.Status}
 	}
-	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxProviderResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("read provider response: %w", err)
+	}
+	if len(body) > maxProviderResponseBytes {
+		return fmt.Errorf("provider response exceeds %d byte limit", maxProviderResponseBytes)
+	}
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(target); err != nil {
 		return fmt.Errorf("decode provider response: %w", err)
 	}
 	return nil

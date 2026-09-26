@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -189,6 +190,21 @@ func TestTMDBDetailRejectsMissingAndMismatchedTitles(t *testing.T) {
 				t.Fatalf("expected catalog not found, got %v", err)
 			}
 		})
+	}
+}
+
+func TestTMDBDetailRejectsOversizedProviderResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, strings.Repeat(" ", maxProviderResponseBytes+1))
+	}))
+	defer server.Close()
+	service := testDiscoveryService(server.URL)
+	service.tmdbToken = "test-token"
+
+	_, err := service.detail(context.Background(), "tmdb", "movie", "1")
+	if err == nil || !strings.Contains(err.Error(), "provider response exceeds") {
+		t.Fatalf("expected bounded provider response error, got %v", err)
 	}
 }
 
