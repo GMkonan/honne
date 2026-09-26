@@ -55,10 +55,23 @@ type discoveryRelation struct {
 	Result   discoveryResult `json:"result"`
 }
 
+type discoverySeason struct {
+	ProviderID   string `json:"providerId"`
+	SeasonNumber int    `json:"seasonNumber"`
+	Title        string `json:"title"`
+	Description  string `json:"description,omitempty"`
+	CoverURL     string `json:"coverUrl,omitempty"`
+	StartDate    string `json:"startDate,omitempty"`
+	EpisodeCount int    `json:"episodeCount,omitempty"`
+}
+
 type discoveryDetail struct {
 	discoveryResult
 	AlternativeTitles []string            `json:"alternativeTitles"`
 	Relations         []discoveryRelation `json:"relations"`
+	Seasons           []discoverySeason   `json:"seasons"`
+	Collection        []discoveryResult   `json:"collection"`
+	Recommendations   []discoveryResult   `json:"recommendations"`
 }
 
 type discoveryResponse struct {
@@ -586,7 +599,7 @@ func (s *discoveryService) getJSONRequest(ctx context.Context, endpoint, token, 
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("provider returned %s", response.Status)
+		return &providerHTTPError{StatusCode: response.StatusCode, Status: response.Status}
 	}
 	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
 		return fmt.Errorf("decode provider response: %w", err)
