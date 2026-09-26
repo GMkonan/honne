@@ -17,6 +17,7 @@ import {
 import {
   catalogCoverStyle,
   type CatalogRelation,
+  type CatalogSeason,
   type SearchCatalogResult,
   type SearchMediaCredit,
   type SearchMediaType,
@@ -70,6 +71,15 @@ interface DetailCatalogRelation extends CatalogRelation {
   existing?: DetailLibraryMedia;
 }
 
+interface DetailCatalogItem {
+  result: SearchCatalogResult;
+  existing?: DetailLibraryMedia;
+}
+
+interface DetailContextItem extends DetailCatalogItem {
+  label: string;
+}
+
 interface MediaDetailPageProps {
   selection: DetailSelection | null;
   loading: boolean;
@@ -78,14 +88,18 @@ interface MediaDetailPageProps {
   metadataRefreshing: boolean;
   metadataError: string;
   alternativeTitles: string[];
+  catalogCredits: SearchMediaCredit[];
   relations: DetailCatalogRelation[];
+  seasons: CatalogSeason[];
+  collection: DetailCatalogItem[];
+  recommendations: DetailCatalogItem[];
   catalogContextLoading: boolean;
   catalogContextError: string;
   onBack: () => void;
   onAdd: (result: SearchCatalogResult) => void;
   onRefreshMetadata: (item: DetailLibraryMedia) => void;
   onRetryCatalogContext: () => void;
-  onOpenRelated: (result: SearchCatalogResult) => void;
+  onOpenCatalog: (result: SearchCatalogResult) => void;
   onManage: (item: DetailLibraryMedia) => void;
 }
 
@@ -262,6 +276,52 @@ function LibraryPanel(
   );
 }
 
+function CatalogMediaSection(
+  { headingId, title, items, onOpen }: {
+    headingId: string;
+    title: string;
+    items: DetailContextItem[];
+    onOpen: (result: SearchCatalogResult) => void;
+  },
+) {
+  if (items.length === 0) return null;
+  return (
+    <section className="detail-context-section" aria-labelledby={headingId}>
+      <div className="detail-section-heading">
+        <h2 id={headingId}>{title}</h2>
+      </div>
+      <div className="detail-related-grid">
+        {items.map(({ label, result, existing }) => (
+          <button
+            type="button"
+            className="detail-related-item"
+            aria-label={`Open ${result.title}, ${label}${
+              existing ? ", in your Library" : ""
+            }`}
+            onClick={() => onOpen(result)}
+            key={`${result.provider}:${result.type}:${result.providerId}`}
+          >
+            <span
+              className="detail-related-cover"
+              style={catalogCoverStyle(result.coverUrl)}
+              aria-hidden="true"
+            />
+            <span className="detail-related-copy">
+              <small>{label}</small>
+              <strong>{result.title}</strong>
+              <em>
+                {typeDetails[result.type]?.label || "Media"}
+                {result.releaseYear ? ` · ${result.releaseYear}` : ""}
+                {existing ? " · In Library" : ""}
+              </em>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function MediaDetailPage(
   {
     selection,
@@ -271,14 +331,18 @@ export function MediaDetailPage(
     metadataRefreshing,
     metadataError,
     alternativeTitles,
+    catalogCredits,
     relations,
+    seasons,
+    collection,
+    recommendations,
     catalogContextLoading,
     catalogContextError,
     onBack,
     onAdd,
     onRefreshMetadata,
     onRetryCatalogContext,
-    onOpenRelated,
+    onOpenCatalog,
     onManage,
   }: MediaDetailPageProps,
 ) {
@@ -330,14 +394,23 @@ export function MediaDetailPage(
       typeof platform === "string"
     ).slice(0, 12)
     : [];
-  const credits = Array.isArray(source.credits)
-    ? source.credits.filter((credit): credit is SearchMediaCredit =>
-      Boolean(
-        credit && typeof credit.name === "string" &&
-          typeof credit.role === "string",
-      )
-    ).slice(0, 12)
-    : [];
+  const seenCredits = new Set<string>();
+  const credits = [
+    ...catalogCredits,
+    ...(Array.isArray(source.credits) ? source.credits : []),
+  ].filter((credit): credit is SearchMediaCredit => {
+    if (
+      !credit || typeof credit.name !== "string" ||
+      typeof credit.role !== "string"
+    ) return false;
+    const name = credit.name.trim().toLocaleLowerCase("en");
+    const role = credit.role.trim().toLocaleLowerCase("en");
+    if (!name || !role) return false;
+    const key = `${name}|${role}`;
+    if (seenCredits.has(key)) return false;
+    seenCredits.add(key);
+    return true;
+  }).slice(0, 12);
   const catalogFacts = [
     { label: "Type", value: type.label },
     {
@@ -501,58 +574,90 @@ export function MediaDetailPage(
           )}
         </section>
 
-        {(relations.length > 0 || catalogContextLoading ||
-          catalogContextError) && (
-          <section className="detail-related" aria-labelledby="related-title">
-            <div className="detail-section-heading">
-              <h2 id="related-title">Related media</h2>
-            </div>
-            {catalogContextLoading && relations.length === 0 && (
+        {(relations.length > 0 || seasons.length > 0 ||
+          collection.length > 0 || recommendations.length > 0 ||
+          catalogContextLoading || catalogContextError) && (
+          <div className="detail-related">
+            {catalogContextLoading && (
               <p className="detail-metadata-status" role="status">
-                Loading related media…
+                Loading additional catalog details…
               </p>
             )}
             {catalogContextError && (
               <div className="detail-related-error" role="status">
-                <span>Related media could not be loaded.</span>
+                <span>Additional catalog details could not be loaded.</span>
                 <button type="button" onClick={onRetryCatalogContext}>
                   <RefreshCw size={13} /> Try again
                 </button>
               </div>
             )}
-            {relations.length > 0 && (
-              <div className="detail-related-grid">
-                {relations.map((
-                  { relation, result, existing: relatedItem },
-                ) => (
-                  <button
-                    type="button"
-                    className="detail-related-item"
-                    aria-label={`Open ${result.title}, ${relation}${
-                      relatedItem ? ", in your Library" : ""
-                    }`}
-                    onClick={() => onOpenRelated(result)}
-                    key={`${result.provider}:${result.type}:${result.providerId}`}
-                  >
-                    <span
-                      className="detail-related-cover"
-                      style={catalogCoverStyle(result.coverUrl)}
-                      aria-hidden="true"
-                    />
-                    <span className="detail-related-copy">
-                      <small>{relation}</small>
-                      <strong>{result.title}</strong>
-                      <em>
-                        {typeDetails[result.type]?.label || "Media"}
-                        {result.releaseYear ? ` · ${result.releaseYear}` : ""}
-                        {relatedItem ? " · In Library" : ""}
-                      </em>
-                    </span>
-                  </button>
-                ))}
-              </div>
+            <CatalogMediaSection
+              headingId="related-title"
+              title="Related media"
+              items={relations.map(({ relation, ...item }) => ({
+                ...item,
+                label: relation,
+              }))}
+              onOpen={onOpenCatalog}
+            />
+            {seasons.length > 0 && (
+              <section
+                className="detail-context-section"
+                aria-labelledby="seasons-title"
+              >
+                <div className="detail-section-heading">
+                  <h2 id="seasons-title">Seasons</h2>
+                </div>
+                <div className="detail-related-grid">
+                  {seasons.map((season) => (
+                    <article
+                      className="detail-related-item detail-season-item"
+                      key={season.providerId}
+                    >
+                      <span
+                        className="detail-related-cover"
+                        style={catalogCoverStyle(season.coverUrl)}
+                        aria-hidden="true"
+                      />
+                      <span className="detail-related-copy">
+                        <small>
+                          {season.seasonNumber === 0
+                            ? "Specials"
+                            : `Season ${season.seasonNumber}`}
+                        </small>
+                        <strong>{season.title}</strong>
+                        <em>
+                          {formatCatalogDate(season.startDate)}
+                          {season.startDate && season.episodeCount ? " · " : ""}
+                          {season.episodeCount
+                            ? `${season.episodeCount} episodes`
+                            : ""}
+                        </em>
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </section>
             )}
-          </section>
+            <CatalogMediaSection
+              headingId="collection-title"
+              title="Collection"
+              items={collection.map((item) => ({
+                ...item,
+                label: "Collection",
+              }))}
+              onOpen={onOpenCatalog}
+            />
+            <CatalogMediaSection
+              headingId="recommendations-title"
+              title="More like this"
+              items={recommendations.map((item) => ({
+                ...item,
+                label: "Recommended",
+              }))}
+              onOpen={onOpenCatalog}
+            />
+          </div>
         )}
 
         {(credits.length > 0 || catalogPlatforms.length > 0 ||

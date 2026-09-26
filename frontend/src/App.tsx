@@ -34,6 +34,7 @@ import {
   catalogCoverStyle,
   type CatalogDetailResponse,
   type CatalogRelation,
+  type CatalogSeason,
   GlobalSearchBox,
   parseSearchQuery,
   type SearchCatalogResult,
@@ -605,6 +606,65 @@ function sanitizeStoredResult(result: DiscoveryResult): DiscoveryResult {
   };
 }
 
+function sanitizeTMDBItems(
+  values: unknown,
+  selected: DiscoveryResult,
+  limit: number,
+): DiscoveryResult[] {
+  if (selected.provider !== "tmdb" || !Array.isArray(values)) return [];
+  const items: DiscoveryResult[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value || typeof value !== "object") continue;
+    const candidate = value as DiscoveryResult;
+    if (
+      candidate.provider !== "tmdb" || candidate.type !== selected.type ||
+      !/^[1-9]\d*$/u.test(candidate.providerId) ||
+      candidate.providerId === selected.providerId ||
+      !safeStoredText(candidate.title, 200) || seen.has(candidate.providerId)
+    ) continue;
+    seen.add(candidate.providerId);
+    items.push(sanitizeStoredResult(candidate));
+    if (items.length === limit) break;
+  }
+  return items;
+}
+
+function sanitizeTMDBSeasons(
+  values: unknown,
+  selected: DiscoveryResult,
+): CatalogSeason[] {
+  if (
+    selected.provider !== "tmdb" || selected.type !== "series" ||
+    !Array.isArray(values)
+  ) return [];
+  const seasons: CatalogSeason[] = [];
+  const seen = new Set<number>();
+  for (const value of values) {
+    if (!value || typeof value !== "object") continue;
+    const season = value as CatalogSeason;
+    const number = safeStoredNumber(season.seasonNumber, 0, 10_000);
+    const title = safeStoredText(season.title, 200);
+    if (
+      !/^[1-9]\d*$/u.test(season.providerId) ||
+      number === undefined || !Number.isInteger(number) || !title ||
+      seen.has(number)
+    ) continue;
+    seen.add(number);
+    seasons.push({
+      providerId: season.providerId,
+      seasonNumber: number,
+      title,
+      description: safeStoredText(season.description),
+      coverUrl: safeHTTPURL(season.coverUrl),
+      startDate: safeStoredDate(season.startDate),
+      episodeCount: safeStoredNumber(season.episodeCount, 0, 10_000),
+    });
+    if (seasons.length === 100) break;
+  }
+  return seasons;
+}
+
 function sanitizeCatalogDetail(
   response: CatalogDetailResponse,
   selected: DiscoveryResult,
@@ -638,7 +698,7 @@ function sanitizeCatalogDetail(
   ]);
   const seenRelations = new Set<string>();
   const relations: CatalogRelation[] = [];
-  if (Array.isArray(response.relations)) {
+  if (selected.provider === "anilist" && Array.isArray(response.relations)) {
     for (const relation of response.relations) {
       if (
         !relation || !allowedRelations.has(relation.relation) ||
@@ -656,7 +716,20 @@ function sanitizeCatalogDetail(
       if (relations.length === 12) break;
     }
   }
-  return { ...result, alternativeTitles, relations };
+  return {
+    ...result,
+    alternativeTitles,
+    relations,
+    seasons: sanitizeTMDBSeasons(response.seasons, selected),
+    collection: selected.type === "movie"
+      ? sanitizeTMDBItems(response.collection, selected, 24)
+      : [],
+    recommendations: sanitizeTMDBItems(
+      response.recommendations,
+      selected,
+      12,
+    ),
+  };
 }
 
 function storedExternalDetail(): DetailSelection | null {
@@ -754,20 +827,13 @@ function App() {
     loading: false,
     error: "",
   });
-  const [aniListContext, setAniListContext] = useState<{
+  const [catalogContext, setCatalogContext] = useState<{
     identity: string;
     loading: boolean;
     error: string;
-    alternativeTitles: string[];
-    relations: CatalogRelation[];
-  }>({
-    identity: "",
-    loading: false,
-    error: "",
-    alternativeTitles: [],
-    relations: [],
-  });
-  const [aniListContextGeneration, setAniListContextGeneration] = useState(0);
+    detail?: CatalogDetailResponse;
+  }>({ identity: "", loading: false, error: "" });
+  const [catalogContextGeneration, setCatalogContextGeneration] = useState(0);
   const [draftItem, setDraftItem] = useState<MediaInput | undefined>(undefined);
   const [discoveryType, setDiscoveryType] = useState<
     MediaType | null | undefined
@@ -871,8 +937,11 @@ function App() {
       ? items.find((item) => item.id === detail.mediaId)
       : detail?.result
     : undefined;
-  const aniListContextIdentity = detailSource?.provider === "anilist" &&
-      ["anime", "manga", "light_novel"].includes(detailSource.type)
+  const supportsCatalogContext = detailSource?.provider === "anilist" &&
+      ["anime", "manga", "light_novel"].includes(detailSource.type) ||
+    detailSource?.provider === "tmdb" &&
+      ["movie", "series"].includes(detailSource.type);
+  const catalogContextIdentity = supportsCatalogContext && detailSource
     ? `${detailSource.provider}:${detailSource.type}:${detailSource.providerId}`
     : "";
 
@@ -932,28 +1001,19 @@ function App() {
   }, [externalDetailIdentity]);
 
   useEffect(() => {
-    if (!aniListContextIdentity || !detailSource) {
-      setAniListContext({
-        identity: "",
-        loading: false,
-        error: "",
-        alternativeTitles: [],
-        relations: [],
-      });
+    if (!catalogContextIdentity || !detailSource) {
+      setCatalogContext({ identity: "", loading: false, error: "" });
       return;
     }
     const selected = detailSource;
     const controller = new AbortController();
-    setAniListContext((current) => ({
-      identity: aniListContextIdentity,
+    setCatalogContext((current) => ({
+      identity: catalogContextIdentity,
       loading: true,
       error: "",
-      alternativeTitles: current.identity === aniListContextIdentity
-        ? current.alternativeTitles
-        : [],
-      relations: current.identity === aniListContextIdentity
-        ? current.relations
-        : [],
+      detail: current.identity === catalogContextIdentity
+        ? current.detail
+        : undefined,
     }));
     const params = new URLSearchParams({
       provider: selected.provider,
@@ -964,14 +1024,13 @@ function App() {
       signal: controller.signal,
     }).then((response) => {
       const context = sanitizeCatalogDetail(response, selected);
-      setAniListContext((current) =>
-        current.identity === aniListContextIdentity
+      setCatalogContext((current) =>
+        current.identity === catalogContextIdentity
           ? {
             identity: current.identity,
             loading: false,
             error: "",
-            alternativeTitles: context.alternativeTitles,
-            relations: context.relations,
+            detail: context,
           }
           : current
       );
@@ -980,7 +1039,7 @@ function App() {
         setDetail((current) =>
           current?.kind === "external" &&
             `${current.result.provider}:${current.result.type}:${current.result.providerId}` ===
-              aniListContextIdentity
+              catalogContextIdentity
             ? { kind: "external", result: enriched }
             : current
         );
@@ -997,14 +1056,14 @@ function App() {
       if (caught instanceof DOMException && caught.name === "AbortError") {
         return;
       }
-      setAniListContext((current) =>
-        current.identity === aniListContextIdentity
+      setCatalogContext((current) =>
+        current.identity === catalogContextIdentity
           ? { ...current, loading: false, error: errorMessage(caught) }
           : current
       );
     });
     return () => controller.abort();
-  }, [aniListContextIdentity, aniListContextGeneration]);
+  }, [catalogContextIdentity, catalogContextGeneration]);
 
   useEffect(() => {
     const parsedSearch = parseSearchQuery(
@@ -1756,29 +1815,47 @@ function App() {
             : externalMetadata.identity === externalDetailIdentity
             ? externalMetadata.error
             : ""}
-          alternativeTitles={aniListContext.identity ===
-              aniListContextIdentity
-            ? aniListContext.alternativeTitles
+          alternativeTitles={catalogContext.identity ===
+              catalogContextIdentity
+            ? catalogContext.detail?.alternativeTitles || []
             : []}
-          relations={aniListContext.identity === aniListContextIdentity
-            ? aniListContext.relations.map((relation) => ({
+          catalogCredits={catalogContext.identity === catalogContextIdentity
+            ? catalogContext.detail?.credits || []
+            : []}
+          relations={catalogContext.identity === catalogContextIdentity
+            ? (catalogContext.detail?.relations || []).map((relation) => ({
               ...relation,
               existing: findExistingLibraryItem(relation.result, items),
             }))
             : []}
-          catalogContextLoading={Boolean(aniListContextIdentity) &&
-            (aniListContext.identity !== aniListContextIdentity ||
-              aniListContext.loading)}
-          catalogContextError={aniListContext.identity ===
-              aniListContextIdentity
-            ? aniListContext.error
+          seasons={catalogContext.identity === catalogContextIdentity
+            ? catalogContext.detail?.seasons || []
+            : []}
+          collection={catalogContext.identity === catalogContextIdentity
+            ? (catalogContext.detail?.collection || []).map((result) => ({
+              result,
+              existing: findExistingLibraryItem(result, items),
+            }))
+            : []}
+          recommendations={catalogContext.identity === catalogContextIdentity
+            ? (catalogContext.detail?.recommendations || []).map((result) => ({
+              result,
+              existing: findExistingLibraryItem(result, items),
+            }))
+            : []}
+          catalogContextLoading={Boolean(catalogContextIdentity) &&
+            (catalogContext.identity !== catalogContextIdentity ||
+              catalogContext.loading)}
+          catalogContextError={catalogContext.identity ===
+              catalogContextIdentity
+            ? catalogContext.error
             : ""}
           onBack={leaveDetail}
           onAdd={reviewDiscovery}
           onRefreshMetadata={refreshMediaMetadata}
           onRetryCatalogContext={() =>
-            setAniListContextGeneration((current) => current + 1)}
-          onOpenRelated={openExternalDetail}
+            setCatalogContextGeneration((current) => current + 1)}
+          onOpenCatalog={openExternalDetail}
           onManage={(item) => setManagedItem(item)}
         />
       )}

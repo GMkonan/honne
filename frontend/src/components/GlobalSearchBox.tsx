@@ -239,9 +239,22 @@ export interface CatalogRelation {
   result: SearchCatalogResult;
 }
 
+export interface CatalogSeason {
+  providerId: string;
+  seasonNumber: number;
+  title: string;
+  description?: string;
+  coverUrl?: string;
+  startDate?: string;
+  episodeCount?: number;
+}
+
 export interface CatalogDetailResponse extends SearchCatalogResult {
   alternativeTitles: string[];
   relations: CatalogRelation[];
+  seasons: CatalogSeason[];
+  collection: SearchCatalogResult[];
+  recommendations: SearchCatalogResult[];
 }
 
 export interface SearchCatalogResult {
