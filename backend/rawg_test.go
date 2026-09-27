@@ -53,7 +53,7 @@ func TestRAWGDetailMapsCreditsAndUsesCache(t *testing.T) {
 		if r.URL.Path != "/games/420" || r.URL.Query().Get("key") != "secret" {
 			t.Fatalf("unexpected RAWG detail request: %s", r.URL.String())
 		}
-		_, _ = w.Write([]byte(`{"id":420,"slug":"hades","name":"Hades","description_raw":"Escape the Underworld.","released":"2999-09-17","rating":4.5,"developers":[{"name":"Supergiant Games"}],"publishers":[{"name":"Supergiant Games"}],"platforms":[{"platform":{"name":"PC"}}]}`))
+		_, _ = w.Write([]byte(`{"id":420,"slug":"hades","name":"Hades","description_raw":"Escape the Underworld.","released":"2999-09-17","rating":4.5,"developers":[{"id":19,"slug":"supergiant-games","name":"Supergiant Games"}],"publishers":[{"id":25,"slug":"supergiant-games","name":"Supergiant Games"}],"platforms":[{"platform":{"name":"PC"}}]}`))
 	}))
 	defer server.Close()
 
@@ -63,7 +63,10 @@ func TestRAWGDetailMapsCreditsAndUsesCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Description != "Escape the Underworld." || result.ReleaseStatus != "upcoming" ||
-		len(result.Credits) != 2 || result.Credits[0].Role != "Developer" || result.Credits[1].Role != "Publisher" {
+		len(result.Credits) != 2 || result.Credits[0].Role != "Developer" || result.Credits[1].Role != "Publisher" ||
+		len(result.Contributors) != 2 || result.Contributors[0].ProviderID != "19" ||
+		result.Contributors[0].Relation != "developer" || result.Contributors[1].ProviderID != "25" ||
+		result.Contributors[1].Relation != "publisher" {
 		t.Fatalf("unexpected RAWG detail: %+v", result)
 	}
 	if _, err := service.detail(context.Background(), "rawg", "game", "420"); err != nil || requests.Load() != 1 {

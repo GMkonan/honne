@@ -37,16 +37,22 @@ type tmdbDetailPayload struct {
 	VoteAverage      float64        `json:"vote_average"`
 	Genres           []providerName `json:"genres"`
 	CreatedBy        []struct {
+		ID          int    `json:"id"`
 		Name        string `json:"name"`
 		ProfilePath string `json:"profile_path"`
 	} `json:"created_by"`
 	Credits struct {
 		Crew []struct {
+			ID          int    `json:"id"`
 			Name        string `json:"name"`
 			Job         string `json:"job"`
 			ProfilePath string `json:"profile_path"`
 		} `json:"crew"`
 	} `json:"credits"`
+	ProductionCompanies []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"production_companies"`
 	Seasons []struct {
 		ID           int     `json:"id"`
 		Name         string  `json:"name"`
@@ -68,6 +74,8 @@ type tmdbDetailPayload struct {
 type tmdbTitleSummary struct {
 	ID           int     `json:"id"`
 	Adult        bool    `json:"adult"`
+	MediaType    string  `json:"media_type"`
+	Job          string  `json:"job"`
 	Title        string  `json:"title"`
 	Name         string  `json:"name"`
 	Original     string  `json:"original_title"`
@@ -153,9 +161,17 @@ func boundedTMDBDetailResult(item tmdbDetailPayload, mediaType string) (discover
 				credits = append(credits, mediaCredit{Name: member.Name, Role: "Director"})
 				contributors = append(contributors, discoveryContributor{
 					Name: member.Name, Role: "Director", ImageURL: tmdbProfileURL(member.ProfilePath),
+					Provider: "tmdb", ProviderID: strconv.Itoa(member.ID), Kind: "person", Relation: "director",
 				})
 			}
 		}
+	}
+	for _, company := range item.ProductionCompanies {
+		credits = append(credits, mediaCredit{Name: company.Name, Role: "Production company"})
+		contributors = append(contributors, discoveryContributor{
+			Name: company.Name, Role: "Production company", Provider: "tmdb",
+			ProviderID: strconv.Itoa(company.ID), Kind: "organization", Relation: "production_company",
+		})
 	}
 	title = limitedProviderText(title, 200)
 	if item.ID < 1 || item.Adult || title == "" {
@@ -283,12 +299,28 @@ func normalizedTMDBContributors(values []discoveryContributor) []discoveryContri
 	for _, contributor := range values {
 		name := limitedProviderText(contributor.Name, 100)
 		role := limitedProviderText(contributor.Role, 100)
+		if name == "" || role == "" {
+			continue
+		}
+		normalized := discoveryContributor{Name: name, Role: role, ImageURL: safeProviderURL(contributor.ImageURL)}
+		id, err := strconv.Atoi(contributor.ProviderID)
+		if err == nil && contributor.Provider == "tmdb" && id > 0 && strconv.Itoa(id) == contributor.ProviderID &&
+			slicesContains([]string{"person", "organization"}, contributor.Kind) &&
+			slicesContains([]string{"director", "production_company"}, contributor.Relation) {
+			normalized.Provider = contributor.Provider
+			normalized.ProviderID = contributor.ProviderID
+			normalized.Kind = contributor.Kind
+			normalized.Relation = contributor.Relation
+		}
 		key := strings.ToLower(name + "\x00" + role)
-		if name == "" || role == "" || seen[key] {
+		if normalized.ProviderID != "" {
+			key = normalized.Provider + "\x00" + normalized.Relation + "\x00" + normalized.ProviderID
+		}
+		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		result = append(result, discoveryContributor{Name: name, Role: role, ImageURL: safeProviderURL(contributor.ImageURL)})
+		result = append(result, normalized)
 		if len(result) == maxTMDBContributors {
 			break
 		}
