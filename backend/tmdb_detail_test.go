@@ -28,7 +28,7 @@ func TestTMDBSeriesDetailMapsCreatorsSeasonsRecommendationsAndUsesCache(t *testi
 			"id":1399,"name":"Game of Thrones","original_name":"Game of Thrones","overview":"Seven kingdoms.",
 			"poster_path":"/show.jpg","first_air_date":"2011-04-17","last_air_date":"2019-05-19",
 			"episode_run_time":[60],"number_of_episodes":73,"status":"Ended","vote_average":8.4,
-			"genres":[{"name":"Drama"}],"created_by":[{"name":"David Benioff"},{"name":"D. B. Weiss"}],
+			"genres":[{"name":"Drama"}],"created_by":[{"name":"David Benioff","profile_path":"/benioff.jpg"},{"name":"D. B. Weiss"}],
 			"seasons":[
 				{"id":10,"name":"Specials","season_number":0,"episode_count":5,"air_date":"2010-12-05","poster_path":"/specials.jpg"},
 				{"id":11,"name":"Season 1","season_number":1,"episode_count":10,"air_date":"2011-04-17","poster_path":"/s1.jpg"},
@@ -56,13 +56,16 @@ func TestTMDBSeriesDetailMapsCreatorsSeasonsRecommendationsAndUsesCache(t *testi
 	if len(detail.Credits) != 2 || detail.Credits[0] != (mediaCredit{Name: "David Benioff", Role: "Creator"}) {
 		t.Fatalf("unexpected creators: %+v", detail.Credits)
 	}
+	if len(detail.Contributors) != 2 || detail.Contributors[0] != (discoveryContributor{Name: "David Benioff", Role: "Creator", ImageURL: "https://image.tmdb.org/t/p/w185/benioff.jpg"}) {
+		t.Fatalf("unexpected contributor profiles: %+v", detail.Contributors)
+	}
 	if len(detail.Seasons) != 2 || detail.Seasons[0].SeasonNumber != 0 || detail.Seasons[1].EpisodeCount != 10 {
 		t.Fatalf("unexpected seasons: %+v", detail.Seasons)
 	}
 	if len(detail.Recommendations) != 1 || detail.Recommendations[0].ProviderID != "1402" || detail.Recommendations[0].Type != "series" {
 		t.Fatalf("unexpected recommendations: %+v", detail.Recommendations)
 	}
-	if detail.Relations == nil || detail.Collection == nil || detail.AlternativeTitles == nil {
+	if detail.Relations == nil || detail.Collection == nil || detail.AlternativeTitles == nil || detail.Contributors == nil {
 		t.Fatalf("detail lists must not be nil: %+v", detail)
 	}
 	if _, err := service.detail(context.Background(), "tmdb", "series", "1399"); err != nil || requests.Load() != 1 {
@@ -86,7 +89,7 @@ func TestTMDBMovieDetailMapsDirectorAndCollection(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"id":550,"title":"Fight Club","overview":"An insomniac.","poster_path":"/fight.jpg",
 				"release_date":"1999-10-15","runtime":139,"status":"Released","vote_average":8.4,
-				"genres":[{"name":"Drama"}],"credits":{"crew":[{"name":"David Fincher","job":"Director"},{"name":"Someone","job":"Writer"}]},
+				"genres":[{"name":"Drama"}],"credits":{"crew":[{"name":"David Fincher","job":"Director","profile_path":"/fincher.jpg"},{"name":"Someone","job":"Writer"}]},
 				"belongs_to_collection":{"id":100},"recommendations":{"results":[]}
 			}`))
 		case "/collection/100":
@@ -108,6 +111,9 @@ func TestTMDBMovieDetailMapsDirectorAndCollection(t *testing.T) {
 	}
 	if len(detail.Credits) != 1 || detail.Credits[0] != (mediaCredit{Name: "David Fincher", Role: "Director"}) {
 		t.Fatalf("unexpected director: %+v", detail.Credits)
+	}
+	if len(detail.Contributors) != 1 || detail.Contributors[0].ImageURL != "https://image.tmdb.org/t/p/w185/fincher.jpg" {
+		t.Fatalf("unexpected director profile: %+v", detail.Contributors)
 	}
 	if len(detail.Collection) != 1 || detail.Collection[0].ProviderID != "551" || detail.Collection[0].Type != "movie" {
 		t.Fatalf("unexpected collection: %+v", detail.Collection)
@@ -255,7 +261,7 @@ func TestTMDBDetailBoundsUntrustedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{`"alternativeTitles":[]`, `"relations":[]`, `"collection":[]`} {
+	for _, expected := range []string{`"alternativeTitles":[]`, `"relations":[]`, `"collection":[]`, `"contributors":[]`} {
 		if !strings.Contains(string(encoded), expected) {
 			t.Fatalf("detail JSON missing non-null array %s: %s", expected, encoded)
 		}

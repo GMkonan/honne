@@ -99,5 +99,6 @@ func emptyDiscoveryDetail(result discoveryResult) discoveryDetail {
 		Seasons:           []discoverySeason{},
 		Collection:        []discoveryResult{},
 		Recommendations:   []discoveryResult{},
+		Contributors:      []discoveryContributor{},
 	}
 }

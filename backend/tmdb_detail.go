@@ -14,7 +14,8 @@ import (
 const (
 	maxTMDBSeasons         = 100
 	maxTMDBCollectionParts = 24
-	maxTMDBRecommendations = 12
+	maxTMDBRecommendations = 8
+	maxTMDBContributors    = 12
 )
 
 type tmdbDetailPayload struct {
@@ -36,12 +37,14 @@ type tmdbDetailPayload struct {
 	VoteAverage      float64        `json:"vote_average"`
 	Genres           []providerName `json:"genres"`
 	CreatedBy        []struct {
-		Name string `json:"name"`
+		Name        string `json:"name"`
+		ProfilePath string `json:"profile_path"`
 	} `json:"created_by"`
 	Credits struct {
 		Crew []struct {
-			Name string `json:"name"`
-			Job  string `json:"job"`
+			Name        string `json:"name"`
+			Job         string `json:"job"`
+			ProfilePath string `json:"profile_path"`
 		} `json:"crew"`
 	} `json:"credits"`
 	Seasons []struct {
@@ -102,12 +105,13 @@ func (s *discoveryService) fetchTMDBDetail(ctx context.Context, mediaType, provi
 		return discoveryDetail{}, err
 	}
 	expectedID, _ := strconv.Atoi(providerID)
-	result, ok := boundedTMDBDetailResult(payload, mediaType)
+	result, contributors, ok := boundedTMDBDetailResult(payload, mediaType)
 	if !ok || payload.ID != expectedID {
 		return discoveryDetail{}, errCatalogNotFound
 	}
 	detail := emptyDiscoveryDetail(result)
 	detail.AlternativeTitles = tmdbAlternativeTitles(payload, result.Title, mediaType)
+	detail.Contributors = contributors
 	detail.Seasons = tmdbSeasons(payload, mediaType)
 	detail.Recommendations = tmdbSummaries(payload.Recommendations.Results, mediaType, providerID, maxTMDBRecommendations)
 	if mediaType == "movie" && payload.BelongsToCollection != nil && payload.BelongsToCollection.ID > 0 {
@@ -124,11 +128,12 @@ func (s *discoveryService) fetchTMDBDetail(ctx context.Context, mediaType, provi
 	return detail, nil
 }
 
-func boundedTMDBDetailResult(item tmdbDetailPayload, mediaType string) (discoveryResult, bool) {
+func boundedTMDBDetailResult(item tmdbDetailPayload, mediaType string) (discoveryResult, []discoveryContributor, bool) {
 	title, originalTitle := item.Title, item.OriginalTitle
 	startDate, endDate := item.ReleaseDate, ""
 	duration, catalogTotal := item.Runtime, 0
 	credits := make([]mediaCredit, 0, 4)
+	contributors := make([]discoveryContributor, 0, 4)
 	if mediaType == "series" {
 		title, originalTitle = item.Name, item.OriginalName
 		startDate, endDate = item.FirstAirDate, item.LastAirDate
@@ -138,17 +143,23 @@ func boundedTMDBDetailResult(item tmdbDetailPayload, mediaType string) (discover
 		catalogTotal = boundedPositive(item.NumberOfEpisodes, 1_000_000)
 		for _, creator := range item.CreatedBy {
 			credits = append(credits, mediaCredit{Name: creator.Name, Role: "Creator"})
+			contributors = append(contributors, discoveryContributor{
+				Name: creator.Name, Role: "Creator", ImageURL: tmdbProfileURL(creator.ProfilePath),
+			})
 		}
 	} else {
 		for _, member := range item.Credits.Crew {
 			if strings.EqualFold(strings.TrimSpace(member.Job), "Director") {
 				credits = append(credits, mediaCredit{Name: member.Name, Role: "Director"})
+				contributors = append(contributors, discoveryContributor{
+					Name: member.Name, Role: "Director", ImageURL: tmdbProfileURL(member.ProfilePath),
+				})
 			}
 		}
 	}
 	title = limitedProviderText(title, 200)
 	if item.ID < 1 || item.Adult || title == "" {
-		return discoveryResult{}, false
+		return discoveryResult{}, []discoveryContributor{}, false
 	}
 	startDate, endDate = boundedTMDBDate(startDate), boundedTMDBDate(endDate)
 	return discoveryResult{
@@ -157,7 +168,7 @@ func boundedTMDBDetailResult(item tmdbDetailPayload, mediaType string) (discover
 		CoverURL: tmdbCoverURL(item.PosterPath), ReleaseYear: yearFromDate(startDate), Genres: normalizedMetadataStrings(namesOf(item.Genres)),
 		Credits: normalizedMediaCredits(credits), ReleaseStatus: tmdbReleaseStatus(item.Status), StartDate: startDate, EndDate: endDate,
 		DurationMinutes: boundedPositive(duration, 10_080), CatalogTotal: catalogTotal, CommunityRating: boundedTMDBRating(item.VoteAverage),
-	}, true
+	}, normalizedTMDBContributors(contributors), true
 }
 
 func tmdbSeasons(item tmdbDetailPayload, mediaType string) []discoverySeason {
@@ -251,11 +262,38 @@ func tmdbProviderURL(mediaType string, id int) string {
 }
 
 func tmdbCoverURL(path string) string {
+	return tmdbImageURL(path, "w500")
+}
+
+func tmdbProfileURL(path string) string {
+	return tmdbImageURL(path, "w185")
+}
+
+func tmdbImageURL(path, size string) string {
 	path = strings.TrimSpace(path)
 	if path == "" || !strings.HasPrefix(path, "/") || len([]rune(path)) > 500 {
 		return ""
 	}
-	return safeProviderURL("https://image.tmdb.org/t/p/w500" + path)
+	return safeProviderURL("https://image.tmdb.org/t/p/" + size + path)
+}
+
+func normalizedTMDBContributors(values []discoveryContributor) []discoveryContributor {
+	result := make([]discoveryContributor, 0, min(len(values), maxTMDBContributors))
+	seen := make(map[string]bool)
+	for _, contributor := range values {
+		name := limitedProviderText(contributor.Name, 100)
+		role := limitedProviderText(contributor.Role, 100)
+		key := strings.ToLower(name + "\x00" + role)
+		if name == "" || role == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, discoveryContributor{Name: name, Role: role, ImageURL: safeProviderURL(contributor.ImageURL)})
+		if len(result) == maxTMDBContributors {
+			break
+		}
+	}
+	return result
 }
 
 func boundedTMDBDate(value string) string {

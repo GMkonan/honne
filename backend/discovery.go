@@ -67,13 +67,20 @@ type discoverySeason struct {
 	EpisodeCount int    `json:"episodeCount,omitempty"`
 }
 
+type discoveryContributor struct {
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	ImageURL string `json:"imageUrl,omitempty"`
+}
+
 type discoveryDetail struct {
 	discoveryResult
-	AlternativeTitles []string            `json:"alternativeTitles"`
-	Relations         []discoveryRelation `json:"relations"`
-	Seasons           []discoverySeason   `json:"seasons"`
-	Collection        []discoveryResult   `json:"collection"`
-	Recommendations   []discoveryResult   `json:"recommendations"`
+	AlternativeTitles []string               `json:"alternativeTitles"`
+	Relations         []discoveryRelation    `json:"relations"`
+	Seasons           []discoverySeason      `json:"seasons"`
+	Collection        []discoveryResult      `json:"collection"`
+	Recommendations   []discoveryResult      `json:"recommendations"`
+	Contributors      []discoveryContributor `json:"contributors"`
 }
 
 type discoveryResponse struct {
