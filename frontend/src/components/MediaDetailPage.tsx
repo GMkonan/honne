@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
   CirclePlus,
   Clapperboard,
   ExternalLink,
@@ -13,8 +15,10 @@ import {
   Sparkles,
   Star,
   Tv,
+  UserRound,
 } from "lucide-react";
 import {
+  type CatalogContributor,
   catalogCoverStyle,
   type CatalogRelation,
   type CatalogSeason,
@@ -89,6 +93,7 @@ interface MediaDetailPageProps {
   metadataError: string;
   alternativeTitles: string[];
   catalogCredits: SearchMediaCredit[];
+  catalogContributors: CatalogContributor[];
   relations: DetailCatalogRelation[];
   seasons: CatalogSeason[];
   collection: DetailCatalogItem[];
@@ -277,20 +282,63 @@ function LibraryPanel(
 }
 
 function CatalogMediaSection(
-  { headingId, title, items, onOpen }: {
+  { headingId, title, items, horizontal = false, onOpen }: {
     headingId: string;
     title: string;
     items: DetailContextItem[];
+    horizontal?: boolean;
     onOpen: (result: SearchCatalogResult) => void;
   },
 ) {
+  const trackRef = useRef<HTMLDivElement>(null);
   if (items.length === 0) return null;
+  const handleScroll = (direction: -1 | 1) => {
+    const track = trackRef.current;
+    if (!track) return;
+    track.scrollBy({
+      left: direction * Math.max(track.clientWidth * 0.8, 240),
+      behavior: "smooth",
+    });
+  };
   return (
     <section className="detail-context-section" aria-labelledby={headingId}>
-      <div className="detail-section-heading">
+      <div
+        className={`detail-section-heading${
+          horizontal ? " detail-slider-heading" : ""
+        }`}
+      >
         <h2 id={headingId}>{title}</h2>
+        {horizontal && items.length > 1 && (
+          <div
+            className="detail-slider-controls"
+            aria-label={`${title} navigation`}
+          >
+            <button
+              type="button"
+              aria-label={`Scroll ${title} backward`}
+              onClick={() => handleScroll(-1)}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label={`Scroll ${title} forward`}
+              onClick={() =>
+                handleScroll(1)}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
       </div>
-      <div className="detail-related-grid">
+      <div
+        ref={trackRef}
+        className={`detail-related-grid${
+          horizontal ? " detail-related-slider" : ""
+        }`}
+        role={horizontal ? "region" : undefined}
+        aria-label={horizontal ? `${title} carousel` : undefined}
+      >
         {items.map(({ label, result, existing }) => (
           <button
             type="button"
@@ -332,6 +380,7 @@ export function MediaDetailPage(
     metadataError,
     alternativeTitles,
     catalogCredits,
+    catalogContributors,
     relations,
     seasons,
     collection,
@@ -394,22 +443,30 @@ export function MediaDetailPage(
       typeof platform === "string"
     ).slice(0, 12)
     : [];
-  const seenCredits = new Set<string>();
-  const credits = [
+  const seenContributors = new Set<string>();
+  const contributors = [
+    ...catalogContributors,
     ...catalogCredits,
     ...(Array.isArray(source.credits) ? source.credits : []),
-  ].filter((credit): credit is SearchMediaCredit => {
+  ].flatMap((credit) => {
     if (
       !credit || typeof credit.name !== "string" ||
       typeof credit.role !== "string"
-    ) return false;
-    const name = credit.name.trim().toLocaleLowerCase("en");
-    const role = credit.role.trim().toLocaleLowerCase("en");
-    if (!name || !role) return false;
-    const key = `${name}|${role}`;
-    if (seenCredits.has(key)) return false;
-    seenCredits.add(key);
-    return true;
+    ) return [];
+    const name = credit.name.trim();
+    const role = credit.role.trim();
+    const key = `${name.toLocaleLowerCase("en")}|${
+      role.toLocaleLowerCase("en")
+    }`;
+    if (!name || !role || seenContributors.has(key)) return [];
+    seenContributors.add(key);
+    return [{
+      name,
+      role,
+      imageUrl: "imageUrl" in credit && typeof credit.imageUrl === "string"
+        ? safeHTTPURL(credit.imageUrl)
+        : "",
+    }];
   }).slice(0, 12);
   const catalogFacts = [
     { label: "Type", value: type.label },
@@ -655,19 +712,20 @@ export function MediaDetailPage(
                 ...item,
                 label: "Recommended",
               }))}
+              horizontal
               onOpen={onOpenCatalog}
             />
           </div>
         )}
 
-        {(credits.length > 0 || catalogPlatforms.length > 0 ||
+        {(contributors.length > 0 || catalogPlatforms.length > 0 ||
           (selection.kind === "external" && metadataRefreshing) ||
           metadataError) && (
           <section
             className="detail-supporting-metadata"
             aria-label="More details"
           >
-            {(credits.length > 0 || catalogPlatforms.length > 0) && (
+            {(contributors.length > 0 || catalogPlatforms.length > 0) && (
               <div className="detail-metadata-groups">
                 {catalogPlatforms.length > 0 && (
                   <section aria-labelledby="detail-platforms-title">
@@ -679,20 +737,37 @@ export function MediaDetailPage(
                     </ul>
                   </section>
                 )}
-                {credits.length > 0 && (
+                {contributors.length > 0 && (
                   <section
                     className="detail-credits-group"
                     aria-labelledby="detail-credits-title"
                   >
                     <h2 id="detail-credits-title">Credits</h2>
-                    <dl className="detail-credits">
-                      {credits.map((credit, index) => (
-                        <div key={`${credit.name}-${credit.role}-${index}`}>
-                          <dt>{credit.name}</dt>
-                          <dd>{credit.role}</dd>
-                        </div>
+                    <ul className="detail-credits">
+                      {contributors.map((contributor) => (
+                        <li key={`${contributor.name}-${contributor.role}`}>
+                          <span className="detail-credit-avatar">
+                            <UserRound size={20} aria-hidden="true" />
+                            {contributor.imageUrl && (
+                              <img
+                                src={contributor.imageUrl}
+                                alt=""
+                                width="48"
+                                height="48"
+                                loading="lazy"
+                                onError={(event) => {
+                                  event.currentTarget.hidden = true;
+                                }}
+                              />
+                            )}
+                          </span>
+                          <span className="detail-credit-copy">
+                            <strong>{contributor.name}</strong>
+                            <small>{contributor.role}</small>
+                          </span>
+                        </li>
                       ))}
-                    </dl>
+                    </ul>
                   </section>
                 )}
               </div>

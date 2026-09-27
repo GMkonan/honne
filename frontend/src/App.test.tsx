@@ -2014,7 +2014,22 @@ describe("Library characterization", () => {
 
     resolveDetail(Response.json({
       ...series,
-      credits: [{ name: "Vince Gilligan", role: "Creator" }],
+      credits: [
+        { name: "Vince Gilligan", role: "Creator" },
+        { name: "Peter Gould", role: "Creator" },
+      ],
+      contributors: [
+        {
+          name: "Vince Gilligan",
+          role: "Creator",
+          imageUrl: "https://image.tmdb.org/t/p/w185/vince.jpg",
+        },
+        {
+          name: "Peter Gould",
+          role: "Creator",
+          imageUrl: "javascript:alert(1)",
+        },
+      ],
       alternativeTitles: [],
       relations: [],
       seasons: [
@@ -2033,20 +2048,37 @@ describe("Library characterization", () => {
         },
       ],
       collection: [],
-      recommendations: [{
-        provider: "tmdb",
-        providerId: "60059",
-        providerUrl: "https://www.themoviedb.org/tv/60059",
-        type: "series",
-        title: "Better Call Saul",
-        releaseYear: 2015,
-      }],
+      recommendations: [
+        {
+          provider: "tmdb",
+          providerId: "60059",
+          providerUrl: "https://www.themoviedb.org/tv/60059",
+          type: "series",
+          title: "Better Call Saul",
+          releaseYear: 2015,
+        },
+        ...Array.from({ length: 9 }, (_, index) => ({
+          provider: "tmdb",
+          providerId: String(70_000 + index),
+          providerUrl: `https://www.themoviedb.org/tv/${70_000 + index}`,
+          type: "series",
+          title: `Recommendation ${index + 1}`,
+        })),
+      ],
     }));
 
     expect(await screen.findByRole("heading", { name: "Seasons" })).not
       .toBeNull();
     expect(screen.getByText("Vince Gilligan")).not.toBeNull();
-    expect(screen.getByText("Creator")).not.toBeNull();
+    expect(screen.getAllByText("Creator")).toHaveLength(2);
+    const creatorCredit = screen.getByText("Vince Gilligan").closest("li");
+    if (!creatorCredit) throw new Error("missing creator credit card");
+    expect(creatorCredit.querySelector("img")?.getAttribute("src")).toBe(
+      "https://image.tmdb.org/t/p/w185/vince.jpg",
+    );
+    const fallbackCredit = screen.getByText("Peter Gould").closest("li");
+    if (!fallbackCredit) throw new Error("missing fallback credit card");
+    expect(within(fallbackCredit).queryByRole("img")).toBeNull();
     expect(screen.getByText(/7 episodes/u)).not.toBeNull();
     expect(screen.getByRole("heading", { name: "More like this" })).not
       .toBeNull();
@@ -2055,6 +2087,22 @@ describe("Library characterization", () => {
         name: "Open Better Call Saul, Recommended, in your Library",
       }),
     ).not.toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: /, Recommended/u }),
+    ).toHaveLength(8);
+    expect(screen.queryByText("Recommendation 8")).toBeNull();
+    const carousel = screen.getByRole("region", {
+      name: "More like this carousel",
+    });
+    const scrollBy = vi.fn();
+    Object.defineProperty(carousel, "scrollBy", { value: scrollBy });
+    expect(
+      screen.getByRole("button", { name: "Scroll More like this backward" }),
+    ).not.toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Scroll More like this forward" }),
+    );
+    expect(scrollBy).toHaveBeenCalledWith({ left: 240, behavior: "smooth" });
   });
 
   it("shows TMDB movie directors and collection titles", async () => {
@@ -2086,6 +2134,11 @@ describe("Library characterization", () => {
       {
         ...movie,
         credits: [{ name: "Denis Villeneuve", role: "Director" }],
+        contributors: [{
+          name: "Denis Villeneuve",
+          role: "Director",
+          imageUrl: "https://image.tmdb.org/t/p/w185/denis.jpg",
+        }],
         alternativeTitles: [],
         relations: [{
           relation: "adaptation",
@@ -2120,6 +2173,11 @@ describe("Library characterization", () => {
 
     expect(await screen.findByText("Denis Villeneuve")).not.toBeNull();
     expect(screen.getByText("Director")).not.toBeNull();
+    const directorCredit = screen.getByText("Denis Villeneuve").closest("li");
+    if (!directorCredit) throw new Error("missing director credit card");
+    expect(directorCredit.querySelector("img")?.getAttribute("src")).toBe(
+      "https://image.tmdb.org/t/p/w185/denis.jpg",
+    );
     expect(screen.getByRole("heading", { name: "Collection" })).not.toBeNull();
     expect(
       screen.getByRole("button", {

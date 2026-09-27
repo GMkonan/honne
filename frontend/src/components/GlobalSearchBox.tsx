@@ -249,12 +249,17 @@ export interface CatalogSeason {
   episodeCount?: number;
 }
 
+export interface CatalogContributor extends SearchMediaCredit {
+  imageUrl?: string;
+}
+
 export interface CatalogDetailResponse extends SearchCatalogResult {
   alternativeTitles: string[];
   relations: CatalogRelation[];
   seasons: CatalogSeason[];
   collection: SearchCatalogResult[];
   recommendations: SearchCatalogResult[];
+  contributors: CatalogContributor[];
 }
 
 export interface SearchCatalogResult {
