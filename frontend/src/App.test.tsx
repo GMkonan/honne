@@ -1300,6 +1300,48 @@ describe("Library characterization", () => {
         communityRating: 9,
       },
     );
+    router.json(
+      "GET",
+      "/api/discovery/works?provider=rawg&type=game&id=19&relation=developer&page=1&exclude=420",
+      {
+        results: [{
+          provider: "rawg",
+          providerId: "900",
+          providerUrl: "https://rawg.io/games/hades-ii",
+          type: "game",
+          title: "Hades II",
+          releaseYear: 2025,
+        }],
+        page: 1,
+        hasMore: false,
+      },
+    );
+    router.json(
+      "GET",
+      "/api/discovery/works?provider=rawg&type=game&id=25&relation=publisher&page=1&exclude=420",
+      {
+        results: [
+          {
+            provider: "rawg",
+            providerId: "900",
+            providerUrl: "https://rawg.io/games/hades-ii",
+            type: "game",
+            title: "Hades II",
+            releaseYear: 2025,
+          },
+          {
+            provider: "rawg",
+            providerId: "901",
+            providerUrl: "https://rawg.io/games/pyre",
+            type: "game",
+            title: "Pyre",
+            releaseYear: 2017,
+          },
+        ],
+        page: 1,
+        hasMore: false,
+      },
+    );
     router.json("POST", "/api/media", async (request: Request) => {
       submitted = await request.json() as Record<string, unknown>;
       return Response.json({
@@ -1339,6 +1381,18 @@ describe("Library characterization", () => {
     expect(screen.getByText("PlayStation 5")).not.toBeNull();
     expect(screen.getByText("Supergiant Games")).not.toBeNull();
     expect(screen.getByText("Developer · Publisher")).not.toBeNull();
+    await user.click(
+      screen.getByRole("button", {
+        name: "View works by Supergiant Games",
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "More from Supergiant Games",
+      }),
+    ).not.toBeNull();
+    expect(screen.getAllByText("Hades II")).toHaveLength(1);
+    expect(screen.getByText("Pyre")).not.toBeNull();
     const providerLink = screen.getByRole("link", { name: /View on RAWG/u });
     expect(
       screen.getByRole("region", { name: "Synopsis" }).contains(providerLink),
@@ -2163,6 +2217,10 @@ describe("Library characterization", () => {
           name: "Denis Villeneuve",
           role: "Director",
           imageUrl: "https://image.tmdb.org/t/p/w185/denis.jpg",
+          provider: "tmdb",
+          providerId: "525",
+          kind: "person",
+          relation: "director",
         }],
         alternativeTitles: [],
         relations: [{
@@ -2185,6 +2243,32 @@ describe("Library characterization", () => {
           releaseYear: 2021,
         }],
         recommendations: [],
+      },
+    );
+    router.json(
+      "GET",
+      "/api/discovery/works?provider=tmdb&type=movie&id=525&relation=director&page=1&exclude=693134",
+      {
+        results: [
+          {
+            provider: "tmdb",
+            providerId: "438631",
+            providerUrl: "https://www.themoviedb.org/movie/438631",
+            type: "movie",
+            title: "Dune",
+            releaseYear: 2021,
+          },
+          {
+            provider: "tmdb",
+            providerId: "329865",
+            providerUrl: "https://www.themoviedb.org/movie/329865",
+            type: "movie",
+            title: "Arrival",
+            releaseYear: 2016,
+          },
+        ],
+        page: 1,
+        hasMore: false,
       },
     );
     const user = userEvent.setup();
@@ -2210,6 +2294,19 @@ describe("Library characterization", () => {
       }),
     ).not.toBeNull();
     expect(screen.queryByRole("heading", { name: "Related media" })).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "View works by Denis Villeneuve" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Works directed by Denis Villeneuve",
+      }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Open Dune, in your Library" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Open Arrival" })).not
+      .toBeNull();
   });
 
   it("waits for exact AniList details before adding related media", async () => {

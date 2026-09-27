@@ -31,6 +31,11 @@ import {
   mediaStatusLabel,
   type TrackingMediaStatus,
 } from "../mediaTracking.ts";
+import {
+  ContributorWorksSection,
+  type ContributorWorksTarget,
+} from "./ContributorWorksSection.tsx";
+import type { ContributorIdentity } from "../services/discoveryWorks.ts";
 
 export type DetailMediaStatus = TrackingMediaStatus;
 
@@ -98,6 +103,7 @@ interface MediaDetailPageProps {
   seasons: CatalogSeason[];
   collection: DetailCatalogItem[];
   recommendations: DetailCatalogItem[];
+  libraryItems: DetailLibraryMedia[];
   catalogContextLoading: boolean;
   catalogContextError: string;
   onBack: () => void;
@@ -115,6 +121,63 @@ const organizationCreditRoles = new Set([
   "production company",
   "network",
 ]);
+
+function ContributorCreditCard({
+  name,
+  role,
+  imageUrl,
+  target,
+  selected,
+  onSelect,
+}: {
+  name: string;
+  role: string;
+  imageUrl?: string;
+  target?: ContributorWorksTarget;
+  selected: boolean;
+  onSelect: (target: ContributorWorksTarget) => void;
+}) {
+  const content = (
+    <>
+      {imageUrl !== undefined && (
+        <span className="detail-credit-avatar">
+          <UserRound size={20} aria-hidden="true" />
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt=""
+              width="48"
+              height="48"
+              loading="lazy"
+              onError={(event) => event.currentTarget.hidden = true}
+            />
+          )}
+        </span>
+      )}
+      <span className="detail-credit-copy">
+        <strong>{name}</strong>
+        <small>{role}</small>
+      </span>
+    </>
+  );
+  return (
+    <li className={target ? "detail-credit-interactive" : undefined}>
+      {target
+        ? (
+          <button
+            type="button"
+            aria-controls="contributor-works"
+            aria-expanded={selected}
+            aria-label={`View works by ${name}`}
+            onClick={() => onSelect(target)}
+          >
+            {content}
+          </button>
+        )
+        : content}
+    </li>
+  );
+}
 
 const typeDetails: Record<
   SearchMediaType,
@@ -393,6 +456,7 @@ export function MediaDetailPage(
     seasons,
     collection,
     recommendations,
+    libraryItems,
     catalogContextLoading,
     catalogContextError,
     onBack,
@@ -404,6 +468,9 @@ export function MediaDetailPage(
   }: MediaDetailPageProps,
 ) {
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [selectedContributor, setSelectedContributor] = useState<
+    ContributorWorksTarget | null
+  >(null);
   const focusIdentity = selection?.kind === "local"
     ? `local:${selection.mediaId}`
     : selection?.kind === "external"
@@ -412,6 +479,7 @@ export function MediaDetailPage(
   useEffect(() => {
     if (!loading && focusIdentity) titleRef.current?.focus();
   }, [focusIdentity, loading, media?.id]);
+  useEffect(() => setSelectedContributor(null), [focusIdentity]);
 
   if (!selection || (selection.kind === "local" && !media)) {
     const waitingForLibrary = loading && selection?.kind === "local";
@@ -451,7 +519,8 @@ export function MediaDetailPage(
       typeof platform === "string"
     ).slice(0, 12)
     : [];
-  const seenContributors = new Set<string>();
+  const seenContributorIdentities = new Set<string>();
+  const seenContributorCredits = new Set<string>();
   const contributors = [
     ...catalogContributors,
     ...catalogCredits,
@@ -463,17 +532,39 @@ export function MediaDetailPage(
     ) return [];
     const name = credit.name.trim();
     const role = credit.role.trim();
-    const key = `${name.toLocaleLowerCase("en")}|${
+    const creditKey = `${name.toLocaleLowerCase("en")}|${
       role.toLocaleLowerCase("en")
     }`;
-    if (!name || !role || seenContributors.has(key)) return [];
-    seenContributors.add(key);
+    const provider = "provider" in credit ? credit.provider : undefined;
+    const providerId = "providerId" in credit ? credit.providerId : undefined;
+    const kind = "kind" in credit ? credit.kind : undefined;
+    const relation = "relation" in credit ? credit.relation : undefined;
+    let identity: ContributorIdentity | undefined;
+    if (
+      (provider === "tmdb" || provider === "rawg") &&
+      typeof providerId === "string" && /^[1-9]\d*$/u.test(providerId) &&
+      (kind === "person" || kind === "organization") &&
+      (relation === "director" || relation === "production_company" ||
+        relation === "developer" || relation === "publisher")
+    ) identity = { provider, providerId, kind, relation };
+    const identityKey = identity
+      ? `${identity.provider}:${identity.relation}:${identity.providerId}`
+      : "";
+    if (
+      !name || !role ||
+      (identityKey
+        ? seenContributorIdentities.has(identityKey)
+        : seenContributorCredits.has(creditKey))
+    ) return [];
+    if (identityKey) seenContributorIdentities.add(identityKey);
+    seenContributorCredits.add(creditKey);
     return [{
       name,
       role,
       imageUrl: "imageUrl" in credit && typeof credit.imageUrl === "string"
         ? safeHTTPURL(credit.imageUrl)
         : "",
+      identity,
     }];
   }).slice(0, 12);
   const people = contributors.filter((contributor) =>
@@ -481,7 +572,7 @@ export function MediaDetailPage(
   );
   const organizationMap = new Map<
     string,
-    { name: string; roles: string[] }
+    { name: string; roles: string[]; identities: ContributorIdentity[] }
   >();
   for (const contributor of contributors) {
     if (
@@ -495,10 +586,14 @@ export function MediaDetailPage(
       if (!organization.roles.includes(contributor.role)) {
         organization.roles.push(contributor.role);
       }
+      if (contributor.identity) {
+        organization.identities.push(contributor.identity);
+      }
     } else {
       organizationMap.set(key, {
         name: contributor.name,
         roles: [contributor.role],
+        identities: contributor.identity ? [contributor.identity] : [],
       });
     }
   }
@@ -782,29 +877,33 @@ export function MediaDetailPage(
                       <>
                         <h3 className="detail-credit-subheading">People</h3>
                         <ul className="detail-credits">
-                          {people.map((person) => (
-                            <li key={`${person.name}-${person.role}`}>
-                              <span className="detail-credit-avatar">
-                                <UserRound size={20} aria-hidden="true" />
-                                {person.imageUrl && (
-                                  <img
-                                    src={person.imageUrl}
-                                    alt=""
-                                    width="48"
-                                    height="48"
-                                    loading="lazy"
-                                    onError={(event) => {
-                                      event.currentTarget.hidden = true;
-                                    }}
-                                  />
-                                )}
-                              </span>
-                              <span className="detail-credit-copy">
-                                <strong>{person.name}</strong>
-                                <small>{person.role}</small>
-                              </span>
-                            </li>
-                          ))}
+                          {people.map((person) => {
+                            const target = person.identity
+                              ? {
+                                key:
+                                  `${person.identity.provider}:${person.identity.relation}:${person.identity.providerId}`,
+                                name: person.name,
+                                kind: person.identity.kind,
+                                identities: [person.identity],
+                              } satisfies ContributorWorksTarget
+                              : undefined;
+                            return (
+                              <ContributorCreditCard
+                                key={target?.key ||
+                                  `${person.name}-${person.role}`}
+                                name={person.name}
+                                role={person.role}
+                                imageUrl={person.imageUrl}
+                                target={target}
+                                selected={selectedContributor?.key ===
+                                  target?.key}
+                                onSelect={(next) =>
+                                  setSelectedContributor((current) =>
+                                    current?.key === next.key ? null : next
+                                  )}
+                              />
+                            );
+                          })}
                         </ul>
                       </>
                     )}
@@ -814,14 +913,34 @@ export function MediaDetailPage(
                           Studios & companies
                         </h3>
                         <ul className="detail-credits detail-company-credits">
-                          {organizations.map((organization) => (
-                            <li key={organization.name}>
-                              <span className="detail-credit-copy">
-                                <strong>{organization.name}</strong>
-                                <small>{organization.roles.join(" · ")}</small>
-                              </span>
-                            </li>
-                          ))}
+                          {organizations.map((organization) => {
+                            const target = organization.identities.length > 0
+                              ? {
+                                key: `organization:${
+                                  organization.identities.map((identity) =>
+                                    `${identity.provider}:${identity.relation}:${identity.providerId}`
+                                  ).join("|")
+                                }`,
+                                name: organization.name,
+                                kind: "organization" as const,
+                                identities: organization.identities,
+                              } satisfies ContributorWorksTarget
+                              : undefined;
+                            return (
+                              <ContributorCreditCard
+                                key={organization.name}
+                                name={organization.name}
+                                role={organization.roles.join(" · ")}
+                                target={target}
+                                selected={selectedContributor?.key ===
+                                  target?.key}
+                                onSelect={(next) =>
+                                  setSelectedContributor((current) =>
+                                    current?.key === next.key ? null : next
+                                  )}
+                              />
+                            );
+                          })}
                         </ul>
                       </>
                     )}
@@ -842,6 +961,15 @@ export function MediaDetailPage(
               </p>
             )}
           </section>
+        )}
+        {selectedContributor && (
+          <ContributorWorksSection
+            key={selectedContributor.key}
+            target={selectedContributor}
+            source={source}
+            libraryItems={libraryItems}
+            onOpen={onOpenCatalog}
+          />
         )}
       </article>
     </main>

@@ -1826,6 +1826,7 @@ function App() {
               existing: findExistingLibraryItem(result, items),
             }))
             : []}
+          libraryItems={items}
           catalogContextLoading={Boolean(catalogContextIdentity) &&
             (catalogContext.identity !== catalogContextIdentity ||
               catalogContext.loading)}
