@@ -2901,8 +2901,9 @@ describe("Library characterization", () => {
     const credits = screen.getByRole("region", { name: "Credits" });
     expect(within(credits).getByRole("heading", { name: "People" })).not
       .toBeNull();
-    expect(within(credits).getByRole("heading", { name: "Companies" })).not
-      .toBeNull();
+    expect(
+      within(credits).getByRole("heading", { name: "Studios & companies" }),
+    ).not.toBeNull();
     const companyCard = within(credits).getByText("Sunrise").closest("li");
     if (!companyCard) throw new Error("missing company credit card");
     expect(companyCard.querySelector(".detail-credit-avatar")).toBeNull();

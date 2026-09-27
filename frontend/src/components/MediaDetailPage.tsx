@@ -811,7 +811,7 @@ export function MediaDetailPage(
                     {organizations.length > 0 && (
                       <>
                         <h3 className="detail-credit-subheading">
-                          Companies
+                          Studios & companies
                         </h3>
                         <ul className="detail-credits detail-company-credits">
                           {organizations.map((organization) => (
