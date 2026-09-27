@@ -2344,6 +2344,15 @@ button {
 .detail-credits-group {
   grid-column: 1 / -1;
 }
+.detail-credit-subheading {
+  margin: 14px 0 8px;
+  color: var(--overlay);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
 .detail-credits {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -2384,6 +2393,10 @@ button {
   min-width: 0;
   display: grid;
   gap: 3px;
+}
+.detail-company-credits li {
+  min-height: 66px;
+  padding: 12px 14px;
 }
 .detail-credit-copy strong,
 .detail-credit-copy small {

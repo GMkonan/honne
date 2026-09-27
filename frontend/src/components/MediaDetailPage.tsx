@@ -108,6 +108,14 @@ interface MediaDetailPageProps {
   onManage: (item: DetailLibraryMedia) => void;
 }
 
+const organizationCreditRoles = new Set([
+  "developer",
+  "publisher",
+  "studio",
+  "production company",
+  "network",
+]);
+
 const typeDetails: Record<
   SearchMediaType,
   { label: string; icon: LucideIcon }
@@ -468,6 +476,33 @@ export function MediaDetailPage(
         : "",
     }];
   }).slice(0, 12);
+  const people = contributors.filter((contributor) =>
+    !organizationCreditRoles.has(contributor.role.toLocaleLowerCase("en"))
+  );
+  const organizationMap = new Map<
+    string,
+    { name: string; roles: string[] }
+  >();
+  for (const contributor of contributors) {
+    if (
+      !organizationCreditRoles.has(
+        contributor.role.toLocaleLowerCase("en"),
+      )
+    ) continue;
+    const key = contributor.name.toLocaleLowerCase("en");
+    const organization = organizationMap.get(key);
+    if (organization) {
+      if (!organization.roles.includes(contributor.role)) {
+        organization.roles.push(contributor.role);
+      }
+    } else {
+      organizationMap.set(key, {
+        name: contributor.name,
+        roles: [contributor.role],
+      });
+    }
+  }
+  const organizations = [...organizationMap.values()];
   const catalogFacts = [
     { label: "Type", value: type.label },
     {
@@ -743,31 +778,53 @@ export function MediaDetailPage(
                     aria-labelledby="detail-credits-title"
                   >
                     <h2 id="detail-credits-title">Credits</h2>
-                    <ul className="detail-credits">
-                      {contributors.map((contributor) => (
-                        <li key={`${contributor.name}-${contributor.role}`}>
-                          <span className="detail-credit-avatar">
-                            <UserRound size={20} aria-hidden="true" />
-                            {contributor.imageUrl && (
-                              <img
-                                src={contributor.imageUrl}
-                                alt=""
-                                width="48"
-                                height="48"
-                                loading="lazy"
-                                onError={(event) => {
-                                  event.currentTarget.hidden = true;
-                                }}
-                              />
-                            )}
-                          </span>
-                          <span className="detail-credit-copy">
-                            <strong>{contributor.name}</strong>
-                            <small>{contributor.role}</small>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    {people.length > 0 && (
+                      <>
+                        <h3 className="detail-credit-subheading">People</h3>
+                        <ul className="detail-credits">
+                          {people.map((person) => (
+                            <li key={`${person.name}-${person.role}`}>
+                              <span className="detail-credit-avatar">
+                                <UserRound size={20} aria-hidden="true" />
+                                {person.imageUrl && (
+                                  <img
+                                    src={person.imageUrl}
+                                    alt=""
+                                    width="48"
+                                    height="48"
+                                    loading="lazy"
+                                    onError={(event) => {
+                                      event.currentTarget.hidden = true;
+                                    }}
+                                  />
+                                )}
+                              </span>
+                              <span className="detail-credit-copy">
+                                <strong>{person.name}</strong>
+                                <small>{person.role}</small>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {organizations.length > 0 && (
+                      <>
+                        <h3 className="detail-credit-subheading">
+                          Companies
+                        </h3>
+                        <ul className="detail-credits detail-company-credits">
+                          {organizations.map((organization) => (
+                            <li key={organization.name}>
+                              <span className="detail-credit-copy">
+                                <strong>{organization.name}</strong>
+                                <small>{organization.roles.join(" · ")}</small>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                   </section>
                 )}
               </div>

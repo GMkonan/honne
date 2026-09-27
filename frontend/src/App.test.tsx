@@ -2857,6 +2857,7 @@ describe("Library characterization", () => {
       genres: ["Action", "Sci-Fi"],
       credits: [
         { name: "Sunrise", role: "Studio" },
+        { name: "Sunrise", role: "Publisher" },
         { name: "Shinichirō Watanabe", role: "Director" },
       ],
       releaseStatus: "finished",
@@ -2898,8 +2899,19 @@ describe("Library characterization", () => {
     expect(within(genres).getByText("Action")).not.toBeNull();
     expect(within(genres).getByText("Sci-Fi")).not.toBeNull();
     const credits = screen.getByRole("region", { name: "Credits" });
-    expect(within(credits).getByText("Sunrise")).not.toBeNull();
-    expect(within(credits).getByText("Director")).not.toBeNull();
+    expect(within(credits).getByRole("heading", { name: "People" })).not
+      .toBeNull();
+    expect(within(credits).getByRole("heading", { name: "Companies" })).not
+      .toBeNull();
+    const companyCard = within(credits).getByText("Sunrise").closest("li");
+    if (!companyCard) throw new Error("missing company credit card");
+    expect(companyCard.querySelector(".detail-credit-avatar")).toBeNull();
+    expect(within(companyCard).getByText("Studio · Publisher")).not.toBeNull();
+    const personCard = within(credits).getByText("Shinichirō Watanabe")
+      .closest("li");
+    if (!personCard) throw new Error("missing person credit card");
+    expect(personCard.querySelector(".detail-credit-avatar")).not.toBeNull();
+    expect(within(personCard).getByText("Director")).not.toBeNull();
 
     await user.click(
       screen.getByRole("button", {
