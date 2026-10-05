@@ -1,4 +1,12 @@
-import { CalendarDays, History, Plus, RotateCcw, Star } from "lucide-react";
+import {
+  CalendarDays,
+  Download,
+  History,
+  Plus,
+  RotateCcw,
+  Share2,
+  Star,
+} from "lucide-react";
 import { useState } from "react";
 import {
   buildRecapSummary,
@@ -9,6 +17,7 @@ import {
   recapPeriodLabel,
   type RecapSort,
 } from "../recapModel.ts";
+import { createRecapImage, recapFilename } from "../services/recapImage.ts";
 
 interface RecapPageProps {
   media: RecapMedia[];
@@ -29,6 +38,15 @@ const typeLabels: Record<string, string> = {
   game: "Game",
 };
 
+function downloadImage(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  globalThis.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function periodRange(startsAt: Date, now: Date): string {
   const formatter = new Intl.DateTimeFormat("en", {
     month: "short",
@@ -44,6 +62,10 @@ export function RecapPage(
   const [period, setPeriod] = useState<RecapPeriod>("month");
   const [focus, setFocus] = useState<RecapFocus>("finished");
   const [sort, setSort] = useState<RecapSort>("recent");
+  const [imageWorking, setImageWorking] = useState<"download" | "share" | "">(
+    "",
+  );
+  const [imageFeedback, setImageFeedback] = useState("");
   const now = new Date();
   const summary = buildRecapSummary(
     media,
@@ -53,6 +75,44 @@ export function RecapPage(
     sort,
     now,
   );
+
+  async function exportImage(action: "download" | "share") {
+    setImageWorking(action);
+    setImageFeedback("");
+    try {
+      const blob = await createRecapImage({
+        summary,
+        period,
+        focus,
+        profileName,
+        now,
+      });
+      const filename = recapFilename(period, focus);
+      if (action === "share") {
+        const file = new File([blob], filename, { type: "image/png" });
+        if (!navigator.canShare?.({ files: [file] })) {
+          throw new Error("Image sharing is unavailable in this browser.");
+        }
+        await navigator.share({
+          files: [file],
+          title: "My Honne recap",
+          text: recapPeriodLabel(period),
+        });
+        setImageFeedback("Recap shared.");
+      } else {
+        downloadImage(blob, filename);
+        setImageFeedback("Recap downloaded.");
+      }
+    } catch (caught: unknown) {
+      if (!(caught instanceof DOMException && caught.name === "AbortError")) {
+        setImageFeedback(
+          caught instanceof Error ? caught.message : "Image export failed.",
+        );
+      }
+    } finally {
+      setImageWorking("");
+    }
+  }
 
   return (
     <main className="page-container standalone-page recap-page">
@@ -125,6 +185,32 @@ export function RecapPage(
               <option value="rating">Highest rated</option>
             </select>
           </label>
+          <div className="recap-export-actions">
+            <button
+              type="button"
+              className="primary-button"
+              disabled={summary.entries.length === 0 || !!imageWorking}
+              onClick={() => void exportImage("download")}
+            >
+              <Download size={15} />
+              {imageWorking === "download" ? "Creating…" : "Download PNG"}
+            </button>
+            {typeof navigator.share === "function" && (
+              <button
+                type="button"
+                disabled={summary.entries.length === 0 || !!imageWorking}
+                onClick={() => void exportImage("share")}
+              >
+                <Share2 size={15} />
+                {imageWorking === "share" ? "Creating…" : "Share image"}
+              </button>
+            )}
+          </div>
+          {imageFeedback && (
+            <p className="recap-export-feedback" role="status">
+              {imageFeedback}
+            </p>
+          )}
           <p className="recap-privacy-note">
             Built locally from your Library and retained Activity. Nothing is
             uploaded.

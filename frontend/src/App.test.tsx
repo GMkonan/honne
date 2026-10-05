@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.tsx";
+import * as recapImage from "./services/recapImage.ts";
 import { disconnectedAniList, mediaItems } from "./test/fixtures.ts";
 import { createFetchRouter, type FetchRouter } from "./test/fetch-router.ts";
 
@@ -112,6 +113,20 @@ describe("Library characterization", () => {
       changes: { fromStatus: "in_progress", toStatus: "completed" },
       occurredAt,
     }]);
+    const createImage = vi.spyOn(recapImage, "createRecapImage")
+      .mockResolvedValue(
+        new Blob(["png"], { type: "image/png" }),
+      );
+    const download = vi.spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:recap"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
     const user = userEvent.setup();
     render(<App />);
 
@@ -128,6 +143,10 @@ describe("Library characterization", () => {
     expect(within(preview).getByText("New on my shelf")).not.toBeNull();
     await user.selectOptions(screen.getByLabelText("Order"), "rating");
     expect(screen.getByLabelText("Order")).toHaveProperty("value", "rating");
+    await user.click(screen.getByRole("button", { name: "Download PNG" }));
+    expect(await screen.findByText("Recap downloaded.")).not.toBeNull();
+    expect(createImage).toHaveBeenCalledOnce();
+    expect(download).toHaveBeenCalledOnce();
   });
 
   it("retries an unavailable retained Activity window", async () => {
