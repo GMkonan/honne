@@ -99,8 +99,8 @@ func (a *app) listActivity(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "limit must be a positive integer")
 			return
 		}
-		if parsed > 100 {
-			parsed = 100
+		if parsed > maxStoredActivities {
+			parsed = maxStoredActivities
 		}
 		limit = parsed
 	}
