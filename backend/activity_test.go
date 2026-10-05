@@ -240,7 +240,7 @@ func TestGameTrackingUpdateRollsBackWhenPersistenceFails(t *testing.T) {
 
 func TestActivityLimitValidationAndCap(t *testing.T) {
 	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
-	for index := 0; index < 120; index++ {
+	for index := 0; index < maxStoredActivities+20; index++ {
 		store.appendActivityLocked(Activity{Title: "Item", MediaType: "anime", Action: "added"})
 	}
 	application := &app{store: store}
@@ -257,8 +257,8 @@ func TestActivityLimitValidationAndCap(t *testing.T) {
 	if err := json.NewDecoder(capped.Body).Decode(&activities); err != nil {
 		t.Fatal(err)
 	}
-	if len(activities) != 100 {
-		t.Fatalf("capped activity count = %d, want 100", len(activities))
+	if len(activities) != maxStoredActivities {
+		t.Fatalf("capped activity count = %d, want %d", len(activities), maxStoredActivities)
 	}
 }
 
