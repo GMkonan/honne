@@ -1453,6 +1453,31 @@ button {
   background: var(--base);
   font-size: 12px;
 }
+.recap-export-actions {
+  display: grid;
+  gap: 7px;
+}
+.recap-export-actions button {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--surface-2);
+  color: var(--text);
+  background: var(--base);
+  font-size: 12px;
+  cursor: pointer;
+}
+.recap-export-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+.recap-export-feedback {
+  margin: -12px 0 0;
+  color: var(--green);
+  font-size: 12px;
+}
 .recap-privacy-note {
   margin: 0;
   color: var(--overlay);
