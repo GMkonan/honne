@@ -2848,16 +2848,13 @@ function movieCardHighlight(item: Media): {
   value: string;
   title?: string;
 } {
-  if (item.repeatCount > 0) {
-    return { label: "Rewatches", value: String(item.repeatCount) };
+  if (item.releaseYear > 0) {
+    return { label: "Release", value: String(item.releaseYear) };
   }
   if (item.durationMinutes > 0) {
     return { label: "Runtime", value: formatPlaytime(item.durationMinutes) };
   }
-  if (item.releaseYear > 0) {
-    return { label: "Release", value: String(item.releaseYear) };
-  }
-  return { label: "Rewatches", value: "0" };
+  return { label: "Rewatches", value: String(item.repeatCount || 0) };
 }
 
 function MediaCard(
@@ -2880,6 +2877,10 @@ function MediaCard(
     ? gameCardHighlight(item)
     : item.type === "movie"
     ? movieCardHighlight(item)
+    : null;
+  const repeatHighlight = item.type === "movie" && item.repeatCount > 0 &&
+      cardHighlight?.label !== "Rewatches"
+    ? { label: "Rewatches", value: String(item.repeatCount) }
     : null;
 
   return (
@@ -2966,11 +2967,19 @@ function MediaCard(
           : cardHighlight
           ? (
             <>
-              <div className="progress-label">
-                <span>{cardHighlight.label}</span>
-                <strong title={cardHighlight.title}>
-                  {cardHighlight.value}
-                </strong>
+              <div className="card-highlight-list">
+                <div className="progress-label">
+                  <span>{cardHighlight.label}</span>
+                  <strong title={cardHighlight.title}>
+                    {cardHighlight.value}
+                  </strong>
+                </div>
+                {repeatHighlight && (
+                  <div className="progress-label">
+                    <span>{repeatHighlight.label}</span>
+                    <strong>{repeatHighlight.value}</strong>
+                  </div>
+                )}
               </div>
               <div
                 className="progress-placeholder with-label"

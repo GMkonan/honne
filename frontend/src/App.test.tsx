@@ -1809,6 +1809,32 @@ describe("Library characterization", () => {
     expect(within(movieCard).getByText("2026")).not.toBeNull();
   });
 
+  it("keeps a movie release visible alongside its rewatch count", async () => {
+    const router = createFetchRouter();
+    bootstrap(router, [{
+      ...mediaItems[0],
+      id: 11,
+      title: "Arrival",
+      type: "movie",
+      status: "completed",
+      progress: 0,
+      total: 0,
+      repeatCount: 2,
+      durationMinutes: 116,
+      releaseYear: 2016,
+    }]);
+    render(<App />);
+
+    const movieCard = (await screen.findByRole("button", {
+      name: /^View details for Arrival/u,
+    })).closest("article");
+    if (!movieCard) throw new Error("movie card not found");
+    expect(within(movieCard).getByText("Release")).not.toBeNull();
+    expect(within(movieCard).getByText("2016")).not.toBeNull();
+    expect(within(movieCard).getByText("Rewatches")).not.toBeNull();
+    expect(within(movieCard).getByText("2")).not.toBeNull();
+  });
+
   it("keeps catalog movie metadata separate from personal progress", async () => {
     const result = {
       provider: "tmdb",
