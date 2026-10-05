@@ -16,6 +16,7 @@ import {
   mediaTracking,
   normalizePersonalPlatforms,
   optionalNumberInputValue,
+  plannedRepeatLabel,
   playtimeHoursInputValue,
   playtimeMinutesFromHours,
   suggestedTrackingTotal,
@@ -27,6 +28,7 @@ export interface ManagedMediaValues {
   total: number;
   rating: number;
   repeatCount: number;
+  plannedRepeat: boolean;
   playtimeMinutes: number;
   playedOnPlatforms: string[];
   notes: string;
@@ -80,6 +82,7 @@ export function ManageMediaModal(
     ),
     rating: item.rating,
     repeatCount: item.repeatCount || 0,
+    plannedRepeat: item.plannedRepeat || false,
     playtimeMinutes: item.playtimeMinutes || 0,
     playedOnPlatforms: Array.isArray(item.playedOnPlatforms)
       ? item.playedOnPlatforms
@@ -143,10 +146,27 @@ export function ManageMediaModal(
     >,
   ) {
     const { name, value, type } = event.target;
-    setForm((current) => ({
-      ...current,
-      [name]: type === "number" ? Number(value) : value,
-    }));
+    const checked = event.target instanceof HTMLInputElement
+      ? event.target.checked
+      : false;
+    setForm((current) => {
+      if (name === "status") {
+        const status = value as DetailMediaStatus;
+        return {
+          ...current,
+          status,
+          plannedRepeat: status === "completed" && current.plannedRepeat,
+        };
+      }
+      return {
+        ...current,
+        [name]: type === "checkbox"
+          ? checked
+          : type === "number"
+          ? Number(value)
+          : value,
+      };
+    });
   }
 
   function handleEditDetails() {
@@ -245,6 +265,23 @@ export function ManageMediaModal(
                 </option>
               ))}
             </select>
+          </label>
+          <label className="wide planned-repeat-field">
+            <span>
+              <input
+                type="checkbox"
+                name="plannedRepeat"
+                checked={form.plannedRepeat}
+                disabled={form.status !== "completed"}
+                aria-label={plannedRepeatLabel(item.type)}
+                aria-describedby="planned-repeat-help"
+                onChange={handleChange}
+              />
+              {plannedRepeatLabel(item.type)}
+            </span>
+            <small id="planned-repeat-help">
+              Keep this title completed while marking it for another time.
+            </small>
           </label>
           <label>
             {tracking.repeatLabel}

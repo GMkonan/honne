@@ -251,6 +251,27 @@ describe("Library characterization", () => {
     expect(visibleMediaTitles()).toEqual(["Dune"]);
   });
 
+  it("separates completed titles planned for another time", async () => {
+    const router = createFetchRouter();
+    bootstrap(router, [
+      { ...mediaItems[2], plannedRepeat: true },
+      { ...mediaItems[0], id: 4, title: "Samurai Champloo" },
+    ]);
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", {
+      name: /^View details for Spirited Away/,
+    });
+
+    const statusFilters = screen.getByRole("complementary", {
+      name: "Status filters",
+    });
+    await user.click(
+      within(statusFilters).getByRole("button", { name: /^Plan to revisit/u }),
+    );
+    expect(visibleMediaTitles()).toEqual(["Spirited Away"]);
+  });
+
   it("sorts and resets the current collection", async () => {
     const router = createFetchRouter();
     bootstrap(router);
@@ -2733,6 +2754,11 @@ describe("Library characterization", () => {
       screen.getByRole("combobox", { name: "Status" }),
       "completed",
     );
+    const plannedRepeat = screen.getByRole("checkbox", {
+      name: "Plan to rewatch",
+    });
+    expect((plannedRepeat as HTMLInputElement).disabled).toBe(false);
+    await user.click(plannedRepeat);
     const progress = screen.getByRole("spinbutton", {
       name: "Episodes watched 26 episodes total",
     });
@@ -2767,6 +2793,7 @@ describe("Library characterization", () => {
       progress: 26,
       rating: 10,
       repeatCount: 1,
+      plannedRepeat: true,
       notes: "A timeless finale.",
       description: "Synthetic fixture",
       format: "TV",
@@ -2784,6 +2811,7 @@ describe("Library characterization", () => {
     expect(within(personal).queryByText("26 of 26")).toBeNull();
     expect(within(personal).queryByText("A timeless finale.")).toBeNull();
     expect(within(personal).queryByText("Rewatches")).toBeNull();
+    expect(within(personal).getByText("Plan to rewatch")).not.toBeNull();
   });
 
   it("saves cleared optional numbers as zero and keeps them visually empty", async () => {
@@ -3055,6 +3083,15 @@ describe("Library characterization", () => {
         changes: { fromPlaytimeMinutes: 0, toPlaytimeMinutes: 90 },
         occurredAt: "2026-01-05T00:00:00Z",
       },
+      {
+        id: 8,
+        mediaId: 1,
+        title: "Cowboy Bebop",
+        mediaType: "anime",
+        action: "updated",
+        changes: { fromPlannedRepeat: false, toPlannedRepeat: true },
+        occurredAt: "2026-01-05T00:00:00Z",
+      },
     ]);
     render(<App />);
 
@@ -3065,6 +3102,7 @@ describe("Library characterization", () => {
     expect(screen.getByText("Rewatches 0 → 1")).not.toBeNull();
     expect(screen.getByText("Rereads 1 → 2")).not.toBeNull();
     expect(screen.getByText("Playtime Not tracked → 1h 30m")).not.toBeNull();
+    expect(screen.getByText("Plan to rewatch")).not.toBeNull();
   });
 
   it("preserves management values after a failed save and restores focus on Escape", async () => {

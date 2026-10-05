@@ -18,6 +18,8 @@ type ActivityChanges struct {
 	ToRating            *int   `json:"toRating,omitempty"`
 	FromRepeatCount     *int   `json:"fromRepeatCount,omitempty"`
 	ToRepeatCount       *int   `json:"toRepeatCount,omitempty"`
+	FromPlannedRepeat   *bool  `json:"fromPlannedRepeat,omitempty"`
+	ToPlannedRepeat     *bool  `json:"toPlannedRepeat,omitempty"`
 	FromPlaytimeMinutes *int   `json:"fromPlaytimeMinutes,omitempty"`
 	ToPlaytimeMinutes   *int   `json:"toPlaytimeMinutes,omitempty"`
 }
@@ -45,13 +47,14 @@ func (s *store) appendActivityLocked(activity Activity) {
 }
 
 func activityForNewMedia(item Media, action string) Activity {
+	changes := ActivityChanges{ToStatus: item.Status}
+	if item.PlannedRepeat {
+		planned := true
+		changes.ToPlannedRepeat = &planned
+	}
 	return Activity{
-		MediaID:    item.ID,
-		Title:      item.Title,
-		MediaType:  item.Type,
-		Action:     action,
-		Changes:    ActivityChanges{ToStatus: item.Status},
-		OccurredAt: item.UpdatedAt,
+		MediaID: item.ID, Title: item.Title, MediaType: item.Type, Action: action,
+		Changes: changes, OccurredAt: item.UpdatedAt,
 	}
 }
 
@@ -75,6 +78,11 @@ func activityForUpdatedMedia(before, after Media) Activity {
 		from, to := before.RepeatCount, after.RepeatCount
 		changes.FromRepeatCount = &from
 		changes.ToRepeatCount = &to
+	}
+	if before.PlannedRepeat != after.PlannedRepeat {
+		from, to := before.PlannedRepeat, after.PlannedRepeat
+		changes.FromPlannedRepeat = &from
+		changes.ToPlannedRepeat = &to
 	}
 	if before.PlaytimeMinutes != after.PlaytimeMinutes {
 		from, to := before.PlaytimeMinutes, after.PlaytimeMinutes

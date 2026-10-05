@@ -45,7 +45,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	if response.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
 		response.Header().Get("Cache-Control") != "no-store" ||
 		response.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		response.Header().Get("X-Honne-Backup-Version") != "5" {
+		response.Header().Get("X-Honne-Backup-Version") != "6" {
 		t.Fatalf("unexpected backup headers: %v", response.Header())
 	}
 	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, `attachment; filename="honne-backup-`) || !strings.HasSuffix(disposition, `.json"`) {

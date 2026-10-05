@@ -944,6 +944,19 @@ button {
 .status.dropped {
   --status-accent: var(--red);
 }
+.card-repeat-plan {
+  position: absolute;
+  z-index: 2;
+  top: 43px;
+  left: 8px;
+  padding: 4px 7px;
+  border: 1px solid rgba(116,199,236,.5);
+  border-radius: 3px;
+  color: var(--sapphire);
+  background: rgba(17,17,27,.9);
+  font-size: 9px;
+  font-weight: 600;
+}
 .card-content {
   padding: 9px;
 }
@@ -1299,6 +1312,9 @@ button {
 }
 .status-list .dropped {
   border-left-color: var(--red);
+}
+.status-list .planned-repeat {
+  border-left-color: var(--sapphire);
 }
 
 .standalone-page {
@@ -2794,6 +2810,18 @@ button {
 .detail-manage-button.dropped {
   background: var(--red);
 }
+.detail-repeat-plan {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 7px;
+  border: 1px solid var(--sapphire);
+  border-radius: 3px;
+  color: var(--sapphire);
+  font-size: 12px;
+  font-weight: 600;
+}
 .detail-add-panel .primary-button {
   width: 100%;
   min-height: 46px;
@@ -3022,6 +3050,25 @@ button {
 .manage-media-modal small {
   font-size: 12px;
   line-height: 1.45;
+}
+.modal label.planned-repeat-field {
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--surface-2);
+  background: var(--base);
+}
+.planned-repeat-field > span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+}
+.manage-media-modal .planned-repeat-field input {
+  width: 24px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--blue);
 }
 .manage-media-modal .form-error {
   font-size: 12px;

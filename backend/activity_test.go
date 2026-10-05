@@ -197,13 +197,14 @@ func TestRepeatCountUpdateRollsBackWhenPersistenceFails(t *testing.T) {
 	application := &app{store: store}
 	request := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
 		Title: "Dune", Type: "book", Status: "completed", RepeatCount: intPointer(2),
+		PlannedRepeat: boolPointer(true),
 	})
 	request.SetPathValue("id", "1")
 	response := httptest.NewRecorder()
 	application.updateMedia(response, request)
 
 	if response.Code != http.StatusInternalServerError || store.items[0].RepeatCount != 1 ||
-		len(store.activities) != 0 || store.nextActivityID != 1 {
+		store.items[0].PlannedRepeat || len(store.activities) != 0 || store.nextActivityID != 1 {
 		t.Fatalf("failed update left partial state: code=%d item=%+v activities=%+v next=%d", response.Code, store.items[0], store.activities, store.nextActivityID)
 	}
 }

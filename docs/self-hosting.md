@@ -152,7 +152,9 @@ docker compose pull
 docker compose up -d
 ```
 
-Do not use that sequence for v0.1.0. Its Compose asset predates embedded image tags, and its backend cannot read the persistence-v5 snapshot written by v0.2.0. Before validating or starting v0.1.0:
+Starting with v0.4.0, the first successful Library write upgrades the snapshot to persistence version 6 so planned rewatch, reread, and replay intent can be stored. A v0.3.x or older backend cannot read that snapshot. Before updating to v0.4.0, download a backup. To roll back afterward, stop the backend, preserve the current data directory, restore the pre-v0.4.0 backup as described in **Restore a downloaded backup**, and only then start the older containers. Starting the older backend without that restore fails safely with an unsupported-version error; it does not rewrite the newer snapshot.
+
+Do not use the simple image-only rollback sequence for v0.1.0 either. Its Compose asset predates embedded image tags, and its backend cannot read the persistence-v5 snapshot written by v0.2.0. Before validating or starting v0.1.0:
 
 1. locate the matching pre-v0.2.0 JSON backup;
 2. set `HONNE_VERSION=v0.1.0` in `.env`;
