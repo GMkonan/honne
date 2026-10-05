@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const persistedStoreVersion = 5
+const persistedStoreVersion = 6
 
 var (
 	validTypes    = []string{"anime", "series", "movie", "book", "manga", "light_novel", "game"}
@@ -40,6 +40,7 @@ type Media struct {
 	Total               int           `json:"total"`
 	Rating              int           `json:"rating"`
 	RepeatCount         int           `json:"repeatCount"`
+	PlannedRepeat       bool          `json:"plannedRepeat,omitempty"`
 	PlaytimeMinutes     int           `json:"playtimeMinutes"`
 	PlayedOnPlatforms   []string      `json:"playedOnPlatforms"`
 	CatalogPlatforms    []string      `json:"catalogPlatforms"`
@@ -77,6 +78,7 @@ type mediaInput struct {
 	Total             int           `json:"total"`
 	Rating            int           `json:"rating"`
 	RepeatCount       *int          `json:"repeatCount,omitempty"`
+	PlannedRepeat     *bool         `json:"plannedRepeat,omitempty"`
 	PlaytimeMinutes   *int          `json:"playtimeMinutes,omitempty"`
 	PlayedOnPlatforms *[]string     `json:"playedOnPlatforms,omitempty"`
 	CatalogPlatforms  []string      `json:"catalogPlatforms,omitempty"`
@@ -399,6 +401,9 @@ func (a *app) updateMedia(w http.ResponseWriter, r *http.Request) {
 	if input.RepeatCount != nil {
 		item.RepeatCount = *input.RepeatCount
 	}
+	if input.PlannedRepeat != nil {
+		item.PlannedRepeat = *input.PlannedRepeat
+	}
 	if input.PlaytimeMinutes != nil {
 		item.PlaytimeMinutes = *input.PlaytimeMinutes
 	}
@@ -516,6 +521,9 @@ func validateInput(input mediaInput) error {
 	}
 	if input.RepeatCount != nil && (*input.RepeatCount < 0 || *input.RepeatCount > maxRepeatCount) {
 		return fmt.Errorf("repeat count must be between 0 and %d", maxRepeatCount)
+	}
+	if input.PlannedRepeat != nil && *input.PlannedRepeat && input.Status != "completed" {
+		return errors.New("only completed media can be planned for a repeat")
 	}
 	if input.PlaytimeMinutes != nil && (*input.PlaytimeMinutes < 0 || *input.PlaytimeMinutes > maxPlaytimeMinutes) {
 		return fmt.Errorf("playtime must be between 0 and %d minutes", maxPlaytimeMinutes)

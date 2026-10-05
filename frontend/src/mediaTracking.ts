@@ -77,6 +77,17 @@ export function mediaTracking(
   return trackingByType[type];
 }
 
+export function plannedRepeatLabel(
+  type: TrackingMediaType | "all",
+): string {
+  if (type === "all") return "Plan to revisit";
+  if (type === "game") return "Plan to replay";
+  if (["book", "manga", "light_novel"].includes(type)) {
+    return "Plan to reread";
+  }
+  return "Plan to rewatch";
+}
+
 export function mediaStatusLabel(
   status?: TrackingMediaStatus,
   type: TrackingMediaType | "all" = "all",

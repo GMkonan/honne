@@ -29,6 +29,7 @@ import {
 import {
   catalogTotalLabel,
   mediaStatusLabel,
+  plannedRepeatLabel,
   type TrackingMediaStatus,
 } from "../mediaTracking.ts";
 import {
@@ -48,6 +49,7 @@ export interface DetailLibraryMedia {
   total: number;
   rating: number;
   repeatCount: number;
+  plannedRepeat: boolean;
   playtimeMinutes: number;
   playedOnPlatforms: string[];
   notes: string;
@@ -348,6 +350,11 @@ function LibraryPanel(
         <Pencil size={16} />
         <span>{mediaStatusLabel(item.status, item.type)}</span>
       </button>
+      {item.plannedRepeat && (
+        <span className="detail-repeat-plan">
+          {plannedRepeatLabel(item.type)}
+        </span>
+      )}
     </section>
   );
 }

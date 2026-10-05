@@ -57,6 +57,7 @@ import {
   mediaTracking,
   normalizePersonalPlatforms,
   optionalNumberInputValue,
+  plannedRepeatLabel,
   playtimeHoursInputValue,
   playtimeMinutesFromHours,
   suggestedTrackingTotal,
@@ -75,6 +76,7 @@ interface MediaInput {
   total: number;
   rating: number;
   repeatCount: number;
+  plannedRepeat: boolean;
   playtimeMinutes: number;
   playedOnPlatforms: string[];
   notes: string;
@@ -115,6 +117,8 @@ interface ActivityChanges {
   toRating?: number;
   fromRepeatCount?: number;
   toRepeatCount?: number;
+  fromPlannedRepeat?: boolean;
+  toPlannedRepeat?: boolean;
   fromPlaytimeMinutes?: number;
   toPlaytimeMinutes?: number;
 }
@@ -130,6 +134,7 @@ interface ActivityEvent {
 }
 
 type LibrarySort = "recent" | "added" | "title" | "rating";
+type LibraryStatusFilter = MediaStatus | "planned_repeat";
 type AppView =
   | "library"
   | "activity"
@@ -255,6 +260,7 @@ const emptyForm: MediaInput = {
   total: 0,
   rating: 0,
   repeatCount: 0,
+  plannedRepeat: false,
   playtimeMinutes: 0,
   playedOnPlatforms: [],
   notes: "",
@@ -361,6 +367,7 @@ function mediaToInput(item: Media): MediaInput {
     total: item.total,
     rating: item.rating,
     repeatCount: item.repeatCount || 0,
+    plannedRepeat: item.plannedRepeat || false,
     playtimeMinutes: item.playtimeMinutes || 0,
     playedOnPlatforms: Array.isArray(item.playedOnPlatforms)
       ? item.playedOnPlatforms
@@ -437,6 +444,13 @@ function activityDescription(activity: ActivityEvent): string {
       `${mediaTracking(activity.mediaType).repeatLabel} ${
         activity.changes.fromRepeatCount ?? 0
       } → ${activity.changes.toRepeatCount}`,
+    );
+  }
+  if (activity.changes.toPlannedRepeat !== undefined) {
+    details.push(
+      activity.changes.toPlannedRepeat
+        ? plannedRepeatLabel(activity.mediaType)
+        : "Repeat plan cleared",
     );
   }
   if (activity.changes.toPlaytimeMinutes !== undefined) {
@@ -865,7 +879,9 @@ function App() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [activeType, setActiveType] = useState<MediaType | "all">("all");
-  const [activeStatus, setActiveStatus] = useState<MediaStatus | "all">("all");
+  const [activeStatus, setActiveStatus] = useState<
+    LibraryStatusFilter | "all"
+  >("all");
   const [sortBy, setSortBy] = useState<LibrarySort>("recent");
   const [modalItem, setModalItem] = useState<Media | null | undefined>(
     undefined,
@@ -1256,7 +1272,10 @@ function App() {
     );
     return matchesSearch &&
       (activeType === "all" || item.type === activeType) &&
-      (activeStatus === "all" || item.status === activeStatus);
+      (activeStatus === "all" ||
+        (activeStatus === "planned_repeat"
+          ? item.plannedRepeat
+          : item.status === activeStatus));
   }).sort((a, b) => {
     if (sortBy === "title") return a.title.localeCompare(b.title);
     if (sortBy === "rating") {
@@ -1775,6 +1794,19 @@ function App() {
                       </strong>
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    aria-pressed={activeStatus === "planned_repeat"}
+                    className={`planned-repeat ${
+                      activeStatus === "planned_repeat" ? "active" : ""
+                    }`}
+                    onClick={() => setActiveStatus("planned_repeat")}
+                  >
+                    <span>{plannedRepeatLabel(activeType)}</span>
+                    <strong>
+                      {statusScope.filter((item) => item.plannedRepeat).length}
+                    </strong>
+                  </button>
                 </div>
               </aside>
             </div>
@@ -2897,7 +2929,7 @@ function MediaCard(
           onClick={onOpen}
           aria-label={`View details for ${item.title}. Status: ${
             mediaStatusLabel(item.status, item.type)
-          }`}
+          }${item.plannedRepeat ? `. ${plannedRepeatLabel(item.type)}` : ""}`}
         >
           {!item.coverUrl && (
             <span className="fallback-label">
@@ -2907,6 +2939,11 @@ function MediaCard(
           <span className={`status ${item.status}`}>
             {status ? mediaStatusLabel(status.value, item.type) : ""}
           </span>
+          {item.plannedRepeat && (
+            <span className="card-repeat-plan">
+              {plannedRepeatLabel(item.type)}
+            </span>
+          )}
         </button>
         <div className="card-actions">
           <button

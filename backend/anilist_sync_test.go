@@ -26,6 +26,15 @@ func TestLocalStatusMapping(t *testing.T) {
 	}
 }
 
+func TestPlannedRepeatRemainsLocalToHonne(t *testing.T) {
+	before := Media{Status: "completed", PlannedRepeat: false}
+	after := before
+	after.PlannedRepeat = true
+	if aniListWritableFieldsChanged(before, after) {
+		t.Fatal("planned repeat intent must not enqueue an AniList write")
+	}
+}
+
 func TestLegacyStoreMigratesWithDurableCoalescedOutbox(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	legacy := []Media{{ID: 4, Title: "Cowboy Bebop", Type: "anime", Status: "planned", Provider: "anilist", ProviderID: "1"}}
@@ -62,7 +71,7 @@ func TestLegacyStoreMigratesWithDurableCoalescedOutbox(t *testing.T) {
 		t.Fatalf("migration did not survive restart: %+v", reopened)
 	}
 	persisted, _ := os.ReadFile(path)
-	if !strings.Contains(string(persisted), `"version": 5`) {
+	if !strings.Contains(string(persisted), `"version": 6`) {
 		t.Fatalf("expected versioned store, got %s", persisted)
 	}
 }

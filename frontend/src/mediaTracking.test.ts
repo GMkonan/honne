@@ -6,6 +6,7 @@ import {
   mediaTracking,
   normalizePersonalPlatforms,
   optionalNumberInputValue,
+  plannedRepeatLabel,
   playtimeHoursInputValue,
   playtimeMinutesFromHours,
   suggestedTrackingTotal,
@@ -89,6 +90,15 @@ describe("media tracking rules", () => {
   it("renders zero as an empty numeric input value", () => {
     expect(optionalNumberInputValue(0)).toBe("");
     expect(optionalNumberInputValue(10)).toBe(10);
+  });
+
+  it("uses type-aware planned repeat labels", () => {
+    expect(plannedRepeatLabel("anime")).toBe("Plan to rewatch");
+    expect(plannedRepeatLabel("movie")).toBe("Plan to rewatch");
+    expect(plannedRepeatLabel("book")).toBe("Plan to reread");
+    expect(plannedRepeatLabel("manga")).toBe("Plan to reread");
+    expect(plannedRepeatLabel("game")).toBe("Plan to replay");
+    expect(plannedRepeatLabel("all")).toBe("Plan to revisit");
   });
 
   it("keeps generic labels for mixed-type filters", () => {

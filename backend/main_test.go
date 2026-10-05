@@ -62,6 +62,8 @@ func TestValidateInput(t *testing.T) {
 	invalidRepeatCount.RepeatCount = intPointer(-1)
 	tooManyRepeats := valid
 	tooManyRepeats.RepeatCount = intPointer(maxRepeatCount + 1)
+	invalidPlannedRepeat := valid
+	invalidPlannedRepeat.PlannedRepeat = boolPointer(true)
 	invalidPlaytime := valid
 	invalidPlaytime.Type = "game"
 	invalidPlaytime.PlaytimeMinutes = intPointer(maxPlaytimeMinutes + 1)
@@ -84,7 +86,7 @@ func TestValidateInput(t *testing.T) {
 	invalidCatalogPlatform := valid
 	invalidCatalogPlatform.Type = "game"
 	invalidCatalogPlatform.CatalogPlatforms = []string{strings.Repeat("x", 101)}
-	cases = append(cases, tooManyGenres, tooManyCredits, invalidGenre, invalidCredit, invalidReleaseStatus, invalidDate, invalidDuration, invalidCatalogTotal, invalidCommunityRating, invalidFormat, reversedDates, mismatchedReleaseYear, invalidRepeatCount, tooManyRepeats, invalidPlaytime, tooManyPlatforms, invalidPlatform, nonGameCatalogPlatform, tooManyCatalogPlatforms, invalidCatalogPlatform)
+	cases = append(cases, tooManyGenres, tooManyCredits, invalidGenre, invalidCredit, invalidReleaseStatus, invalidDate, invalidDuration, invalidCatalogTotal, invalidCommunityRating, invalidFormat, reversedDates, mismatchedReleaseYear, invalidRepeatCount, tooManyRepeats, invalidPlannedRepeat, invalidPlaytime, tooManyPlatforms, invalidPlatform, nonGameCatalogPlatform, tooManyCatalogPlatforms, invalidCatalogPlatform)
 
 	for i, input := range cases {
 		if err := validateInput(input); err == nil {
@@ -378,6 +380,60 @@ func TestRepeatCountPersistsAndLegacyUpdatesPreserveIt(t *testing.T) {
 	}
 }
 
+func TestPlannedRepeatPersistsAndLegacyUpdatesPreserveIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	store, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store}
+
+	created := httptest.NewRecorder()
+	application.createMedia(created, jsonRequest(http.MethodPost, "/api/media", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", PlannedRepeat: boolPointer(true),
+	}))
+	if created.Code != http.StatusCreated || !store.items[0].PlannedRepeat {
+		t.Fatalf("create = %d, item=%+v", created.Code, store.items[0])
+	}
+
+	legacyUpdate := httptest.NewRecorder()
+	legacyRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", Rating: 9,
+	})
+	legacyRequest.SetPathValue("id", "1")
+	application.updateMedia(legacyUpdate, legacyRequest)
+	if legacyUpdate.Code != http.StatusOK || !store.items[0].PlannedRepeat {
+		t.Fatalf("legacy update = %d, item=%+v", legacyUpdate.Code, store.items[0])
+	}
+
+	invalid := httptest.NewRecorder()
+	invalidRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "in_progress",
+	})
+	invalidRequest.SetPathValue("id", "1")
+	application.updateMedia(invalid, invalidRequest)
+	if invalid.Code != http.StatusUnprocessableEntity || !store.items[0].PlannedRepeat {
+		t.Fatalf("invalid status update = %d, item=%+v", invalid.Code, store.items[0])
+	}
+
+	cleared := httptest.NewRecorder()
+	clearRequest := jsonRequest(http.MethodPatch, "/api/media/1", mediaInput{
+		Title: "Dune", Type: "book", Status: "completed", Rating: 9, PlannedRepeat: boolPointer(false),
+	})
+	clearRequest.SetPathValue("id", "1")
+	application.updateMedia(cleared, clearRequest)
+	if cleared.Code != http.StatusOK || store.items[0].PlannedRepeat {
+		t.Fatalf("clear planned repeat = %d, item=%+v", cleared.Code, store.items[0])
+	}
+	if len(store.activities) != 3 || store.activities[2].Changes.ToPlannedRepeat == nil || *store.activities[2].Changes.ToPlannedRepeat {
+		t.Fatalf("planned repeat activity was not recorded: %+v", store.activities)
+	}
+	reopened, err := newStore(path)
+	if err != nil || reopened.items[0].PlannedRepeat {
+		t.Fatalf("cleared planned repeat did not survive restart: store=%+v err=%v", reopened, err)
+	}
+}
+
 func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	legacy := `{"version":1,"items":[{"id":1,"title":"Legacy","type":"anime","status":"planned","progress":0,"total":12,"rating":0,"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`
@@ -401,11 +457,11 @@ func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(persisted), `"version": 5`) || !strings.Contains(string(persisted), `"playedOnPlatforms": []`) || !strings.Contains(string(persisted), `"catalogPlatforms": []`) {
+	if !strings.Contains(string(persisted), `"version": 6`) || !strings.Contains(string(persisted), `"playedOnPlatforms": []`) || !strings.Contains(string(persisted), `"catalogPlatforms": []`) {
 		t.Fatalf("v1 snapshot was not upgraded on write: %s", persisted)
 	}
 	if _, err := newStore(path); err != nil {
-		t.Fatalf("v5 snapshot did not reopen: %v", err)
+		t.Fatalf("v6 snapshot did not reopen: %v", err)
 	}
 
 	v2Path := filepath.Join(t.TempDir(), "media.json")
@@ -423,12 +479,12 @@ func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	v2Persisted, err := os.ReadFile(v2Path)
-	if err != nil || !strings.Contains(string(v2Persisted), `"version": 5`) {
+	if err != nil || !strings.Contains(string(v2Persisted), `"version": 6`) {
 		t.Fatalf("v2 snapshot was not upgraded on write: data=%s err=%v", v2Persisted, err)
 	}
 }
 
-func TestVersionThreeSnapshotMigratesToVersionFive(t *testing.T) {
+func TestVersionThreeSnapshotMigratesToVersionSix(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	if err := os.WriteFile(path, []byte(`{"version":3,"items":[{"id":1,"title":"Before games","type":"anime","status":"planned","progress":0,"total":0,"rating":0,"repeatCount":0,"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -441,12 +497,12 @@ func TestVersionThreeSnapshotMigratesToVersionFive(t *testing.T) {
 	err = store.persistLocked()
 	store.mu.Unlock()
 	data, readErr := os.ReadFile(path)
-	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 5`) || !strings.Contains(string(data), `"playedOnPlatforms": []`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
-		t.Fatalf("v3 snapshot was not rewritten as v5: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 6`) || !strings.Contains(string(data), `"playedOnPlatforms": []`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
+		t.Fatalf("v3 snapshot was not rewritten as v6: data=%s persistErr=%v readErr=%v", data, err, readErr)
 	}
 }
 
-func TestVersionFourSnapshotMigratesToVersionFive(t *testing.T) {
+func TestVersionFourSnapshotMigratesToVersionSix(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	if err := os.WriteFile(path, []byte(`{"version":4,"items":[{"id":1,"title":"Hades","type":"game","status":"in_progress","progress":0,"total":0,"rating":9,"repeatCount":1,"playtimeMinutes":90,"playedOnPlatforms":["PC"],"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -459,17 +515,35 @@ func TestVersionFourSnapshotMigratesToVersionFive(t *testing.T) {
 	err = store.persistLocked()
 	store.mu.Unlock()
 	data, readErr := os.ReadFile(path)
-	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 5`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
-		t.Fatalf("v4 snapshot was not rewritten as v5: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 6`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
+		t.Fatalf("v4 snapshot was not rewritten as v6: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	}
+}
+
+func TestVersionFiveSnapshotMigratesWithNoPlannedRepeat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	if err := os.WriteFile(path, []byte(`{"version":5,"items":[{"id":1,"title":"Arrival","type":"movie","status":"completed","progress":0,"total":0,"rating":9,"repeatCount":1,"playtimeMinutes":0,"playedOnPlatforms":[],"catalogPlatforms":[],"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := newStore(path)
+	if err != nil || store.items[0].PlannedRepeat {
+		t.Fatalf("v5 snapshot did not migrate with no planned repeat: store=%+v err=%v", store, err)
+	}
+	store.mu.Lock()
+	err = store.persistLocked()
+	store.mu.Unlock()
+	data, readErr := os.ReadFile(path)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 6`) {
+		t.Fatalf("v5 snapshot was not rewritten as v6: data=%s persistErr=%v readErr=%v", data, err, readErr)
 	}
 }
 
 func TestNewStoreRejectsUnknownSnapshotVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
-	if err := os.WriteFile(path, []byte(`{"version":6,"items":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"version":7,"items":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 6") {
+	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 7") {
 		t.Fatalf("expected unsupported version error, got %v", err)
 	}
 }
@@ -497,6 +571,10 @@ func TestLoadConfigValidatesOptionalAuthentication(t *testing.T) {
 }
 
 func intPointer(value int) *int {
+	return &value
+}
+
+func boolPointer(value bool) *bool {
 	return &value
 }
 

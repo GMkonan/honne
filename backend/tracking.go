@@ -30,6 +30,13 @@ func validateTrackingForUpdate(existing Media, input mediaInput) error {
 	if input.Type != "game" && hasChangedGameTracking(existing, input) {
 		return errors.New("only games support playtime and played-on platforms")
 	}
+	plannedRepeat := existing.PlannedRepeat
+	if input.PlannedRepeat != nil {
+		plannedRepeat = *input.PlannedRepeat
+	}
+	if plannedRepeat && input.Status != "completed" {
+		return errors.New("only completed media can be planned for a repeat")
+	}
 	return nil
 }
 
@@ -50,6 +57,10 @@ func repeatCountValue(value *int) int {
 		return 0
 	}
 	return *value
+}
+
+func plannedRepeatValue(value *bool) bool {
+	return value != nil && *value
 }
 
 func playtimeMinutesValue(value *int) int {

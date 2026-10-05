@@ -3,6 +3,7 @@ const baseMedia = {
   total: 0,
   rating: 0,
   repeatCount: 0,
+  plannedRepeat: false,
   notes: "",
   coverUrl: "",
   provider: "",

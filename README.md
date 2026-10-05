@@ -10,7 +10,7 @@ Track what you plan to watch, read, or play, keep personal progress and ratings,
 ## Highlights
 
 - One Library for anime, series, movies, books, manga, light novels, and games.
-- Type-aware tracking with episodes, pages, chapters, rewatches, and rereads.
+- Type-aware tracking with episodes, pages, chapters, rewatches, rereads, and plans to revisit completed titles.
 - Personal status, progress, rating, notes, and activity history.
 - Optional discovery through AniList/Kitsu, TMDB, Open Library, and RAWG.
 - Optional one-way synchronization from Honne to AniList.
