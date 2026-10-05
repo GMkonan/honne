@@ -83,6 +83,7 @@ export async function requestContributorWorks(
   const body = await response.json() as {
     results?: unknown;
     page?: unknown;
+    hasMore?: unknown;
   };
   if (body.page !== page || !Array.isArray(body.results)) {
     throw new Error("The metadata provider returned an invalid response.");
@@ -96,5 +97,5 @@ export async function requestContributorWorks(
     results.push(result);
     if (results.length === 20) break;
   }
-  return { results };
+  return { results, hasMore: body.hasMore === true };
 }

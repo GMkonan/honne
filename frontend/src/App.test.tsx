@@ -1300,46 +1300,52 @@ describe("Library characterization", () => {
         communityRating: 9,
       },
     );
+    let developerWorksCalls = 0;
     router.json(
       "GET",
       "/api/discovery/works?provider=rawg&type=game&id=19&relation=developer&page=1&exclude=420",
-      {
-        results: [{
-          provider: "rawg",
-          providerId: "900",
-          providerUrl: "https://rawg.io/games/hades-ii",
-          type: "game",
-          title: "Hades II",
-          releaseYear: 2025,
-        }],
-        page: 1,
-        hasMore: false,
+      () => {
+        developerWorksCalls += 1;
+        return developerWorksCalls === 1
+          ? Response.json({
+            results: [{
+              provider: "rawg",
+              providerId: "900",
+              providerUrl: "https://rawg.io/games/hades-ii",
+              type: "game",
+              title: "Hades II",
+              releaseYear: 2025,
+            }],
+            page: 1,
+            hasMore: false,
+          })
+          : Response.json({ error: "temporarily unavailable" }, {
+            status: 502,
+          });
       },
     );
+    let publisherWorksCalls = 0;
     router.json(
       "GET",
       "/api/discovery/works?provider=rawg&type=game&id=25&relation=publisher&page=1&exclude=420",
-      {
-        results: [
-          {
-            provider: "rawg",
-            providerId: "900",
-            providerUrl: "https://rawg.io/games/hades-ii",
-            type: "game",
-            title: "Hades II",
-            releaseYear: 2025,
-          },
-          {
-            provider: "rawg",
-            providerId: "901",
-            providerUrl: "https://rawg.io/games/pyre",
-            type: "game",
-            title: "Pyre",
-            releaseYear: 2017,
-          },
-        ],
-        page: 1,
-        hasMore: false,
+      () => {
+        publisherWorksCalls += 1;
+        return publisherWorksCalls === 1
+          ? Response.json({ error: "temporarily unavailable" }, {
+            status: 502,
+          })
+          : Response.json({
+            results: [{
+              provider: "rawg",
+              providerId: "901",
+              providerUrl: "https://rawg.io/games/pyre",
+              type: "game",
+              title: "Pyre",
+              releaseYear: 2017,
+            }],
+            page: 1,
+            hasMore: false,
+          });
       },
     );
     router.json("POST", "/api/media", async (request: Request) => {
@@ -1392,7 +1398,13 @@ describe("Library characterization", () => {
       }),
     ).not.toBeNull();
     expect(screen.getAllByText("Hades II")).toHaveLength(1);
-    expect(screen.getByText("Pyre")).not.toBeNull();
+    expect(screen.queryByText("Pyre")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Pyre")).not.toBeNull();
+    expect(screen.getAllByText("Hades II")).toHaveLength(1);
+    expect(
+      screen.getByRole("group", { name: "Filter works by company role" }),
+    ).not.toBeNull();
     const providerLink = screen.getByRole("link", { name: /View on RAWG/u });
     expect(
       screen.getByRole("region", { name: "Synopsis" }).contains(providerLink),
@@ -2206,7 +2218,16 @@ describe("Library characterization", () => {
       providerId: "438631",
       providerUrl: "https://www.themoviedb.org/movie/438631",
     };
-    bootstrap(router, [movie, firstPart]);
+    const collidingMovie = {
+      ...mediaItems[2],
+      id: 22,
+      title: "A Different Movie",
+      type: "movie",
+      provider: "tmdb",
+      providerId: "1000",
+      providerUrl: "https://www.themoviedb.org/movie/1000",
+    };
+    bootstrap(router, [movie, firstPart, collidingMovie]);
     router.json(
       "GET",
       "/api/discovery/detail?provider=tmdb&type=movie&id=693134",
@@ -2268,6 +2289,38 @@ describe("Library characterization", () => {
           },
         ],
         page: 1,
+        hasMore: true,
+      },
+    );
+    router.json(
+      "GET",
+      "/api/discovery/works?provider=tmdb&type=movie&id=525&relation=director&page=2&exclude=693134",
+      {
+        results: [{
+          provider: "tmdb",
+          providerId: "78",
+          providerUrl: "https://www.themoviedb.org/movie/78",
+          type: "movie",
+          title: "Blade Runner 2049",
+          releaseYear: 2017,
+        }],
+        page: 2,
+        hasMore: false,
+      },
+    );
+    router.json(
+      "GET",
+      "/api/discovery/works?provider=tmdb&type=series&id=525&relation=director&page=1",
+      {
+        results: [{
+          provider: "tmdb",
+          providerId: "1000",
+          providerUrl: "https://www.themoviedb.org/tv/1000",
+          type: "series",
+          title: "A Directed Series",
+          releaseYear: 2020,
+        }],
+        page: 1,
         hasMore: false,
       },
     );
@@ -2294,6 +2347,7 @@ describe("Library characterization", () => {
       }),
     ).not.toBeNull();
     expect(screen.queryByRole("heading", { name: "Related media" })).toBeNull();
+
     await user.click(
       screen.getByRole("button", { name: "View works by Denis Villeneuve" }),
     );
@@ -2307,6 +2361,19 @@ describe("Library characterization", () => {
     ).not.toBeNull();
     expect(screen.getByRole("button", { name: "Open Arrival" })).not
       .toBeNull();
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Blade Runner 2049")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Series" }));
+    expect(await screen.findByText("A Directed Series")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Open A Directed Series" }),
+    ).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Series" }));
+    expect(screen.getByText("A Directed Series")).not.toBeNull();
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/discovery/works?provider=tmdb&type=series&id=525&relation=director&page=1",
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("waits for exact AniList details before adding related media", async () => {
