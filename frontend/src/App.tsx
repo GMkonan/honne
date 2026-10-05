@@ -670,7 +670,9 @@ function sanitizeCatalogContributors(
   values: unknown,
   selected: DiscoveryResult,
 ): CatalogContributor[] {
-  if (selected.provider !== "tmdb" || !Array.isArray(values)) return [];
+  if (
+    !["tmdb", "rawg"].includes(selected.provider) || !Array.isArray(values)
+  ) return [];
   const contributors: CatalogContributor[] = [];
   const seen = new Set<string>();
   for (const value of values) {
@@ -678,16 +680,31 @@ function sanitizeCatalogContributors(
     const contributor = value as CatalogContributor;
     const name = safeStoredText(contributor.name, 100);
     const role = safeStoredText(contributor.role, 100);
+    const providerId = safeStoredText(contributor.providerId, 40);
+    const validIdentity = contributor.provider === selected.provider &&
+      /^[1-9]\d*$/u.test(providerId || "") &&
+      (contributor.kind === "person" ||
+        contributor.kind === "organization") &&
+      (contributor.provider === "tmdb"
+        ? contributor.relation === "director" ||
+          contributor.relation === "production_company"
+        : contributor.provider === "rawg" &&
+          (contributor.relation === "developer" ||
+            contributor.relation === "publisher"));
     if (!name || !role) continue;
-    const key = `${name.toLocaleLowerCase("en")}|${
-      role.toLocaleLowerCase("en")
-    }`;
+    const key = validIdentity
+      ? `${contributor.provider}:${contributor.relation}:${providerId}`
+      : `${name.toLocaleLowerCase("en")}|${role.toLocaleLowerCase("en")}`;
     if (seen.has(key)) continue;
     seen.add(key);
     contributors.push({
       name,
       role,
       imageUrl: safeHTTPURL(contributor.imageUrl) || undefined,
+      provider: validIdentity ? contributor.provider : undefined,
+      providerId: validIdentity ? providerId : undefined,
+      kind: validIdentity ? contributor.kind : undefined,
+      relation: validIdentity ? contributor.relation : undefined,
     });
     if (contributors.length === 12) break;
   }
@@ -852,11 +869,6 @@ function App() {
     } | null
   >(null);
   const metadataRefreshAttempted = useRef(new Set<number>());
-  const [externalMetadata, setExternalMetadata] = useState({
-    identity: "",
-    loading: false,
-    error: "",
-  });
   const [catalogContext, setCatalogContext] = useState<{
     identity: string;
     loading: boolean;
@@ -958,10 +970,6 @@ function App() {
     void refreshMediaMetadata(item);
   }, [detail, items]);
 
-  const externalDetailIdentity = detail?.kind === "external" &&
-      detail.result.provider === "rawg" && detail.result.type === "game"
-    ? `${detail.result.provider}:${detail.result.type}:${detail.result.providerId}`
-    : "";
   const detailSource = view === "detail"
     ? detail?.kind === "local"
       ? items.find((item) => item.id === detail.mediaId)
@@ -970,65 +978,11 @@ function App() {
   const supportsCatalogContext = detailSource?.provider === "anilist" &&
       ["anime", "manga", "light_novel"].includes(detailSource.type) ||
     detailSource?.provider === "tmdb" &&
-      ["movie", "series"].includes(detailSource.type);
+      ["movie", "series"].includes(detailSource.type) ||
+    detailSource?.provider === "rawg" && detailSource.type === "game";
   const catalogContextIdentity = supportsCatalogContext && detailSource
     ? `${detailSource.provider}:${detailSource.type}:${detailSource.providerId}`
     : "";
-
-  useEffect(() => {
-    if (!externalDetailIdentity || detail?.kind !== "external") {
-      setExternalMetadata({ identity: "", loading: false, error: "" });
-      return;
-    }
-    const selected = detail.result;
-    const controller = new AbortController();
-    setExternalMetadata({
-      identity: externalDetailIdentity,
-      loading: true,
-      error: "",
-    });
-    const params = new URLSearchParams({
-      provider: selected.provider,
-      type: selected.type,
-      id: selected.providerId,
-    });
-    request<DiscoveryResult>(`/api/discovery/detail?${params}`, {
-      signal: controller.signal,
-    }).then((expanded) => {
-      const enriched = sanitizeStoredResult({ ...selected, ...expanded });
-      setDetail((current) =>
-        current?.kind === "external" &&
-          `${current.result.provider}:${current.result.type}:${current.result.providerId}` ===
-            externalDetailIdentity
-          ? { kind: "external", result: enriched }
-          : current
-      );
-      try {
-        globalThis.sessionStorage.setItem(
-          `honne:catalog:${expanded.provider}:${expanded.type}:${expanded.providerId}`,
-          JSON.stringify(enriched),
-        );
-      } catch {
-        // The current view still works when private browsing blocks storage.
-      }
-    }).catch((caught: unknown) => {
-      if (caught instanceof DOMException && caught.name === "AbortError") {
-        return;
-      }
-      setExternalMetadata((current) =>
-        current.identity === externalDetailIdentity
-          ? { ...current, error: errorMessage(caught) }
-          : current
-      );
-    }).finally(() => {
-      setExternalMetadata((current) =>
-        current.identity === externalDetailIdentity
-          ? { ...current, loading: false }
-          : current
-      );
-    });
-    return () => controller.abort();
-  }, [externalDetailIdentity]);
 
   useEffect(() => {
     if (!catalogContextIdentity || !detailSource) {
@@ -1834,16 +1788,11 @@ function App() {
           existing={detail?.kind === "external"
             ? findExistingLibraryItem(detail.result, items)
             : undefined}
-          metadataRefreshing={detail?.kind === "local"
-            ? metadataRefreshingId === detail.mediaId
-            : externalMetadata.identity === externalDetailIdentity &&
-              externalMetadata.loading}
-          metadataError={detail?.kind === "local"
-            ? metadataRefreshError?.id === detail.mediaId
-              ? metadataRefreshError.message
-              : ""
-            : externalMetadata.identity === externalDetailIdentity
-            ? externalMetadata.error
+          metadataRefreshing={detail?.kind === "local" &&
+            metadataRefreshingId === detail.mediaId}
+          metadataError={detail?.kind === "local" &&
+              metadataRefreshError?.id === detail.mediaId
+            ? metadataRefreshError.message
             : ""}
           alternativeTitles={catalogContext.identity ===
               catalogContextIdentity

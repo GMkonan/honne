@@ -1274,7 +1274,28 @@ describe("Library characterization", () => {
         startDate: "2020-09-17",
         releaseStatus: "finished",
         genres: ["Action", "Indie"],
-        credits: [{ name: "Supergiant Games", role: "Developer" }],
+        credits: [
+          { name: "Supergiant Games", role: "Developer" },
+          { name: "Supergiant Games", role: "Publisher" },
+        ],
+        contributors: [
+          {
+            name: "Supergiant Games",
+            role: "Developer",
+            provider: "rawg",
+            providerId: "19",
+            kind: "organization",
+            relation: "developer",
+          },
+          {
+            name: "Supergiant Games",
+            role: "Publisher",
+            provider: "rawg",
+            providerId: "25",
+            kind: "organization",
+            relation: "publisher",
+          },
+        ],
         catalogPlatforms: ["PC", "PlayStation 5"],
         communityRating: 9,
       },
@@ -1317,6 +1338,7 @@ describe("Library characterization", () => {
       .toBeNull();
     expect(screen.getByText("PlayStation 5")).not.toBeNull();
     expect(screen.getByText("Supergiant Games")).not.toBeNull();
+    expect(screen.getByText("Developer · Publisher")).not.toBeNull();
     const providerLink = screen.getByRole("link", { name: /View on RAWG/u });
     expect(
       screen.getByRole("region", { name: "Synopsis" }).contains(providerLink),
@@ -1341,7 +1363,10 @@ describe("Library characterization", () => {
       title: "Hades",
       catalogPlatforms: ["PC", "PlayStation 5"],
       genres: ["Action", "Indie"],
-      credits: [{ name: "Supergiant Games", role: "Developer" }],
+      credits: [
+        { name: "Supergiant Games", role: "Developer" },
+        { name: "Supergiant Games", role: "Publisher" },
+      ],
     });
   });
 
@@ -1372,7 +1397,7 @@ describe("Library characterization", () => {
     expect(await screen.findByRole("heading", { name: "Hades" })).not
       .toBeNull();
     expect((await screen.findByRole("status")).textContent).toContain(
-      "Some catalog details could not be loaded",
+      "Additional catalog details could not be loaded",
     );
     expect(screen.getByRole("button", { name: "Add to Library" })).not
       .toBeNull();

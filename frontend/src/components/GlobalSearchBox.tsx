@@ -251,6 +251,10 @@ export interface CatalogSeason {
 
 export interface CatalogContributor extends SearchMediaCredit {
   imageUrl?: string;
+  provider?: "tmdb" | "rawg";
+  providerId?: string;
+  kind?: "person" | "organization";
+  relation?: "director" | "production_company" | "developer" | "publisher";
 }
 
 export interface CatalogDetailResponse extends SearchCatalogResult {
