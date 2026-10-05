@@ -2001,7 +2001,8 @@ button {
     "cover title"
     "cover overview"
     "cover related"
-    "cover metadata";
+    "cover metadata"
+    "cover works";
   align-items: start;
   gap: 22px 38px;
 }
@@ -2370,6 +2371,26 @@ button {
   border: 1px solid var(--surface-2);
   background: var(--mantle);
 }
+.detail-credit-interactive {
+  padding: 0 !important;
+}
+.detail-credit-interactive > button {
+  width: 100%;
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.detail-credit-interactive > button:hover,
+.detail-credit-interactive > button[aria-expanded="true"] {
+  background: rgba(137,180,250,.08);
+}
 .detail-credit-avatar {
   position: relative;
   width: 48px;
@@ -2397,6 +2418,15 @@ button {
 .detail-company-credits li {
   min-height: 66px;
   padding: 12px 14px;
+}
+.detail-company-credits .detail-credit-interactive > button {
+  padding: 12px 14px;
+}
+.contributor-works {
+  min-width: 0;
+  grid-area: works;
+  padding-top: 20px;
+  border-top: 1px solid var(--surface);
 }
 .detail-credit-copy strong,
 .detail-credit-copy small {
@@ -3640,7 +3670,8 @@ button {
       "cover"
       "overview"
       "related"
-      "metadata";
+      "metadata"
+      "works";
     gap: 24px;
   }
   .detail-cover-column {
