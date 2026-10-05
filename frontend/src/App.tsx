@@ -49,6 +49,7 @@ import {
 } from "./components/ManageMediaModal.tsx";
 import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { ProviderAttribution } from "./components/ProviderAttribution.tsx";
+import { RecapPage } from "./components/RecapPage.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
   formatPlaytime,
@@ -129,7 +130,13 @@ interface ActivityEvent {
 }
 
 type LibrarySort = "recent" | "added" | "title" | "rating";
-type AppView = "library" | "activity" | "settings" | "search" | "detail";
+type AppView =
+  | "library"
+  | "activity"
+  | "recap"
+  | "settings"
+  | "search"
+  | "detail";
 type DetailSelection =
   | { kind: "local"; mediaId: number }
   | { kind: "external"; result: DiscoveryResult };
@@ -496,6 +503,7 @@ function searchHash(query: string, scope: SearchScope): string {
 function routeFromHash(): AppView {
   const hash = globalThis.location.hash;
   if (hash === "#activity") return "activity";
+  if (hash === "#recap") return "recap";
   if (hash === "#settings") return "settings";
   if (hash.startsWith("#search")) return "search";
   if (hash.startsWith("#media/") || hash.startsWith("#catalog/")) {
@@ -848,6 +856,10 @@ function App() {
   const [suggestionsError, setSuggestionsError] = useState("");
   const [items, setItems] = useState<Media[]>([]);
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
+  const [recapActivities, setRecapActivities] = useState<ActivityEvent[]>([]);
+  const [recapLoading, setRecapLoading] = useState(false);
+  const [recapError, setRecapError] = useState("");
+  const [recapGeneration, setRecapGeneration] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(true);
   const [error, setError] = useState("");
@@ -931,6 +943,30 @@ function App() {
       clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (view !== "recap") return;
+    const controller = new AbortController();
+    let active = true;
+    setRecapLoading(true);
+    setRecapError("");
+    request<ActivityEvent[]>("/api/activity?limit=500", {
+      signal: controller.signal,
+    }).then((recent) => {
+      if (active) setRecapActivities(recent);
+    }).catch((caught: unknown) => {
+      if (
+        active &&
+        !(caught instanceof DOMException && caught.name === "AbortError")
+      ) setRecapError(errorMessage(caught));
+    }).finally(() => {
+      if (active) setRecapLoading(false);
+    });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [view, recapGeneration]);
 
   useEffect(() => {
     function syncRoute() {
@@ -1259,8 +1295,8 @@ function App() {
     (view === "search" &&
       catalogSearchResults.some((result) => result.provider === "rawg")) ||
     (view === "detail" && detailUsesRawg) ||
-    (view === "activity" &&
-      activities.some((activity) =>
+    ((view === "activity" || view === "recap") &&
+      (view === "recap" ? recapActivities : activities).some((activity) =>
         activity.mediaType === "game" ||
         items.find((item) => item.id === activity.mediaId)?.provider === "rawg"
       ));
@@ -1450,6 +1486,14 @@ function App() {
               onClick={() => setMenuOpen(false)}
             >
               Activity
+            </a>
+            <a
+              className={view === "recap" ? "active" : ""}
+              href="#recap"
+              aria-current={view === "recap" ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
+            >
+              Recap
             </a>
             <a
               className={view === "settings" ? "active" : ""}
@@ -1744,6 +1788,17 @@ function App() {
           loading={activityLoading}
           items={items}
           onOpen={openLocalDetail}
+        />
+      )}
+
+      {view === "recap" && (
+        <RecapPage
+          media={items}
+          activities={recapActivities}
+          profileName={profile.name}
+          loading={loading || recapLoading}
+          error={recapError}
+          onRetry={() => setRecapGeneration((current) => current + 1)}
         />
       )}
 

@@ -93,6 +93,64 @@ describe("Library characterization", () => {
       .toBeNull();
   });
 
+  it("builds a period recap from the full retained Activity window", async () => {
+    globalThis.history.replaceState(null, "", "/#recap");
+    const router = createFetchRouter();
+    const occurredAt = new Date().toISOString();
+    bootstrap(router, [{
+      ...mediaItems[0],
+      status: "completed",
+      rating: 9,
+      createdAt: occurredAt,
+    }], { name: "Konan Library", avatarUrl: "", catEnabled: false });
+    router.json("GET", "/api/activity?limit=500", [{
+      id: 20,
+      mediaId: 1,
+      title: "Cowboy Bebop",
+      mediaType: "anime",
+      action: "updated",
+      changes: { fromStatus: "in_progress", toStatus: "completed" },
+      occurredAt,
+    }]);
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Your Honne recap" }))
+      .not.toBeNull();
+    const preview = screen.getByRole("region", { name: "Recap preview" });
+    expect(await within(preview).findByText("Cowboy Bebop")).not.toBeNull();
+    expect(within(preview).getByText("Konan Library")).not.toBeNull();
+    expect(within(preview).getByText("Stories I finished")).not.toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: "Show titles added to Library" }),
+    );
+    expect(within(preview).getByText("New on my shelf")).not.toBeNull();
+    await user.selectOptions(screen.getByLabelText("Order"), "rating");
+    expect(screen.getByLabelText("Order")).toHaveProperty("value", "rating");
+  });
+
+  it("retries an unavailable retained Activity window", async () => {
+    globalThis.history.replaceState(null, "", "/#recap");
+    const router = createFetchRouter();
+    bootstrap(router);
+    let attempts = 0;
+    router.json("GET", "/api/activity?limit=500", () => {
+      attempts++;
+      return attempts === 1
+        ? Response.json({ error: "Activity unavailable" }, { status: 503 })
+        : Response.json([]);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("Activity unavailable")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("No entries for this edition")).not
+      .toBeNull();
+    expect(attempts).toBe(2);
+  });
+
   it("renders the configured profile and falls back to the default kanji mark", async () => {
     const router = createFetchRouter();
     bootstrap(router, mediaItems, {
