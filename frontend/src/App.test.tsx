@@ -1972,6 +1972,163 @@ describe("Library characterization", () => {
     expect(globalThis.location.hash).toBe("#catalog/anilist/anime/2");
   });
 
+  it("shows TMDB series creators, seasons, and recommendations", async () => {
+    const router = createFetchRouter();
+    const series = {
+      ...mediaItems[0],
+      id: 10,
+      title: "Breaking Bad",
+      type: "series",
+      provider: "tmdb",
+      providerId: "1396",
+      providerUrl: "https://www.themoviedb.org/tv/1396",
+      startDate: "2008-01-20",
+      credits: [],
+    };
+    const recommended = {
+      ...mediaItems[2],
+      id: 11,
+      title: "Better Call Saul",
+      type: "series",
+      provider: "tmdb",
+      providerId: "60059",
+      providerUrl: "https://www.themoviedb.org/tv/60059",
+    };
+    bootstrap(router, [series, recommended]);
+    let resolveDetail: (response: Response) => void = () => {};
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=tmdb&type=series&id=1396",
+      () => new Promise<Response>((resolve) => resolveDetail = resolve),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Breaking Bad/u,
+      }),
+    );
+    expect(await screen.findByText("Loading additional catalog details…"))
+      .not.toBeNull();
+
+    resolveDetail(Response.json({
+      ...series,
+      credits: [{ name: "Vince Gilligan", role: "Creator" }],
+      alternativeTitles: [],
+      relations: [],
+      seasons: [
+        {
+          providerId: "3572",
+          seasonNumber: 0,
+          title: "Specials",
+          episodeCount: 11,
+        },
+        {
+          providerId: "3573",
+          seasonNumber: 1,
+          title: "Season 1",
+          startDate: "2008-01-20",
+          episodeCount: 7,
+        },
+      ],
+      collection: [],
+      recommendations: [{
+        provider: "tmdb",
+        providerId: "60059",
+        providerUrl: "https://www.themoviedb.org/tv/60059",
+        type: "series",
+        title: "Better Call Saul",
+        releaseYear: 2015,
+      }],
+    }));
+
+    expect(await screen.findByRole("heading", { name: "Seasons" })).not
+      .toBeNull();
+    expect(screen.getByText("Vince Gilligan")).not.toBeNull();
+    expect(screen.getByText("Creator")).not.toBeNull();
+    expect(screen.getByText(/7 episodes/u)).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "More like this" })).not
+      .toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Open Better Call Saul, Recommended, in your Library",
+      }),
+    ).not.toBeNull();
+  });
+
+  it("shows TMDB movie directors and collection titles", async () => {
+    const router = createFetchRouter();
+    const movie = {
+      ...mediaItems[0],
+      id: 20,
+      title: "Dune: Part Two",
+      type: "movie",
+      provider: "tmdb",
+      providerId: "693134",
+      providerUrl: "https://www.themoviedb.org/movie/693134",
+      startDate: "2024-02-27",
+      credits: [],
+    };
+    const firstPart = {
+      ...mediaItems[1],
+      id: 21,
+      title: "Dune",
+      type: "movie",
+      provider: "tmdb",
+      providerId: "438631",
+      providerUrl: "https://www.themoviedb.org/movie/438631",
+    };
+    bootstrap(router, [movie, firstPart]);
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=tmdb&type=movie&id=693134",
+      {
+        ...movie,
+        credits: [{ name: "Denis Villeneuve", role: "Director" }],
+        alternativeTitles: [],
+        relations: [{
+          relation: "adaptation",
+          result: {
+            provider: "anilist",
+            providerId: "1",
+            providerUrl: "https://anilist.co/anime/1",
+            type: "anime",
+            title: "Unexpected relation",
+          },
+        }],
+        seasons: [],
+        collection: [{
+          provider: "tmdb",
+          providerId: "438631",
+          providerUrl: "https://www.themoviedb.org/movie/438631",
+          type: "movie",
+          title: "Dune",
+          releaseYear: 2021,
+        }],
+        recommendations: [],
+      },
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^View details for Dune: Part Two/u,
+      }),
+    );
+
+    expect(await screen.findByText("Denis Villeneuve")).not.toBeNull();
+    expect(screen.getByText("Director")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Collection" })).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Open Dune, Collection, in your Library",
+      }),
+    ).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "Related media" })).toBeNull();
+  });
+
   it("waits for exact AniList details before adding related media", async () => {
     const router = createFetchRouter();
     const linkedItem = {
@@ -2077,7 +2234,9 @@ describe("Library characterization", () => {
       }),
     );
     expect(
-      await screen.findByText("Related media could not be loaded."),
+      await screen.findByText(
+        "Additional catalog details could not be loaded.",
+      ),
     ).not.toBeNull();
     expect(screen.getByRole("heading", { name: "Cowboy Bebop" })).not
       .toBeNull();
@@ -2087,7 +2246,7 @@ describe("Library characterization", () => {
     await waitFor(() => expect(attempts).toBe(2));
   });
 
-  it("cancels obsolete AniList detail requests", async () => {
+  it("cancels obsolete catalog detail requests", async () => {
     const router = createFetchRouter();
     const linkedItem = {
       ...mediaItems[0],
