@@ -247,6 +247,7 @@ func main() {
 	mux.HandleFunc("GET /api/discovery/search", application.searchDiscovery)
 	mux.HandleFunc("GET /api/discovery/global", application.searchGlobalDiscovery)
 	mux.HandleFunc("GET /api/discovery/detail", application.getDiscoveryDetail)
+	mux.HandleFunc("GET /api/discovery/works", application.getDiscoveryWorks)
 	mux.HandleFunc("GET /api/import/anilist", application.previewAniListImport)
 	mux.HandleFunc("POST /api/import/anilist", application.importAniList)
 	mux.HandleFunc("GET /api/integrations/anilist", application.anilist.statusHandler)

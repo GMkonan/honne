@@ -89,7 +89,8 @@ func TestTMDBMovieDetailMapsDirectorAndCollection(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"id":550,"title":"Fight Club","overview":"An insomniac.","poster_path":"/fight.jpg",
 				"release_date":"1999-10-15","runtime":139,"status":"Released","vote_average":8.4,
-				"genres":[{"name":"Drama"}],"credits":{"crew":[{"name":"David Fincher","job":"Director","profile_path":"/fincher.jpg"},{"name":"Someone","job":"Writer"}]},
+				"genres":[{"name":"Drama"}],"credits":{"crew":[{"id":7467,"name":"David Fincher","job":"Director","profile_path":"/fincher.jpg"},{"id":999,"name":"David Fincher","job":"Director"},{"name":"Someone","job":"Writer"}]},
+				"production_companies":[{"id":508,"name":"Regency Enterprises"}],
 				"belongs_to_collection":{"id":100},"recommendations":{"results":[]}
 			}`))
 		case "/collection/100":
@@ -109,11 +110,15 @@ func TestTMDBMovieDetailMapsDirectorAndCollection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(detail.Credits) != 1 || detail.Credits[0] != (mediaCredit{Name: "David Fincher", Role: "Director"}) {
-		t.Fatalf("unexpected director: %+v", detail.Credits)
+	if len(detail.Credits) != 2 || detail.Credits[0] != (mediaCredit{Name: "David Fincher", Role: "Director"}) ||
+		detail.Credits[1] != (mediaCredit{Name: "Regency Enterprises", Role: "Production company"}) {
+		t.Fatalf("unexpected credits: %+v", detail.Credits)
 	}
-	if len(detail.Contributors) != 1 || detail.Contributors[0].ImageURL != "https://image.tmdb.org/t/p/w185/fincher.jpg" {
-		t.Fatalf("unexpected director profile: %+v", detail.Contributors)
+	if len(detail.Contributors) != 3 || detail.Contributors[0].ImageURL != "https://image.tmdb.org/t/p/w185/fincher.jpg" ||
+		detail.Contributors[0].ProviderID != "7467" || detail.Contributors[0].Relation != "director" ||
+		detail.Contributors[1].ProviderID != "999" || detail.Contributors[2].ProviderID != "508" ||
+		detail.Contributors[2].Kind != "organization" {
+		t.Fatalf("unexpected contributor identities: %+v", detail.Contributors)
 	}
 	if len(detail.Collection) != 1 || detail.Collection[0].ProviderID != "551" || detail.Collection[0].Type != "movie" {
 		t.Fatalf("unexpected collection: %+v", detail.Collection)

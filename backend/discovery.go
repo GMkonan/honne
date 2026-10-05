@@ -68,9 +68,13 @@ type discoverySeason struct {
 }
 
 type discoveryContributor struct {
-	Name     string `json:"name"`
-	Role     string `json:"role"`
-	ImageURL string `json:"imageUrl,omitempty"`
+	Name       string `json:"name"`
+	Role       string `json:"role"`
+	ImageURL   string `json:"imageUrl,omitempty"`
+	Provider   string `json:"provider,omitempty"`
+	ProviderID string `json:"providerId,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Relation   string `json:"relation,omitempty"`
 }
 
 type discoveryDetail struct {
@@ -95,6 +99,8 @@ type globalDiscoveryResponse struct {
 }
 
 type providerName struct {
+	ID   int    `json:"id"`
+	Slug string `json:"slug"`
 	Name string `json:"name"`
 }
 

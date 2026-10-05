@@ -54,16 +54,43 @@ func (s *discoveryService) searchRAWG(ctx context.Context, query string, page in
 	return discoveryResponse{Results: results, Page: page, HasMore: payload.Next != ""}, nil
 }
 
-func (s *discoveryService) fetchRAWGDetail(ctx context.Context, providerID string) (discoveryResult, error) {
+func (s *discoveryService) fetchRAWGDetail(ctx context.Context, providerID string) (discoveryDetail, error) {
 	var item rawgGame
 	if err := s.getRAWGJSON(ctx, "/games/"+url.PathEscape(providerID), nil, &item); err != nil {
-		return discoveryResult{}, err
+		return discoveryDetail{}, err
 	}
 	result, ok := rawgDiscoveryResult(item, time.Now())
 	if !ok || result.ProviderID != providerID {
-		return discoveryResult{}, errors.New("RAWG returned an invalid game identity")
+		return discoveryDetail{}, errors.New("RAWG returned an invalid game identity")
 	}
-	return result, nil
+	detail := emptyDiscoveryDetail(result)
+	detail.Contributors = rawgContributors(item)
+	return detail, nil
+}
+
+func rawgContributors(item rawgGame) []discoveryContributor {
+	result := make([]discoveryContributor, 0, min(len(item.Developers)+len(item.Publishers), 12))
+	seen := make(map[string]bool)
+	appendOrganizations := func(values []providerName, role, relation string) {
+		for _, value := range values {
+			if len(result) == 12 {
+				return
+			}
+			name := limitedProviderText(value.Name, 100)
+			key := relation + "\x00" + strconv.Itoa(value.ID)
+			if value.ID < 1 || name == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			result = append(result, discoveryContributor{
+				Name: name, Role: role, Provider: "rawg", ProviderID: strconv.Itoa(value.ID),
+				Kind: "organization", Relation: relation,
+			})
+		}
+	}
+	appendOrganizations(item.Developers, "Developer", "developer")
+	appendOrganizations(item.Publishers, "Publisher", "publisher")
+	return result
 }
 
 func rawgDiscoveryResult(item rawgGame, now time.Time) (discoveryResult, bool) {

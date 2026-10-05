@@ -71,9 +71,7 @@ func (s *discoveryService) detail(ctx context.Context, provider, mediaType, prov
 	var err error
 	switch provider {
 	case "rawg":
-		var rawgResult discoveryResult
-		rawgResult, err = s.fetchRAWGDetail(ctx, providerID)
-		result = emptyDiscoveryDetail(rawgResult)
+		result, err = s.fetchRAWGDetail(ctx, providerID)
 	case "tmdb":
 		result, err = s.fetchTMDBDetail(ctx, mediaType, providerID)
 	default:
