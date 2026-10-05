@@ -21,7 +21,11 @@ func (a *app) getDiscoveryDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := a.discovery.detail(r.Context(), provider, mediaType, providerID)
 	if errors.Is(err, errProviderUnavailable) {
-		writeError(w, http.StatusServiceUnavailable, "game details require RAWG_API_KEY")
+		message := "game details require RAWG_API_KEY"
+		if provider == "tmdb" {
+			message = "movie and series details require TMDB_API_TOKEN"
+		}
+		writeError(w, http.StatusServiceUnavailable, message)
 		return
 	}
 	if errors.Is(err, errCatalogNotFound) {
@@ -47,7 +51,8 @@ func validDiscoveryDetailIdentity(provider, mediaType, providerID string) bool {
 		return false
 	}
 	return provider == "rawg" && mediaType == "game" ||
-		provider == "anilist" && slicesContains([]string{"anime", "manga", "light_novel"}, mediaType)
+		provider == "anilist" && slicesContains([]string{"anime", "manga", "light_novel"}, mediaType) ||
+		provider == "tmdb" && slicesContains([]string{"movie", "series"}, mediaType)
 }
 
 func (s *discoveryService) detail(ctx context.Context, provider, mediaType, providerID string) (discoveryDetail, error) {
@@ -64,11 +69,14 @@ func (s *discoveryService) detail(ctx context.Context, provider, mediaType, prov
 
 	var result discoveryDetail
 	var err error
-	if provider == "rawg" {
+	switch provider {
+	case "rawg":
 		var rawgResult discoveryResult
 		rawgResult, err = s.fetchRAWGDetail(ctx, providerID)
-		result = discoveryDetail{discoveryResult: rawgResult, AlternativeTitles: []string{}, Relations: []discoveryRelation{}}
-	} else {
+		result = emptyDiscoveryDetail(rawgResult)
+	case "tmdb":
+		result, err = s.fetchTMDBDetail(ctx, mediaType, providerID)
+	default:
 		result, err = s.fetchAniListDetail(ctx, mediaType, providerID)
 	}
 	if err != nil {
@@ -81,4 +89,16 @@ func (s *discoveryService) detail(ctx context.Context, provider, mediaType, prov
 	s.detailCache[key] = cachedDiscoveryDetail{result: result, expiresAt: time.Now().Add(10 * time.Minute)}
 	s.mu.Unlock()
 	return result, nil
+}
+
+func emptyDiscoveryDetail(result discoveryResult) discoveryDetail {
+	return discoveryDetail{
+		discoveryResult:   result,
+		AlternativeTitles: []string{},
+		Relations:         []discoveryRelation{},
+		Seasons:           []discoverySeason{},
+		Collection:        []discoveryResult{},
+		Recommendations:   []discoveryResult{},
+		Contributors:      []discoveryContributor{},
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -18,8 +19,9 @@ import (
 )
 
 const (
-	discoveryPageSize = 20
-	kitsuPageSize     = 10
+	discoveryPageSize        = 20
+	kitsuPageSize            = 10
+	maxProviderResponseBytes = 8 << 20
 )
 
 var errProviderUnavailable = errors.New("provider is not configured")
@@ -55,10 +57,30 @@ type discoveryRelation struct {
 	Result   discoveryResult `json:"result"`
 }
 
+type discoverySeason struct {
+	ProviderID   string `json:"providerId"`
+	SeasonNumber int    `json:"seasonNumber"`
+	Title        string `json:"title"`
+	Description  string `json:"description,omitempty"`
+	CoverURL     string `json:"coverUrl,omitempty"`
+	StartDate    string `json:"startDate,omitempty"`
+	EpisodeCount int    `json:"episodeCount,omitempty"`
+}
+
+type discoveryContributor struct {
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	ImageURL string `json:"imageUrl,omitempty"`
+}
+
 type discoveryDetail struct {
 	discoveryResult
-	AlternativeTitles []string            `json:"alternativeTitles"`
-	Relations         []discoveryRelation `json:"relations"`
+	AlternativeTitles []string               `json:"alternativeTitles"`
+	Relations         []discoveryRelation    `json:"relations"`
+	Seasons           []discoverySeason      `json:"seasons"`
+	Collection        []discoveryResult      `json:"collection"`
+	Recommendations   []discoveryResult      `json:"recommendations"`
+	Contributors      []discoveryContributor `json:"contributors"`
 }
 
 type discoveryResponse struct {
@@ -586,9 +608,16 @@ func (s *discoveryService) getJSONRequest(ctx context.Context, endpoint, token, 
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("provider returned %s", response.Status)
+		return &providerHTTPError{StatusCode: response.StatusCode, Status: response.Status}
 	}
-	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxProviderResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("read provider response: %w", err)
+	}
+	if len(body) > maxProviderResponseBytes {
+		return fmt.Errorf("provider response exceeds %d byte limit", maxProviderResponseBytes)
+	}
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(target); err != nil {
 		return fmt.Errorf("decode provider response: %w", err)
 	}
 	return nil

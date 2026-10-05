@@ -74,6 +74,9 @@ func (s *discoveryService) fetchAniListDetail(ctx context.Context, mediaType, pr
 		discoveryResult:   result,
 		AlternativeTitles: aniListAlternativeTitles(*item, result.Title),
 		Relations:         aniListRelations(*item, providerID),
+		Seasons:           []discoverySeason{},
+		Collection:        []discoveryResult{},
+		Recommendations:   []discoveryResult{},
 	}, nil
 }
 
