@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
 import {
+  type CatalogContributor,
   catalogCoverStyle,
   type CatalogDetailResponse,
   type CatalogRelation,
@@ -665,6 +666,34 @@ function sanitizeTMDBSeasons(
   return seasons;
 }
 
+function sanitizeCatalogContributors(
+  values: unknown,
+  selected: DiscoveryResult,
+): CatalogContributor[] {
+  if (selected.provider !== "tmdb" || !Array.isArray(values)) return [];
+  const contributors: CatalogContributor[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value || typeof value !== "object") continue;
+    const contributor = value as CatalogContributor;
+    const name = safeStoredText(contributor.name, 100);
+    const role = safeStoredText(contributor.role, 100);
+    if (!name || !role) continue;
+    const key = `${name.toLocaleLowerCase("en")}|${
+      role.toLocaleLowerCase("en")
+    }`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    contributors.push({
+      name,
+      role,
+      imageUrl: safeHTTPURL(contributor.imageUrl) || undefined,
+    });
+    if (contributors.length === 12) break;
+  }
+  return contributors;
+}
+
 function sanitizeCatalogDetail(
   response: CatalogDetailResponse,
   selected: DiscoveryResult,
@@ -727,8 +756,9 @@ function sanitizeCatalogDetail(
     recommendations: sanitizeTMDBItems(
       response.recommendations,
       selected,
-      12,
+      8,
     ),
+    contributors: sanitizeCatalogContributors(response.contributors, selected),
   };
 }
 
@@ -1821,6 +1851,10 @@ function App() {
             : []}
           catalogCredits={catalogContext.identity === catalogContextIdentity
             ? catalogContext.detail?.credits || []
+            : []}
+          catalogContributors={catalogContext.identity ===
+              catalogContextIdentity
+            ? catalogContext.detail?.contributors || []
             : []}
           relations={catalogContext.identity === catalogContextIdentity
             ? (catalogContext.detail?.relations || []).map((relation) => ({
