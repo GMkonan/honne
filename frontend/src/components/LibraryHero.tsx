@@ -1,3 +1,4 @@
+import { ArrowUpRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 export interface PublicProfile {
@@ -83,6 +84,17 @@ export function LibraryHero(
             </div>
           </dl>
         </div>
+        <a className="hero-monthly-log" href="#monthly-log">
+          <span className="hero-monthly-log-icon" aria-hidden="true">
+            <Sparkles size={19} />
+          </span>
+          <span>
+            <small>SHARE YOUR STORY</small>
+            <strong>Monthly Log</strong>
+            <span>Revisit your previous month</span>
+          </span>
+          <ArrowUpRight size={17} aria-hidden="true" />
+        </a>
       </div>
     </section>
   );

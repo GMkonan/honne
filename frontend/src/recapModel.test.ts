@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildRecapSummary,
-  type RecapActivity,
-  type RecapMedia,
+  buildMonthlyLog,
+  type MonthlyLogActivity,
+  monthlyLogLabel,
+  type MonthlyLogMedia,
 } from "./recapModel.ts";
 
-const now = new Date("2026-10-05T12:00:00Z");
-const media: RecapMedia[] = [
+const now = new Date(2026, 9, 5, 12);
+const media: MonthlyLogMedia[] = [
   {
     id: 1,
     title: "Arrival",
@@ -27,19 +28,9 @@ const media: RecapMedia[] = [
     coverUrl: "",
     createdAt: "2026-10-03T12:00:00Z",
   },
-  {
-    id: 3,
-    title: "Old title",
-    type: "anime",
-    status: "completed",
-    rating: 8,
-    repeatCount: 0,
-    coverUrl: "",
-    createdAt: "2025-01-01T00:00:00Z",
-  },
 ];
 
-const activities: RecapActivity[] = [
+const activities: MonthlyLogActivity[] = [
   {
     id: 1,
     mediaId: 1,
@@ -52,7 +43,7 @@ const activities: RecapActivity[] = [
     mediaId: 1,
     action: "updated",
     changes: { fromRepeatCount: 0, toRepeatCount: 1 },
-    occurredAt: "2026-10-04T12:00:00Z",
+    occurredAt: "2026-09-28T12:00:00Z",
   },
   {
     id: 3,
@@ -61,86 +52,65 @@ const activities: RecapActivity[] = [
     changes: { toStatus: "completed" },
     occurredAt: "2026-10-03T12:00:00Z",
   },
-  {
-    id: 4,
-    mediaId: 3,
-    action: "updated",
-    changes: { fromStatus: "in_progress", toStatus: "completed" },
-    occurredAt: "2025-01-02T00:00:00Z",
-  },
 ];
 
-describe("buildRecapSummary", () => {
-  it("selects and deduplicates completions and repeat increases", () => {
-    const summary = buildRecapSummary(
-      media,
-      activities,
-      "month",
-      "finished",
-      "recent",
-      now,
-    );
+describe("buildMonthlyLog", () => {
+  it("uses the previous closed calendar month", () => {
+    const summary = buildMonthlyLog(media, activities, now);
 
+    expect(monthlyLogLabel(summary.startsAt)).toBe("September 2026");
     expect(summary.entries.map((entry) => entry.media.title)).toEqual([
       "Arrival",
-      "Dune",
     ]);
     expect(summary.entries[0]).toMatchObject({ completed: true, repeats: 1 });
-    expect(summary.completed).toBe(2);
+    expect(summary.titles).toBe(1);
+    expect(summary.completed).toBe(1);
     expect(summary.repeats).toBe(1);
-    expect(summary.added).toBe(2);
   });
 
-  it("keeps added titles semantically separate and sorts by rating", () => {
-    const summary = buildRecapSummary(
-      media,
-      activities,
-      "month",
-      "added",
-      "rating",
-      now,
-    );
-
-    expect(summary.entries.map((entry) => entry.media.title)).toEqual([
-      "Dune",
-      "Arrival",
-    ]);
-    expect(summary.completed).toBe(2);
-    expect(summary.repeats).toBe(1);
-    expect(summary.added).toBe(2);
-  });
-
-  it("excludes invalid, future, and out-of-period events", () => {
-    const noisy: RecapActivity[] = [
+  it("excludes invalid, current-month, and older events", () => {
+    const summary = buildMonthlyLog(media, [
       ...activities,
+      {
+        id: 4,
+        mediaId: 1,
+        action: "updated",
+        changes: { fromRepeatCount: 1, toRepeatCount: 2 },
+        occurredAt: "invalid",
+      },
       {
         id: 5,
         mediaId: 1,
         action: "updated",
-        changes: { fromRepeatCount: 1, toRepeatCount: 3 },
-        occurredAt: "invalid",
+        changes: { fromStatus: "in_progress", toStatus: "completed" },
+        occurredAt: "2026-08-31T12:00:00Z",
       },
-      {
-        id: 6,
-        mediaId: 1,
-        action: "updated",
-        changes: { fromRepeatCount: 1, toRepeatCount: 2 },
-        occurredAt: "2026-10-06T12:00:00Z",
-      },
-    ];
+    ], now);
 
-    const summary = buildRecapSummary(
-      media,
-      noisy,
-      "week",
-      "finished",
-      "recent",
-      now,
-    );
-    expect(summary.entries.map((entry) => entry.media.title)).toEqual([
-      "Arrival",
-      "Dune",
-    ]);
+    expect(summary.entries).toHaveLength(1);
     expect(summary.repeats).toBe(1);
+  });
+
+  it("keeps the latest fifteen entries while counting the whole month", () => {
+    const manyMedia = Array.from({ length: 17 }, (_, index) => ({
+      ...media[0],
+      id: index + 1,
+      title: `Title ${index + 1}`,
+    }));
+    const manyActivities: MonthlyLogActivity[] = manyMedia.map((
+      item,
+      index,
+    ) => ({
+      id: index + 1,
+      mediaId: item.id,
+      action: "updated",
+      changes: { fromStatus: "in_progress", toStatus: "completed" },
+      occurredAt: `2026-09-${String(index + 1).padStart(2, "0")}T12:00:00Z`,
+    }));
+
+    const summary = buildMonthlyLog(manyMedia, manyActivities, now);
+    expect(summary.entries).toHaveLength(15);
+    expect(summary.titles).toBe(17);
+    expect(summary.entries[0].media.title).toBe("Title 17");
   });
 });

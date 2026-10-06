@@ -8,7 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.tsx";
-import * as recapImage from "./services/recapImage.ts";
+import * as monthlyLogImage from "./services/recapImage.ts";
 import { disconnectedAniList, mediaItems } from "./test/fixtures.ts";
 import { createFetchRouter, type FetchRouter } from "./test/fetch-router.ts";
 
@@ -92,12 +92,22 @@ describe("Library characterization", () => {
     ).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Delete Cowboy Bebop/u }))
       .toBeNull();
+    expect(screen.getByRole("link", { name: /Monthly Log/u }))
+      .toHaveProperty("hash", "#monthly-log");
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("link", {
+        name: "Recap",
+      }),
+    ).toBeNull();
   });
 
-  it("builds a period recap from the full retained Activity window", async () => {
-    globalThis.history.replaceState(null, "", "/#recap");
+  it("builds the previous Monthly Log from the full retained Activity window", async () => {
+    globalThis.history.replaceState(null, "", "/#monthly-log");
     const router = createFetchRouter();
-    const occurredAt = new Date().toISOString();
+    const occurredAtDate = new Date();
+    occurredAtDate.setDate(15);
+    occurredAtDate.setMonth(occurredAtDate.getMonth() - 1);
+    const occurredAt = occurredAtDate.toISOString();
     bootstrap(router, [{
       ...mediaItems[0],
       status: "completed",
@@ -113,7 +123,7 @@ describe("Library characterization", () => {
       changes: { fromStatus: "in_progress", toStatus: "completed" },
       occurredAt,
     }]);
-    const createImage = vi.spyOn(recapImage, "createRecapImage")
+    const createImage = vi.spyOn(monthlyLogImage, "createMonthlyLogImage")
       .mockResolvedValue(
         new Blob(["png"], { type: "image/png" }),
       );
@@ -121,7 +131,7 @@ describe("Library characterization", () => {
       .mockImplementation(() => {});
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
-      value: vi.fn(() => "blob:recap"),
+      value: vi.fn(() => "blob:monthly-log"),
     });
     Object.defineProperty(URL, "revokeObjectURL", {
       configurable: true,
@@ -130,21 +140,16 @@ describe("Library characterization", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Your Honne recap" }))
+    expect(await screen.findByRole("heading", { name: "Monthly Log" }))
       .not.toBeNull();
-    const preview = screen.getByRole("region", { name: "Recap preview" });
+    const preview = screen.getByRole("region", { name: "Monthly Log preview" });
     expect(await within(preview).findByText("Cowboy Bebop")).not.toBeNull();
     expect(within(preview).getByText("Konan Library")).not.toBeNull();
-    expect(within(preview).getByText("Stories I finished")).not.toBeNull();
+    expect(within(preview).getByText(/1 title recorded from Activity/u)).not
+      .toBeNull();
 
-    await user.click(
-      screen.getByRole("button", { name: "Show titles added to Library" }),
-    );
-    expect(within(preview).getByText("New on my shelf")).not.toBeNull();
-    await user.selectOptions(screen.getByLabelText("Order"), "rating");
-    expect(screen.getByLabelText("Order")).toHaveProperty("value", "rating");
     await user.click(screen.getByRole("button", { name: "Download PNG" }));
-    expect(await screen.findByText("Recap downloaded.")).not.toBeNull();
+    expect(await screen.findByText("Monthly Log downloaded.")).not.toBeNull();
     expect(createImage).toHaveBeenCalledOnce();
     expect(download).toHaveBeenCalledOnce();
   });
@@ -165,7 +170,7 @@ describe("Library characterization", () => {
 
     expect(await screen.findByText("Activity unavailable")).not.toBeNull();
     await user.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("No entries for this edition")).not
+    expect(await screen.findByText("No completed or revisited titles")).not
       .toBeNull();
     expect(attempts).toBe(2);
   });

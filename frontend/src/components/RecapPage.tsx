@@ -1,27 +1,19 @@
-import {
-  CalendarDays,
-  Download,
-  History,
-  Plus,
-  RotateCcw,
-  Share2,
-  Star,
-} from "lucide-react";
+import { CalendarDays, Download, RotateCcw, Share2, Star } from "lucide-react";
 import { useState } from "react";
 import {
-  buildRecapSummary,
-  type RecapActivity,
-  type RecapFocus,
-  type RecapMedia,
-  type RecapPeriod,
-  recapPeriodLabel,
-  type RecapSort,
+  buildMonthlyLog,
+  type MonthlyLogActivity,
+  monthlyLogLabel,
+  type MonthlyLogMedia,
 } from "../recapModel.ts";
-import { createRecapImage, recapFilename } from "../services/recapImage.ts";
+import {
+  createMonthlyLogImage,
+  monthlyLogFilename,
+} from "../services/recapImage.ts";
 
-interface RecapPageProps {
-  media: RecapMedia[];
-  activities: RecapActivity[];
+interface MonthlyLogPageProps {
+  media: MonthlyLogMedia[];
+  activities: MonthlyLogActivity[];
   profileName: string;
   loading: boolean;
   error: string;
@@ -47,47 +39,36 @@ function downloadImage(blob: Blob, filename: string) {
   globalThis.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function periodRange(startsAt: Date, now: Date): string {
-  const formatter = new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${formatter.format(startsAt)} — ${formatter.format(now)}`;
-}
-
-export function RecapPage(
-  { media, activities, profileName, loading, error, onRetry }: RecapPageProps,
+export function MonthlyLogPage(
+  {
+    media,
+    activities,
+    profileName,
+    loading,
+    error,
+    onRetry,
+  }: MonthlyLogPageProps,
 ) {
-  const [period, setPeriod] = useState<RecapPeriod>("month");
-  const [focus, setFocus] = useState<RecapFocus>("finished");
-  const [sort, setSort] = useState<RecapSort>("recent");
   const [imageWorking, setImageWorking] = useState<"download" | "share" | "">(
     "",
   );
   const [imageFeedback, setImageFeedback] = useState("");
   const now = new Date();
-  const summary = buildRecapSummary(
-    media,
-    activities,
-    period,
-    focus,
-    sort,
-    now,
-  );
+  const summary = buildMonthlyLog(media, activities, now);
+  const month = monthlyLogLabel(summary.startsAt);
+  const titleCount = `${summary.titles} title${
+    summary.titles === 1 ? "" : "s"
+  }`;
 
   async function exportImage(action: "download" | "share") {
     setImageWorking(action);
     setImageFeedback("");
     try {
-      const blob = await createRecapImage({
+      const blob = await createMonthlyLogImage({
         summary,
-        period,
-        focus,
         profileName,
-        now,
       });
-      const filename = recapFilename(period, focus);
+      const filename = monthlyLogFilename(summary.startsAt);
       if (action === "share") {
         const file = new File([blob], filename, { type: "image/png" });
         if (!navigator.canShare?.({ files: [file] })) {
@@ -95,13 +76,13 @@ export function RecapPage(
         }
         await navigator.share({
           files: [file],
-          title: "My Honne recap",
-          text: recapPeriodLabel(period),
+          title: `My ${month} Monthly Log`,
+          text: `${titleCount} in ${month}`,
         });
-        setImageFeedback("Recap shared.");
+        setImageFeedback("Monthly Log shared.");
       } else {
         downloadImage(blob, filename);
-        setImageFeedback("Recap downloaded.");
+        setImageFeedback("Monthly Log downloaded.");
       }
     } catch (caught: unknown) {
       if (!(caught instanceof DOMException && caught.name === "AbortError")) {
@@ -115,214 +96,162 @@ export function RecapPage(
   }
 
   return (
-    <main className="page-container standalone-page recap-page">
-      <header className="page-heading recap-heading">
-        <span className="eyebrow">PERSONAL EDITION</span>
-        <h1>Your Honne recap</h1>
-        <p>
-          Shape a private culture log from what you finished, revisited, or
-          welcomed into your Library.
-        </p>
+    <main className="page-container standalone-page monthly-log-page">
+      <header className="page-heading monthly-log-heading">
+        <div>
+          <span className="eyebrow">PREVIOUS MONTH</span>
+          <h1>Monthly Log</h1>
+          <p>
+            A chronological record of what you finished and revisited—never a
+            favorites list.
+          </p>
+        </div>
+        <span className="monthly-log-heading-mark" aria-hidden="true">
+          本音
+        </span>
       </header>
 
-      <div className="recap-workbench">
-        <aside className="recap-controls" aria-label="Recap controls">
+      <section className="monthly-log-toolbar" aria-label="Monthly Log export">
+        <div className="monthly-log-period">
+          <CalendarDays size={18} aria-hidden="true" />
+          <span>
+            <small>YOUR MONTH IN MEDIA</small>
+            <strong>{month}</strong>
+          </span>
+        </div>
+        <dl className="monthly-log-summary">
           <div>
-            <span className="recap-control-label">Period</span>
-            <div className="recap-choice-grid">
-              {(["week", "month", "year"] as RecapPeriod[]).map((value) => (
-                <button
-                  type="button"
-                  aria-pressed={period === value}
-                  onClick={() => setPeriod(value)}
-                  key={value}
-                >
-                  {value === "week"
-                    ? "7 days"
-                    : value === "month"
-                    ? "30 days"
-                    : "365 days"}
-                </button>
-              ))}
-            </div>
+            <dt>Titles</dt>
+            <dd>{summary.titles}</dd>
           </div>
           <div>
-            <span className="recap-control-label">Story</span>
-            <div className="recap-focus-options">
-              <button
-                type="button"
-                aria-label="Show finished and revisited titles"
-                aria-pressed={focus === "finished"}
-                onClick={() => setFocus("finished")}
-              >
-                <History size={16} />
-                <span>
-                  <strong>Finished</strong>
-                  <small>& revisited</small>
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-label="Show titles added to Library"
-                aria-pressed={focus === "added"}
-                onClick={() => setFocus("added")}
-              >
-                <Plus size={16} />
-                <span>
-                  <strong>Added</strong>
-                  <small>to Library</small>
-                </span>
-              </button>
-            </div>
+            <dt>Finished</dt>
+            <dd>{summary.completed}</dd>
           </div>
-          <label className="recap-sort">
-            <span className="recap-control-label">Order</span>
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value as RecapSort)}
-            >
-              <option value="recent">Most recent</option>
-              <option value="rating">Highest rated</option>
-            </select>
-          </label>
-          <div className="recap-export-actions">
+          <div>
+            <dt>Revisited</dt>
+            <dd>{summary.repeats}</dd>
+          </div>
+        </dl>
+        <div className="monthly-log-export-actions">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={summary.entries.length === 0 || !!imageWorking}
+            onClick={() => void exportImage("download")}
+          >
+            <Download size={15} />
+            {imageWorking === "download" ? "Creating…" : "Download PNG"}
+          </button>
+          {typeof navigator.share === "function" && (
             <button
               type="button"
-              className="primary-button"
               disabled={summary.entries.length === 0 || !!imageWorking}
-              onClick={() => void exportImage("download")}
+              onClick={() => void exportImage("share")}
             >
-              <Download size={15} />
-              {imageWorking === "download" ? "Creating…" : "Download PNG"}
+              <Share2 size={15} />
+              {imageWorking === "share" ? "Creating…" : "Share"}
             </button>
-            {typeof navigator.share === "function" && (
+          )}
+        </div>
+        {imageFeedback && (
+          <p className="monthly-log-feedback" role="status">{imageFeedback}</p>
+        )}
+        <p className="monthly-log-privacy">
+          <strong>Private by design.</strong>{" "}
+          Built locally from your Activity; nothing is uploaded.
+        </p>
+      </section>
+
+      <section className="monthly-log-preview" aria-label="Monthly Log preview">
+        {loading
+          ? <div className="page-empty">Opening last month’s log…</div>
+          : error
+          ? (
+            <div className="page-empty" role="status">
+              <p>{error}</p>
               <button
                 type="button"
-                disabled={summary.entries.length === 0 || !!imageWorking}
-                onClick={() => void exportImage("share")}
+                className="primary-button"
+                onClick={onRetry}
               >
-                <Share2 size={15} />
-                {imageWorking === "share" ? "Creating…" : "Share image"}
+                <RotateCcw size={15} /> Retry
               </button>
-            )}
-          </div>
-          {imageFeedback && (
-            <p className="recap-export-feedback" role="status">
-              {imageFeedback}
-            </p>
-          )}
-          <p className="recap-privacy-note">
-            Built locally from your Library and retained Activity. Nothing is
-            uploaded.
-          </p>
-        </aside>
-
-        <section className="recap-preview" aria-label="Recap preview">
-          {loading
-            ? <div className="page-empty">Assembling your edition…</div>
-            : error
-            ? (
-              <div className="page-empty" role="status">
-                <p>{error}</p>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={onRetry}
-                >
-                  <RotateCcw size={15} /> Retry
-                </button>
+            </div>
+          )
+          : (
+            <article className="monthly-log-poster">
+              <header className="monthly-log-poster-header">
+                <div>
+                  <span>HONNE / MONTHLY LOG</span>
+                  <strong>{profileName || "My Library"}</strong>
+                </div>
+                <b aria-hidden="true">本音</b>
+              </header>
+              <div className="monthly-log-poster-title">
+                <span>YOUR MONTH IN MEDIA</span>
+                <h2>{month}</h2>
+                <p>{titleCount} recorded from Activity</p>
               </div>
-            )
-            : (
-              <article className="recap-poster">
-                <header className="recap-poster-header">
-                  <div>
-                    <span>HONNE / CULTURE LOG</span>
-                    <strong>{profileName || "My Library"}</strong>
+              <div className="monthly-log-stat-row">
+                <span>
+                  <strong>{summary.completed}</strong> finished
+                </span>
+                <span>
+                  <strong>{summary.repeats}</strong> revisited
+                </span>
+              </div>
+              {summary.entries.length === 0
+                ? (
+                  <div className="monthly-log-empty">
+                    <CalendarDays size={28} />
+                    <strong>No completed or revisited titles</strong>
+                    <span>Your next Monthly Log will be waiting.</span>
                   </div>
-                  <b aria-hidden="true">本音</b>
-                </header>
-                <div className="recap-poster-title">
-                  <span>{recapPeriodLabel(period)}</span>
-                  <h2>
-                    {focus === "finished"
-                      ? "Stories I finished"
-                      : "New on my shelf"}
-                  </h2>
-                  <time>{periodRange(summary.startsAt, now)}</time>
-                </div>
-                <div className="recap-stat-row">
-                  <span>
-                    <strong>{summary.completed}</strong> finished
-                  </span>
-                  <span>
-                    <strong>{summary.repeats}</strong> revisited
-                  </span>
-                  <span>
-                    <strong>{summary.added}</strong> added
-                  </span>
-                </div>
-                {summary.entries.length === 0
-                  ? (
-                    <div className="recap-poster-empty">
-                      <CalendarDays size={28} />
-                      <strong>No entries for this edition</strong>
-                      <span>Try another period or story.</span>
-                    </div>
-                  )
-                  : (
-                    <ol className="recap-title-grid">
-                      {summary.entries.map((entry, index) => (
-                        <li key={entry.media.id}>
-                          <div className="recap-cover">
-                            {entry.media.coverUrl
-                              ? <img src={entry.media.coverUrl} alt="" />
-                              : (
-                                <span>
-                                  {String(index + 1).padStart(2, "0")}
-                                </span>
-                              )}
-                          </div>
-                          <div>
-                            <small>
-                              {typeLabels[entry.media.type] || entry.media.type}
-                            </small>
-                            <strong>{entry.media.title}</strong>
-                            <span>
-                              {entry.media.rating > 0
-                                ? (
-                                  <>
-                                    <Star size={11} fill="currentColor" />{" "}
-                                    {entry.media.rating}/10
-                                  </>
-                                )
-                                : entry.repeats > 0
-                                ? `${entry.repeats} revisit${
-                                  entry.repeats === 1 ? "" : "s"
-                                }`
-                                : "In this edition"}
-                            </span>
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                <footer>
-                  <span>LOCAL BY DESIGN</span>
-                  <strong>HONNE</strong>
-                  <span>
-                    №{" "}
-                    {period === "week"
-                      ? "07"
-                      : period === "month"
-                      ? "30"
-                      : "365"}
-                  </span>
-                </footer>
-              </article>
-            )}
-        </section>
-      </div>
+                )
+                : (
+                  <ol className="monthly-log-title-grid">
+                    {summary.entries.map((entry, index) => (
+                      <li key={entry.media.id}>
+                        <div className="monthly-log-cover">
+                          {entry.media.coverUrl
+                            ? <img src={entry.media.coverUrl} alt="" />
+                            : <span>{String(index + 1).padStart(2, "0")}</span>}
+                        </div>
+                        <div>
+                          <small>
+                            {typeLabels[entry.media.type] || entry.media.type}
+                          </small>
+                          <strong>{entry.media.title}</strong>
+                          <span>
+                            {entry.repeats > 0
+                              ? `${entry.repeats} revisit${
+                                entry.repeats === 1 ? "" : "s"
+                              }`
+                              : entry.media.rating > 0
+                              ? (
+                                <>
+                                  <Star size={10} fill="currentColor" />{" "}
+                                  {entry.media.rating}/10
+                                </>
+                              )
+                              : "Finished"}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              <footer>
+                <span>PRIVATE BY DESIGN</span>
+                <strong>MADE WITH HONNE</strong>
+                <span>
+                  {String(summary.entries.length).padStart(2, "0")} SHOWN
+                </span>
+              </footer>
+            </article>
+          )}
+      </section>
     </main>
   );
 }

@@ -49,7 +49,7 @@ import {
 } from "./components/ManageMediaModal.tsx";
 import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { ProviderAttribution } from "./components/ProviderAttribution.tsx";
-import { RecapPage } from "./components/RecapPage.tsx";
+import { MonthlyLogPage } from "./components/RecapPage.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
   formatPlaytime,
@@ -138,7 +138,7 @@ type LibraryStatusFilter = MediaStatus | "planned_repeat";
 type AppView =
   | "library"
   | "activity"
-  | "recap"
+  | "monthly_log"
   | "settings"
   | "search"
   | "detail";
@@ -517,7 +517,9 @@ function searchHash(query: string, scope: SearchScope): string {
 function routeFromHash(): AppView {
   const hash = globalThis.location.hash;
   if (hash === "#activity") return "activity";
-  if (hash === "#recap") return "recap";
+  if (["#monthly-log", "#highlights", "#recap"].includes(hash)) {
+    return "monthly_log";
+  }
   if (hash === "#settings") return "settings";
   if (hash.startsWith("#search")) return "search";
   if (hash.startsWith("#media/") || hash.startsWith("#catalog/")) {
@@ -870,10 +872,12 @@ function App() {
   const [suggestionsError, setSuggestionsError] = useState("");
   const [items, setItems] = useState<Media[]>([]);
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
-  const [recapActivities, setRecapActivities] = useState<ActivityEvent[]>([]);
-  const [recapLoading, setRecapLoading] = useState(false);
-  const [recapError, setRecapError] = useState("");
-  const [recapGeneration, setRecapGeneration] = useState(0);
+  const [monthlyLogActivities, setMonthlyLogActivities] = useState<
+    ActivityEvent[]
+  >([]);
+  const [monthlyLogLoading, setMonthlyLogLoading] = useState(false);
+  const [monthlyLogError, setMonthlyLogError] = useState("");
+  const [monthlyLogGeneration, setMonthlyLogGeneration] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(true);
   const [error, setError] = useState("");
@@ -961,28 +965,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== "recap") return;
+    if (view !== "monthly_log") return;
     const controller = new AbortController();
     let active = true;
-    setRecapLoading(true);
-    setRecapError("");
+    setMonthlyLogLoading(true);
+    setMonthlyLogError("");
     request<ActivityEvent[]>("/api/activity?limit=500", {
       signal: controller.signal,
     }).then((recent) => {
-      if (active) setRecapActivities(recent);
+      if (active) setMonthlyLogActivities(recent);
     }).catch((caught: unknown) => {
       if (
         active &&
         !(caught instanceof DOMException && caught.name === "AbortError")
-      ) setRecapError(errorMessage(caught));
+      ) setMonthlyLogError(errorMessage(caught));
     }).finally(() => {
-      if (active) setRecapLoading(false);
+      if (active) setMonthlyLogLoading(false);
     });
     return () => {
       active = false;
       controller.abort();
     };
-  }, [view, recapGeneration]);
+  }, [view, monthlyLogGeneration]);
 
   useEffect(() => {
     function syncRoute() {
@@ -1314,8 +1318,10 @@ function App() {
     (view === "search" &&
       catalogSearchResults.some((result) => result.provider === "rawg")) ||
     (view === "detail" && detailUsesRawg) ||
-    ((view === "activity" || view === "recap") &&
-      (view === "recap" ? recapActivities : activities).some((activity) =>
+    ((view === "activity" || view === "monthly_log") &&
+      (view === "monthly_log" ? monthlyLogActivities : activities).some((
+        activity,
+      ) =>
         activity.mediaType === "game" ||
         items.find((item) => item.id === activity.mediaId)?.provider === "rawg"
       ));
@@ -1505,14 +1511,6 @@ function App() {
               onClick={() => setMenuOpen(false)}
             >
               Activity
-            </a>
-            <a
-              className={view === "recap" ? "active" : ""}
-              href="#recap"
-              aria-current={view === "recap" ? "page" : undefined}
-              onClick={() => setMenuOpen(false)}
-            >
-              Recap
             </a>
             <a
               className={view === "settings" ? "active" : ""}
@@ -1823,14 +1821,14 @@ function App() {
         />
       )}
 
-      {view === "recap" && (
-        <RecapPage
+      {view === "monthly_log" && (
+        <MonthlyLogPage
           media={items}
-          activities={recapActivities}
+          activities={monthlyLogActivities}
           profileName={profile.name}
-          loading={loading || recapLoading}
-          error={recapError}
-          onRetry={() => setRecapGeneration((current) => current + 1)}
+          loading={loading || monthlyLogLoading}
+          error={monthlyLogError}
+          onRetry={() => setMonthlyLogGeneration((current) => current + 1)}
         />
       )}
 

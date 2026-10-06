@@ -1,35 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRecapImage, recapFilename } from "./recapImage.ts";
+import { createMonthlyLogImage, monthlyLogFilename } from "./recapImage.ts";
 
 const emptySummary = {
   entries: [],
+  titles: 0,
   completed: 0,
   repeats: 0,
-  added: 0,
-  startsAt: new Date("2026-09-05T00:00:00Z"),
+  startsAt: new Date(2026, 8, 1),
+  endsAt: new Date(2026, 9, 1),
 };
 
-describe("recap image export", () => {
-  it("uses stable period and story filenames", () => {
-    expect(recapFilename("week", "finished")).toBe(
-      "honne-finished-07-days.png",
-    );
-    expect(recapFilename("month", "added")).toBe(
-      "honne-added-30-days.png",
-    );
-    expect(recapFilename("year", "finished")).toBe(
-      "honne-finished-365-days.png",
+describe("Monthly Log image export", () => {
+  it("uses a stable calendar-month filename", () => {
+    expect(monthlyLogFilename(new Date(2026, 8, 1))).toBe(
+      "honne-monthly-log-2026-09.png",
     );
   });
 
   it("reports browsers without a canvas context", async () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
-    await expect(createRecapImage({
+    await expect(createMonthlyLogImage({
       summary: emptySummary,
-      period: "month",
-      focus: "finished",
       profileName: "My Library",
-      now: new Date("2026-10-05T00:00:00Z"),
     })).rejects.toThrow("Image generation is unavailable");
   });
 });

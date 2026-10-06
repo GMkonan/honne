@@ -1,8 +1,4 @@
-export type RecapPeriod = "week" | "month" | "year";
-export type RecapFocus = "finished" | "added";
-export type RecapSort = "recent" | "rating";
-
-export interface RecapMedia {
+export interface MonthlyLogMedia {
   id: number;
   title: string;
   type: string;
@@ -13,7 +9,7 @@ export interface RecapMedia {
   createdAt: string;
 }
 
-export interface RecapActivity {
+export interface MonthlyLogActivity {
   id: number;
   mediaId?: number;
   action: "added" | "updated" | "deleted" | "imported";
@@ -26,46 +22,52 @@ export interface RecapActivity {
   occurredAt: string;
 }
 
-export interface RecapEntry {
-  media: RecapMedia;
+export interface MonthlyLogEntry {
+  media: MonthlyLogMedia;
   occurredAt: string;
   completed: boolean;
   repeats: number;
 }
 
-export interface RecapSummary {
-  entries: RecapEntry[];
+export interface MonthlyLogSummary {
+  entries: MonthlyLogEntry[];
+  titles: number;
   completed: number;
   repeats: number;
-  added: number;
   startsAt: Date;
+  endsAt: Date;
 }
 
-const periodDays: Record<RecapPeriod, number> = {
-  week: 7,
-  month: 30,
-  year: 365,
-};
-
-export function recapPeriodLabel(period: RecapPeriod): string {
-  if (period === "week") return "Last 7 days";
-  if (period === "month") return "Last 30 days";
-  return "Last 365 days";
+export function previousCalendarMonth(now = new Date()): {
+  startsAt: Date;
+  endsAt: Date;
+} {
+  const startsAt = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endsAt = new Date(now.getFullYear(), now.getMonth(), 1);
+  endsAt.setMilliseconds(-1);
+  return { startsAt, endsAt };
 }
 
-function dateInPeriod(value: string, startsAt: Date, now: Date): boolean {
+export function monthlyLogLabel(startsAt: Date): string {
+  return new Intl.DateTimeFormat("en", {
+    month: "long",
+    year: "numeric",
+  }).format(startsAt);
+}
+
+function dateInMonth(value: string, startsAt: Date, endsAt: Date): boolean {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) && timestamp >= startsAt.getTime() &&
-    timestamp <= now.getTime();
+    timestamp <= endsAt.getTime();
 }
 
-function completedInActivity(activity: RecapActivity): boolean {
+function completedInActivity(activity: MonthlyLogActivity): boolean {
   if (activity.changes.toStatus !== "completed") return false;
   return activity.action !== "updated" ||
     activity.changes.fromStatus !== "completed";
 }
 
-function repeatIncrease(activity: RecapActivity): number {
+function repeatIncrease(activity: MonthlyLogActivity): number {
   if (activity.changes.toRepeatCount === undefined) return 0;
   return Math.max(
     0,
@@ -74,24 +76,19 @@ function repeatIncrease(activity: RecapActivity): number {
   );
 }
 
-export function buildRecapSummary(
-  media: RecapMedia[],
-  activities: RecapActivity[],
-  period: RecapPeriod,
-  focus: RecapFocus,
-  sort: RecapSort,
+export function buildMonthlyLog(
+  media: MonthlyLogMedia[],
+  activities: MonthlyLogActivity[],
   now = new Date(),
-): RecapSummary {
-  const startsAt = new Date(now.getTime() - periodDays[period] * 86_400_000);
+): MonthlyLogSummary {
+  const { startsAt, endsAt } = previousCalendarMonth(now);
   const mediaByID = new Map(media.map((item) => [item.id, item]));
-  const relevantActivities = activities.filter((activity) =>
-    dateInPeriod(activity.occurredAt, startsAt, now)
-  );
-  const consumed = new Map<number, RecapEntry>();
+  const entriesByMedia = new Map<number, MonthlyLogEntry>();
   const completedMedia = new Set<number>();
   let repeats = 0;
 
-  for (const activity of relevantActivities) {
+  for (const activity of activities) {
+    if (!dateInMonth(activity.occurredAt, startsAt, endsAt)) continue;
     const item = activity.mediaId ? mediaByID.get(activity.mediaId) : undefined;
     if (!item || activity.action === "deleted") continue;
     const completed = completedInActivity(activity);
@@ -99,8 +96,8 @@ export function buildRecapSummary(
     if (!completed && repeatCount === 0) continue;
     if (completed) completedMedia.add(item.id);
     repeats += repeatCount;
-    const previous = consumed.get(item.id);
-    consumed.set(item.id, {
+    const previous = entriesByMedia.get(item.id);
+    entriesByMedia.set(item.id, {
       media: item,
       occurredAt: !previous || Date.parse(activity.occurredAt) >
           Date.parse(previous.occurredAt)
@@ -111,29 +108,16 @@ export function buildRecapSummary(
     });
   }
 
-  const addedEntries = media.filter((item) =>
-    dateInPeriod(item.createdAt, startsAt, now)
-  ).map((item) => ({
-    media: item,
-    occurredAt: item.createdAt,
-    completed: false,
-    repeats: 0,
-  }));
-  const entries = focus === "finished" ? [...consumed.values()] : addedEntries;
-  entries.sort((left, right) => {
-    if (sort === "rating") {
-      const ratingOrder = right.media.rating - left.media.rating;
-      if (ratingOrder !== 0) return ratingOrder;
-    }
-    return Date.parse(right.occurredAt) - Date.parse(left.occurredAt) ||
-      left.media.title.localeCompare(right.media.title);
-  });
-
+  const entries = [...entriesByMedia.values()].sort((left, right) =>
+    Date.parse(right.occurredAt) - Date.parse(left.occurredAt) ||
+    left.media.title.localeCompare(right.media.title)
+  );
   return {
-    entries: entries.slice(0, 6),
+    entries: entries.slice(0, 15),
+    titles: entries.length,
     completed: completedMedia.size,
     repeats,
-    added: addedEntries.length,
     startsAt,
+    endsAt,
   };
 }
