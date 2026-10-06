@@ -227,13 +227,13 @@ export async function createMonthlyLogImage(
       context.strokeRect(x + .5, y + .5, 175, 318);
       context.fillStyle = index % 2 === 0 ? palette.blue : palette.mauve;
       context.fillRect(x, y, 176, 3);
-      drawCover(context, covers[index], x + 8, y + 7, index, 160, 240);
+      drawCover(context, covers[index], x + 13, y + 7, index, 150, 225);
       context.fillStyle = palette.sapphire;
       context.font = "500 12px 'IBM Plex Mono', monospace";
       context.fillText(
         typeLabels[entry.media.type] || entry.media.type.toUpperCase(),
         x + 8,
-        y + 252,
+        y + 248,
         160,
       );
       context.fillStyle = palette.text;

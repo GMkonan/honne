@@ -1663,7 +1663,7 @@ button {
 }
 .monthly-log-poster.is-detailed .monthly-log-title-grid li {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
   align-content: start;
   gap: 7px;
   padding: 6px;
@@ -1684,8 +1684,10 @@ button {
   height: 100%;
   object-fit: cover;
 }
+.monthly-log-poster.is-detailed .monthly-log-cover,
 .monthly-log-poster.is-cover-only .monthly-log-cover {
   height: 100%;
+  min-height: 0;
   aspect-ratio: auto;
 }
 .monthly-log-title-grid li > div:last-child {
