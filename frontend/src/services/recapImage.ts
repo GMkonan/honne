@@ -91,9 +91,9 @@ function drawCover(
   x: number,
   y: number,
   index: number,
+  coverWidth: number,
+  coverHeight: number,
 ) {
-  const coverWidth = 131;
-  const coverHeight = 197;
   context.save();
   context.beginPath();
   context.rect(x, y, coverWidth, coverHeight);
@@ -204,29 +204,41 @@ export async function createMonthlyLogImage(
     context.font = "700 34px 'Zen Kaku Gothic New', sans-serif";
     context.fillText("No completed or revisited titles", 292, 700);
   } else {
+    const coverOnly = options.summary.titles > 15;
     options.summary.entries.forEach((entry, index) => {
-      const column = index % 6;
-      const row = Math.floor(index / 6);
-      const x = 76 + column * 157;
-      const y = 255 + row * 306;
+      if (coverOnly) {
+        const column = index % 7;
+        const row = Math.floor(index / 7);
+        const x = 76 + column * 134;
+        const y = 235 + row * 196;
+        drawCover(context, covers[index], x, y, index, 124, 186);
+        context.strokeStyle = palette.surface;
+        context.strokeRect(x + .5, y + .5, 123, 185);
+        return;
+      }
+
+      const column = index % 5;
+      const row = Math.floor(index / 5);
+      const x = 76 + column * 188;
+      const y = 235 + row * 327;
       context.fillStyle = palette.mantle;
-      context.fillRect(x, y, 143, 290);
+      context.fillRect(x, y, 176, 319);
       context.strokeStyle = palette.surface;
-      context.strokeRect(x + .5, y + .5, 142, 289);
+      context.strokeRect(x + .5, y + .5, 175, 318);
       context.fillStyle = index % 2 === 0 ? palette.blue : palette.mauve;
-      context.fillRect(x, y, 143, 3);
-      drawCover(context, covers[index], x + 6, y + 6, index);
+      context.fillRect(x, y, 176, 3);
+      drawCover(context, covers[index], x + 8, y + 7, index, 160, 240);
       context.fillStyle = palette.sapphire;
       context.font = "500 12px 'IBM Plex Mono', monospace";
       context.fillText(
         typeLabels[entry.media.type] || entry.media.type.toUpperCase(),
-        x + 6,
-        y + 211,
-        131,
+        x + 8,
+        y + 252,
+        160,
       );
       context.fillStyle = palette.text;
       context.font = "700 16px 'Zen Kaku Gothic New', sans-serif";
-      drawWrappedTitle(context, entry.media.title, x + 6, y + 233, 131, 18);
+      drawWrappedTitle(context, entry.media.title, x + 8, y + 270, 160, 18);
       context.fillStyle = palette.muted;
       context.font = "500 12px 'IBM Plex Mono', monospace";
       const note = entry.repeats > 0
@@ -234,20 +246,23 @@ export async function createMonthlyLogImage(
         : entry.media.rating > 0
         ? `★ ${entry.media.rating}/10`
         : "FINISHED";
-      context.fillText(note, x + 6, y + 272, 131);
+      context.fillText(note, x + 8, y + 303, 160);
     });
   }
 
   context.fillStyle = palette.blue;
   context.fillRect(76, 1250, 928, 2);
-  context.font = "500 17px 'IBM Plex Mono', monospace";
+  const outsideImage = options.summary.titles - options.summary.entries.length;
+  context.font = `500 ${
+    outsideImage > 0 ? 14 : 17
+  }px 'IBM Plex Mono', monospace`;
   const finishedLabel = `${options.summary.completed} FINISHED${
     options.summary.repeats > 0
       ? `  /  ${options.summary.repeats} REVISITED`
       : ""
   }${
-    options.summary.titles > options.summary.entries.length
-      ? `  /  ${options.summary.entries.length} NEWEST SHOWN`
+    outsideImage > 0
+      ? `  /  ${options.summary.entries.length} NEWEST SHOWN  /  +${outsideImage} OUTSIDE IMAGE`
       : ""
   }`;
   context.fillStyle = palette.text;

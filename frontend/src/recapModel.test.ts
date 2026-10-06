@@ -91,8 +91,8 @@ describe("buildMonthlyLog", () => {
     expect(summary.repeats).toBe(1);
   });
 
-  it("keeps the latest eighteen entries while counting the whole month", () => {
-    const manyMedia = Array.from({ length: 20 }, (_, index) => ({
+  it("keeps the latest thirty entries while counting the whole month", () => {
+    const manyMedia = Array.from({ length: 35 }, (_, index) => ({
       ...media[0],
       id: index + 1,
       title: `Title ${index + 1}`,
@@ -105,13 +105,18 @@ describe("buildMonthlyLog", () => {
       mediaId: item.id,
       action: "updated",
       changes: { fromStatus: "in_progress", toStatus: "completed" },
-      occurredAt: `2026-09-${String(index + 1).padStart(2, "0")}T12:00:00Z`,
+      occurredAt: `2026-09-${
+        String(Math.floor(index / 12) + 1).padStart(
+          2,
+          "0",
+        )
+      }T${String(12 + (index % 12)).padStart(2, "0")}:00:00Z`,
     }));
 
     const summary = buildMonthlyLog(manyMedia, manyActivities, now);
-    expect(summary.entries).toHaveLength(18);
-    expect(summary.titles).toBe(20);
-    expect(summary.entries[0].media.title).toBe("Title 20");
+    expect(summary.entries).toHaveLength(30);
+    expect(summary.titles).toBe(35);
+    expect(summary.entries[0].media.title).toBe("Title 35");
   });
 
   it("limits the log and its totals to the selected media type", () => {

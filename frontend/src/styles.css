@@ -1642,21 +1642,31 @@ button {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 10px;
   list-style: none;
+}
+.monthly-log-poster.is-detailed .monthly-log-title-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.monthly-log-poster.is-cover-only .monthly-log-title-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  gap: 10px;
 }
 .monthly-log-title-grid li {
   min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--surface);
+  border-top: 2px solid var(--blue);
+  background: var(--mantle);
+}
+.monthly-log-poster.is-detailed .monthly-log-title-grid li {
   display: grid;
   grid-template-rows: auto 1fr;
   align-content: start;
   gap: 7px;
   padding: 6px;
-  border: 1px solid var(--surface);
-  border-top: 2px solid var(--blue);
-  background: var(--mantle);
 }
 .monthly-log-cover {
   width: 100%;
@@ -1673,6 +1683,10 @@ button {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.monthly-log-poster.is-cover-only .monthly-log-cover {
+  height: 100%;
+  aspect-ratio: auto;
 }
 .monthly-log-title-grid li > div:last-child {
   min-width: 0;
@@ -1735,12 +1749,21 @@ button {
     padding: 8px;
   }
   .monthly-log-poster {
-    min-height: 1480px;
     aspect-ratio: auto;
   }
-  .monthly-log-title-grid {
+  .monthly-log-poster.is-detailed {
+    min-height: 1600px;
+  }
+  .monthly-log-poster.is-cover-only {
+    min-height: 2200px;
+  }
+  .monthly-log-poster.is-detailed .monthly-log-title-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(5, minmax(0, 1fr));
+  }
+  .monthly-log-poster.is-cover-only .monthly-log-title-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(10, minmax(0, 1fr));
   }
 }
 

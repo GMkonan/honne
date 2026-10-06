@@ -75,6 +75,8 @@ export function MonthlyLogPage(
   const titleCount = `${summary.titles} title${
     summary.titles === 1 ? "" : "s"
   }`;
+  const coverOnly = summary.titles > 15;
+  const outsideImage = summary.titles - summary.entries.length;
 
   async function exportImage(action: "download" | "share") {
     setImageWorking(action);
@@ -212,7 +214,11 @@ export function MonthlyLogPage(
             </div>
           )
           : (
-            <article className="monthly-log-poster">
+            <article
+              className={`monthly-log-poster ${
+                coverOnly ? "is-cover-only" : "is-detailed"
+              }`}
+            >
               <header className="monthly-log-poster-header">
                 <div>
                   <span>HONNE</span>
@@ -237,29 +243,36 @@ export function MonthlyLogPage(
                       <li key={entry.media.id}>
                         <div className="monthly-log-cover">
                           {entry.media.coverUrl
-                            ? <img src={entry.media.coverUrl} alt="" />
+                            ? (
+                              <img
+                                src={entry.media.coverUrl}
+                                alt={coverOnly ? entry.media.title : ""}
+                              />
+                            )
                             : <span>{String(index + 1).padStart(2, "0")}</span>}
                         </div>
-                        <div>
-                          <small>
-                            {typeLabels[entry.media.type] || entry.media.type}
-                          </small>
-                          <strong>{entry.media.title}</strong>
-                          <span>
-                            {entry.repeats > 0
-                              ? `${entry.repeats} revisit${
-                                entry.repeats === 1 ? "" : "s"
-                              }`
-                              : entry.media.rating > 0
-                              ? (
-                                <>
-                                  <Star size={10} fill="currentColor" />{" "}
-                                  {entry.media.rating}/10
-                                </>
-                              )
-                              : "Finished"}
-                          </span>
-                        </div>
+                        {!coverOnly && (
+                          <div>
+                            <small>
+                              {typeLabels[entry.media.type] || entry.media.type}
+                            </small>
+                            <strong>{entry.media.title}</strong>
+                            <span>
+                              {entry.repeats > 0
+                                ? `${entry.repeats} revisit${
+                                  entry.repeats === 1 ? "" : "s"
+                                }`
+                                : entry.media.rating > 0
+                                ? (
+                                  <>
+                                    <Star size={10} fill="currentColor" />{" "}
+                                    {entry.media.rating}/10
+                                  </>
+                                )
+                                : "Finished"}
+                            </span>
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ol>
@@ -272,10 +285,11 @@ export function MonthlyLogPage(
                       {" "}· <strong>{summary.repeats}</strong> revisited
                     </>
                   )}
-                  {summary.titles > summary.entries.length && (
+                  {outsideImage > 0 && (
                     <>
                       {" "}· <strong>{summary.entries.length}</strong>{" "}
-                      newest shown
+                      newest shown · <strong>+{outsideImage}</strong>{" "}
+                      outside image
                     </>
                   )}
                 </span>

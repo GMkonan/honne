@@ -128,7 +128,7 @@ export function buildMonthlyLog(
     left.media.title.localeCompare(right.media.title)
   );
   return {
-    entries: entries.slice(0, 18),
+    entries: entries.slice(0, 30),
     titles: entries.length,
     completed: completedMedia.size,
     repeats,
