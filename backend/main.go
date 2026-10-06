@@ -216,10 +216,11 @@ func (s *store) persistLocked() error {
 }
 
 type app struct {
-	store     *store
-	discovery *discoveryService
-	anilist   *aniListSync
-	config    config
+	store       *store
+	discovery   *discoveryService
+	anilist     *aniListSync
+	imageClient *http.Client
+	config      config
 }
 
 func main() {
@@ -246,6 +247,7 @@ func main() {
 	mux.HandleFunc("GET /api/media", application.listMedia)
 	mux.HandleFunc("GET /api/activity", application.listActivity)
 	mux.HandleFunc("GET /api/backup", application.downloadBackup)
+	mux.HandleFunc("GET /api/images/cover", application.proxyImage)
 	mux.HandleFunc("GET /api/discovery/search", application.searchDiscovery)
 	mux.HandleFunc("GET /api/discovery/global", application.searchGlobalDiscovery)
 	mux.HandleFunc("GET /api/discovery/detail", application.getDiscoveryDetail)

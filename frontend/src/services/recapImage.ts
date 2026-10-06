@@ -45,31 +45,44 @@ export function monthlyLogFilename(
 
 async function loadCover(url: string): Promise<HTMLImageElement | null> {
   if (!url) return null;
-  try {
-    const response = await fetch(url, { credentials: "omit", mode: "cors" });
-    const declaredSize = Number(response.headers.get("Content-Length") || 0);
-    if (!response.ok || declaredSize > maxCoverBytes) return null;
-    const blob = await response.blob();
-    if (!blob.type.startsWith("image/") || blob.size > maxCoverBytes) {
-      return null;
-    }
-    const objectURL = URL.createObjectURL(blob);
+  const sources: Array<{ url: string; credentials: RequestCredentials }> = [
+    {
+      url: `/api/images/cover?url=${encodeURIComponent(url)}`,
+      credentials: "same-origin",
+    },
+    { url, credentials: "omit" },
+  ];
+  for (const source of sources) {
     try {
-      const image = new Image();
-      image.decoding = "async";
-      image.src = objectURL;
-      await image.decode();
-      if (
-        image.naturalWidth < 1 || image.naturalHeight < 1 ||
-        image.naturalWidth > 10_000 || image.naturalHeight > 10_000
-      ) return null;
-      return image;
-    } finally {
-      URL.revokeObjectURL(objectURL);
+      const response = await fetch(source.url, {
+        credentials: source.credentials,
+        mode: "cors",
+      });
+      const declaredSize = Number(response.headers.get("Content-Length") || 0);
+      if (!response.ok || declaredSize > maxCoverBytes) continue;
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/") || blob.size > maxCoverBytes) {
+        continue;
+      }
+      const objectURL = URL.createObjectURL(blob);
+      try {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = objectURL;
+        await image.decode();
+        if (
+          image.naturalWidth < 1 || image.naturalHeight < 1 ||
+          image.naturalWidth > 10_000 || image.naturalHeight > 10_000
+        ) continue;
+        return image;
+      } finally {
+        URL.revokeObjectURL(objectURL);
+      }
+    } catch {
+      // Try the original URL when a configured provider proxy cannot serve it.
     }
-  } catch {
-    return null;
   }
+  return null;
 }
 
 function drawCover(
@@ -79,8 +92,8 @@ function drawCover(
   y: number,
   index: number,
 ) {
-  const coverWidth = 76;
-  const coverHeight = 114;
+  const coverWidth = 131;
+  const coverHeight = 197;
   context.save();
   context.beginPath();
   context.rect(x, y, coverWidth, coverHeight);
@@ -115,6 +128,7 @@ function drawWrappedTitle(
   x: number,
   y: number,
   maxWidth: number,
+  lineHeight = 25,
 ) {
   const words = title.split(/\s+/u).filter(Boolean);
   const lines: string[] = [];
@@ -131,7 +145,9 @@ function drawWrappedTitle(
   if (lines.length > 2 && visible.length === 2) {
     visible[1] = `${visible[1].replace(/[.…]+$/u, "")}…`;
   }
-  visible.forEach((line, index) => context.fillText(line, x, y + index * 25));
+  visible.forEach((line, index) =>
+    context.fillText(line, x, y + index * lineHeight)
+  );
 }
 
 export async function createMonthlyLogImage(
@@ -189,35 +205,36 @@ export async function createMonthlyLogImage(
     context.fillText("No completed or revisited titles", 292, 700);
   } else {
     options.summary.entries.forEach((entry, index) => {
-      const column = index % 3;
-      const row = Math.floor(index / 3);
-      const x = 76 + column * 316;
-      const y = 255 + row * 154;
+      const column = index % 6;
+      const row = Math.floor(index / 6);
+      const x = 76 + column * 157;
+      const y = 255 + row * 306;
       context.fillStyle = palette.mantle;
-      context.fillRect(x, y, 296, 138);
+      context.fillRect(x, y, 143, 290);
       context.strokeStyle = palette.surface;
-      context.strokeRect(x + .5, y + .5, 295, 137);
+      context.strokeRect(x + .5, y + .5, 142, 289);
       context.fillStyle = index % 2 === 0 ? palette.blue : palette.mauve;
-      context.fillRect(x, y, 3, 138);
-      drawCover(context, covers[index], x + 12, y + 12, index);
+      context.fillRect(x, y, 143, 3);
+      drawCover(context, covers[index], x + 6, y + 6, index);
       context.fillStyle = palette.sapphire;
-      context.font = "500 13px 'IBM Plex Mono', monospace";
+      context.font = "500 12px 'IBM Plex Mono', monospace";
       context.fillText(
         typeLabels[entry.media.type] || entry.media.type.toUpperCase(),
-        x + 100,
-        y + 16,
+        x + 6,
+        y + 211,
+        131,
       );
       context.fillStyle = palette.text;
-      context.font = "700 20px 'Zen Kaku Gothic New', sans-serif";
-      drawWrappedTitle(context, entry.media.title, x + 100, y + 43, 180);
+      context.font = "700 16px 'Zen Kaku Gothic New', sans-serif";
+      drawWrappedTitle(context, entry.media.title, x + 6, y + 233, 131, 18);
       context.fillStyle = palette.muted;
-      context.font = "500 13px 'IBM Plex Mono', monospace";
+      context.font = "500 12px 'IBM Plex Mono', monospace";
       const note = entry.repeats > 0
         ? `${entry.repeats} REVISIT${entry.repeats === 1 ? "" : "S"}`
         : entry.media.rating > 0
         ? `★ ${entry.media.rating}/10`
         : "FINISHED";
-      context.fillText(note, x + 100, y + 109);
+      context.fillText(note, x + 6, y + 272, 131);
     });
   }
 
@@ -227,6 +244,10 @@ export async function createMonthlyLogImage(
   const finishedLabel = `${options.summary.completed} FINISHED${
     options.summary.repeats > 0
       ? `  /  ${options.summary.repeats} REVISITED`
+      : ""
+  }${
+    options.summary.titles > options.summary.entries.length
+      ? `  /  ${options.summary.entries.length} NEWEST SHOWN`
       : ""
   }`;
   context.fillStyle = palette.text;

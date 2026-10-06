@@ -269,7 +269,13 @@ export function MonthlyLogPage(
                   <strong>{summary.completed}</strong> finished
                   {summary.repeats > 0 && (
                     <>
-                      · <strong>{summary.repeats}</strong> revisited
+                      {" "}· <strong>{summary.repeats}</strong> revisited
+                    </>
+                  )}
+                  {summary.titles > summary.entries.length && (
+                    <>
+                      {" "}· <strong>{summary.entries.length}</strong>{" "}
+                      newest shown
                     </>
                   )}
                 </span>
