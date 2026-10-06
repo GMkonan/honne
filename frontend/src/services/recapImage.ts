@@ -225,7 +225,7 @@ export async function createMonthlyLogImage(
       context.fillRect(x, y, 176, 319);
       context.strokeStyle = palette.surface;
       context.strokeRect(x + .5, y + .5, 175, 318);
-      context.fillStyle = index % 2 === 0 ? palette.blue : palette.mauve;
+      context.fillStyle = palette.blue;
       context.fillRect(x, y, 176, 3);
       drawCover(context, covers[index], x + 13, y + 7, index, 150, 225);
       context.fillStyle = palette.sapphire;
@@ -252,7 +252,7 @@ export async function createMonthlyLogImage(
       if (context.measureText(note).width > 160) {
         context.font = "500 11px 'IBM Plex Mono', monospace";
       }
-      context.fillText(note, x + 8, y + 311, 160);
+      context.fillText(note, x + 8, y + 306, 160);
     });
   }
 
