@@ -144,13 +144,6 @@ export async function createMonthlyLogImage(
   context.textBaseline = "top";
   context.fillStyle = palette.crust;
   context.fillRect(0, 0, width, height);
-  context.strokeStyle = "rgba(137, 180, 250, .07)";
-  for (let x = 48; x < width; x += 48) {
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
-    context.stroke();
-  }
   context.fillStyle = palette.blue;
   context.fillRect(0, 0, 14, height);
   context.fillRect(76, 70, 928, 2);

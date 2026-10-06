@@ -1566,8 +1566,7 @@ button {
   place-items: start center;
   padding: clamp(12px, 3vw, 32px);
   border: 1px solid var(--surface);
-  background: radial-gradient(circle at 20% 10%, rgba(137,180,250,.13),
-    transparent 32%), var(--mantle);
+  background: var(--mantle);
 }
 .monthly-log-poster {
   width: min(100%, 720px);
@@ -1579,12 +1578,8 @@ button {
   overflow: hidden;
   padding: clamp(18px, 4vw, 42px);
   color: var(--text);
-  background: radial-gradient(circle at 88% 7%, rgba(203,166,247,.14),
-    transparent 27%),
-    repeating-linear-gradient(90deg, transparent 0 47px, rgba(137,180,250,.035)
-    48px), var(--crust);
-  border: 1px solid var(--surface-2);
-  box-shadow: 0 24px 60px rgba(0,0,0,.35);
+  background: var(--crust);
+  border: 2px solid var(--surface-2);
 }
 .monthly-log-poster-header,
 .monthly-log-poster footer,
@@ -1655,7 +1650,7 @@ button {
   padding: 5px;
   border: 1px solid var(--surface);
   border-left: 2px solid var(--blue);
-  background: rgba(24,24,37,.82);
+  background: var(--mantle);
 }
 .monthly-log-cover {
   aspect-ratio: 2 / 3;
