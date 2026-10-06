@@ -120,7 +120,12 @@ describe("Library characterization", () => {
       title: "Cowboy Bebop",
       mediaType: "anime",
       action: "updated",
-      changes: { fromStatus: "in_progress", toStatus: "completed" },
+      changes: {
+        fromStatus: "in_progress",
+        toStatus: "completed",
+        fromRepeatCount: 0,
+        toRepeatCount: 1,
+      },
       occurredAt,
     }]);
     const createImage = vi.spyOn(monthlyLogImage, "createMonthlyLogImage")
@@ -147,6 +152,7 @@ describe("Library characterization", () => {
     expect(within(preview).getByText("Konan Library")).not.toBeNull();
     expect(within(preview).getByText(/finished/u)).not.toBeNull();
     expect(within(preview).getByText("All media")).not.toBeNull();
+    expect(within(preview).getByText(/9\/10 · 1 revisit/u)).not.toBeNull();
     expect(within(preview).queryByText(/recorded from Activity/u)).toBeNull();
     expect(within(preview).queryByText("PRIVATE BY DESIGN")).toBeNull();
 

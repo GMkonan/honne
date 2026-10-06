@@ -258,18 +258,21 @@ export function MonthlyLogPage(
                             </small>
                             <strong>{entry.media.title}</strong>
                             <span>
+                              {entry.media.rating > 0 && (
+                                <>
+                                  <Star size={10} fill="currentColor" />{" "}
+                                  {entry.media.rating}/10
+                                </>
+                              )}
+                              {entry.media.rating > 0 && entry.repeats > 0 &&
+                                " · "}
                               {entry.repeats > 0
                                 ? `${entry.repeats} revisit${
                                   entry.repeats === 1 ? "" : "s"
                                 }`
-                                : entry.media.rating > 0
-                                ? (
-                                  <>
-                                    <Star size={10} fill="currentColor" />{" "}
-                                    {entry.media.rating}/10
-                                  </>
-                                )
-                                : "Finished"}
+                                : entry.media.rating <= 0
+                                ? "Finished"
+                                : null}
                             </span>
                           </div>
                         )}

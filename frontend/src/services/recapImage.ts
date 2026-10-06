@@ -240,13 +240,19 @@ export async function createMonthlyLogImage(
       context.font = "700 16px 'Zen Kaku Gothic New', sans-serif";
       drawWrappedTitle(context, entry.media.title, x + 8, y + 270, 160, 18);
       context.fillStyle = palette.muted;
+      const noteParts: string[] = [];
+      if (entry.media.rating > 0) noteParts.push(`★ ${entry.media.rating}/10`);
+      if (entry.repeats > 0) {
+        noteParts.push(
+          `${entry.repeats} REVISIT${entry.repeats === 1 ? "" : "S"}`,
+        );
+      }
+      const note = noteParts.join(" · ") || "FINISHED";
       context.font = "500 12px 'IBM Plex Mono', monospace";
-      const note = entry.repeats > 0
-        ? `${entry.repeats} REVISIT${entry.repeats === 1 ? "" : "S"}`
-        : entry.media.rating > 0
-        ? `★ ${entry.media.rating}/10`
-        : "FINISHED";
-      context.fillText(note, x + 8, y + 303, 160);
+      if (context.measureText(note).width > 160) {
+        context.font = "500 11px 'IBM Plex Mono', monospace";
+      }
+      context.fillText(note, x + 8, y + 311, 160);
     });
   }
 

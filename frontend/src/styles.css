@@ -1691,8 +1691,9 @@ button {
 .monthly-log-title-grid li > div:last-child {
   min-width: 0;
   display: grid;
+  grid-template-rows: auto minmax(2.4em, auto) auto;
   align-content: start;
-  gap: 3px;
+  gap: 4px;
   font-size: 12px;
 }
 .monthly-log-title-grid small {
@@ -1706,7 +1707,7 @@ button {
 .monthly-log-title-grid li strong {
   overflow: hidden;
   display: -webkit-box;
-  line-height: 1.1;
+  line-height: 1.2;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
