@@ -1,3 +1,13 @@
+export type MonthlyLogMediaType =
+  | "all"
+  | "anime"
+  | "series"
+  | "movie"
+  | "book"
+  | "manga"
+  | "light_novel"
+  | "game";
+
 export interface MonthlyLogMedia {
   id: number;
   title: string;
@@ -36,6 +46,7 @@ export interface MonthlyLogSummary {
   repeats: number;
   startsAt: Date;
   endsAt: Date;
+  mediaType: MonthlyLogMediaType;
 }
 
 export function previousCalendarMonth(now = new Date()): {
@@ -80,6 +91,7 @@ export function buildMonthlyLog(
   media: MonthlyLogMedia[],
   activities: MonthlyLogActivity[],
   now = new Date(),
+  mediaType: MonthlyLogMediaType = "all",
 ): MonthlyLogSummary {
   const { startsAt, endsAt } = previousCalendarMonth(now);
   const mediaByID = new Map(media.map((item) => [item.id, item]));
@@ -90,7 +102,10 @@ export function buildMonthlyLog(
   for (const activity of activities) {
     if (!dateInMonth(activity.occurredAt, startsAt, endsAt)) continue;
     const item = activity.mediaId ? mediaByID.get(activity.mediaId) : undefined;
-    if (!item || activity.action === "deleted") continue;
+    if (
+      !item || activity.action === "deleted" ||
+      (mediaType !== "all" && item.type !== mediaType)
+    ) continue;
     const completed = completedInActivity(activity);
     const repeatCount = repeatIncrease(activity);
     if (!completed && repeatCount === 0) continue;
@@ -113,11 +128,12 @@ export function buildMonthlyLog(
     left.media.title.localeCompare(right.media.title)
   );
   return {
-    entries: entries.slice(0, 15),
+    entries: entries.slice(0, 18),
     titles: entries.length,
     completed: completedMedia.size,
     repeats,
     startsAt,
     endsAt,
+    mediaType,
   };
 }

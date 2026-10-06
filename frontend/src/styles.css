@@ -1475,7 +1475,7 @@ button {
 }
 .monthly-log-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
+  grid-template-columns: minmax(180px, 1fr) 150px auto auto;
   align-items: center;
   gap: 18px 28px;
   margin-bottom: 16px;
@@ -1502,6 +1502,21 @@ button {
 .monthly-log-period strong {
   color: var(--text);
   font-size: 17px;
+}
+.monthly-log-media-filter {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.monthly-log-media-filter select {
+  min-height: 38px;
+  padding: 0 9px;
+  border: 1px solid var(--surface-2);
+  border-radius: 2px;
+  color: var(--text);
+  background: var(--base);
+  font-size: 12px;
 }
 .monthly-log-summary {
   display: flex;
@@ -1573,8 +1588,8 @@ button {
   aspect-ratio: 4 / 5;
   min-height: 540px;
   display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
-  gap: clamp(8px, 1.6vw, 16px);
+  grid-template-rows: auto auto auto 1fr;
+  gap: clamp(6px, 1.2vw, 12px);
   overflow: hidden;
   padding: clamp(18px, 4vw, 42px);
   color: var(--text);
@@ -1582,7 +1597,6 @@ button {
   border: 2px solid var(--surface-2);
 }
 .monthly-log-poster-header,
-.monthly-log-poster footer,
 .monthly-log-stat-row {
   display: flex;
   align-items: center;
@@ -1608,7 +1622,7 @@ button {
 .monthly-log-poster-title h2 {
   margin: 2px 0;
   font-family: 'Zen Kaku Gothic New', sans-serif;
-  font-size: clamp(26px, 5vw, 52px);
+  font-size: clamp(24px, 4vw, 42px);
   line-height: 1;
   letter-spacing: -.045em;
 }
@@ -1637,7 +1651,7 @@ button {
   padding: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
   gap: 6px;
   list-style: none;
 }
@@ -1701,12 +1715,6 @@ button {
   justify-items: center;
   text-align: center;
 }
-.monthly-log-poster footer {
-  padding-top: 8px;
-  border-top: 2px solid var(--blue);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-}
 @media (max-width: 800px) {
   .monthly-log-toolbar {
     grid-template-columns: 1fr;
@@ -1723,12 +1731,12 @@ button {
     padding: 8px;
   }
   .monthly-log-poster {
-    min-height: 860px;
+    min-height: 980px;
     aspect-ratio: auto;
   }
   .monthly-log-title-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(8, minmax(0, 1fr));
+    grid-template-rows: repeat(9, minmax(0, 1fr));
   }
 }
 

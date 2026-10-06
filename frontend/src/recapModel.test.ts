@@ -91,8 +91,8 @@ describe("buildMonthlyLog", () => {
     expect(summary.repeats).toBe(1);
   });
 
-  it("keeps the latest fifteen entries while counting the whole month", () => {
-    const manyMedia = Array.from({ length: 17 }, (_, index) => ({
+  it("keeps the latest eighteen entries while counting the whole month", () => {
+    const manyMedia = Array.from({ length: 20 }, (_, index) => ({
       ...media[0],
       id: index + 1,
       title: `Title ${index + 1}`,
@@ -109,8 +109,20 @@ describe("buildMonthlyLog", () => {
     }));
 
     const summary = buildMonthlyLog(manyMedia, manyActivities, now);
-    expect(summary.entries).toHaveLength(15);
-    expect(summary.titles).toBe(17);
-    expect(summary.entries[0].media.title).toBe("Title 17");
+    expect(summary.entries).toHaveLength(18);
+    expect(summary.titles).toBe(20);
+    expect(summary.entries[0].media.title).toBe("Title 20");
+  });
+
+  it("limits the log and its totals to the selected media type", () => {
+    const summary = buildMonthlyLog(media, activities, now, "movie");
+
+    expect(summary.mediaType).toBe("movie");
+    expect(summary.entries.map((entry) => entry.media.title)).toEqual([
+      "Arrival",
+    ]);
+    expect(summary.titles).toBe(1);
+    expect(summary.completed).toBe(1);
+    expect(summary.repeats).toBe(1);
   });
 });

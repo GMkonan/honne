@@ -147,10 +147,19 @@ describe("Library characterization", () => {
     expect(within(preview).getByText("Konan Library")).not.toBeNull();
     expect(within(preview).getByText(/1 title recorded from Activity/u)).not
       .toBeNull();
+    expect(within(preview).queryByText("PRIVATE BY DESIGN")).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText("Media type"), "movie");
+    expect(within(preview).getByText("No completed or revisited titles")).not
+      .toBeNull();
+    await user.selectOptions(screen.getByLabelText("Media type"), "anime");
+    expect(await within(preview).findByText("Cowboy Bebop")).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Download PNG" }));
     expect(await screen.findByText("Monthly Log downloaded.")).not.toBeNull();
-    expect(createImage).toHaveBeenCalledOnce();
+    expect(createImage).toHaveBeenCalledWith(expect.objectContaining({
+      summary: expect.objectContaining({ mediaType: "anime" }),
+    }));
     expect(download).toHaveBeenCalledOnce();
   });
 

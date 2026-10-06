@@ -1,4 +1,8 @@
-import { monthlyLogLabel, type MonthlyLogSummary } from "../recapModel.ts";
+import {
+  monthlyLogLabel,
+  type MonthlyLogMediaType,
+  type MonthlyLogSummary,
+} from "../recapModel.ts";
 
 interface MonthlyLogImageOptions {
   summary: MonthlyLogSummary;
@@ -29,10 +33,14 @@ const typeLabels: Record<string, string> = {
   game: "GAME",
 };
 
-export function monthlyLogFilename(startsAt: Date): string {
+export function monthlyLogFilename(
+  startsAt: Date,
+  mediaType: MonthlyLogMediaType = "all",
+): string {
   const year = startsAt.getFullYear();
   const month = String(startsAt.getMonth() + 1).padStart(2, "0");
-  return `honne-monthly-log-${year}-${month}.png`;
+  const scope = mediaType === "all" ? "" : `-${mediaType.replace("_", "-")}`;
+  return `honne-monthly-log-${year}-${month}${scope}.png`;
 }
 
 async function loadCover(url: string): Promise<HTMLImageElement | null> {
@@ -71,8 +79,8 @@ function drawCover(
   y: number,
   index: number,
 ) {
-  const coverWidth = 82;
-  const coverHeight = 122;
+  const coverWidth = 76;
+  const coverHeight = 114;
   context.save();
   context.beginPath();
   context.rect(x, y, coverWidth, coverHeight);
@@ -160,52 +168,55 @@ export async function createMonthlyLogImage(
   context.font = "700 31px 'Zen Kaku Gothic New', sans-serif";
   context.fillText("本音", 921, 107);
 
+  const scopeLabel = options.summary.mediaType === "all"
+    ? "ALL MEDIA"
+    : typeLabels[options.summary.mediaType];
   context.fillStyle = palette.sapphire;
-  context.font = "500 18px 'IBM Plex Mono', monospace";
-  context.fillText("YOUR MONTH IN MEDIA", 76, 204);
-  context.fillStyle = palette.text;
-  context.font = "700 66px 'Zen Kaku Gothic New', sans-serif";
-  context.fillText(monthlyLogLabel(options.summary.startsAt), 76, 235);
-  context.fillStyle = palette.muted;
   context.font = "500 17px 'IBM Plex Mono', monospace";
+  context.fillText(`${scopeLabel} / MONTHLY LOG`, 76, 194);
+  context.fillStyle = palette.text;
+  context.font = "700 50px 'Zen Kaku Gothic New', sans-serif";
+  context.fillText(monthlyLogLabel(options.summary.startsAt), 76, 220);
+  context.fillStyle = palette.muted;
+  context.font = "500 16px 'IBM Plex Mono', monospace";
   const titleLabel = options.summary.titles === 1 ? "TITLE" : "TITLES";
   context.fillText(
     `${options.summary.titles} ${titleLabel}  /  ${options.summary.completed} FINISHED  /  ${options.summary.repeats} REVISITED`,
     76,
-    330,
+    281,
   );
 
   if (options.summary.entries.length === 0) {
     context.strokeStyle = palette.surface;
     context.setLineDash([10, 8]);
-    context.strokeRect(76, 405, 928, 770);
+    context.strokeRect(76, 320, 928, 908);
     context.setLineDash([]);
     context.fillStyle = palette.text;
     context.font = "700 34px 'Zen Kaku Gothic New', sans-serif";
-    context.fillText("No completed or revisited titles", 292, 760);
+    context.fillText("No completed or revisited titles", 292, 735);
   } else {
     options.summary.entries.forEach((entry, index) => {
       const column = index % 3;
       const row = Math.floor(index / 3);
       const x = 76 + column * 316;
-      const y = 405 + row * 158;
+      const y = 320 + row * 154;
       context.fillStyle = palette.mantle;
-      context.fillRect(x, y, 296, 142);
+      context.fillRect(x, y, 296, 138);
       context.strokeStyle = palette.surface;
-      context.strokeRect(x + .5, y + .5, 295, 141);
+      context.strokeRect(x + .5, y + .5, 295, 137);
       context.fillStyle = index % 2 === 0 ? palette.blue : palette.mauve;
-      context.fillRect(x, y, 3, 142);
-      drawCover(context, covers[index], x + 12, y + 10, index);
+      context.fillRect(x, y, 3, 138);
+      drawCover(context, covers[index], x + 12, y + 12, index);
       context.fillStyle = palette.sapphire;
       context.font = "500 13px 'IBM Plex Mono', monospace";
       context.fillText(
         typeLabels[entry.media.type] || entry.media.type.toUpperCase(),
-        x + 106,
+        x + 100,
         y + 16,
       );
       context.fillStyle = palette.text;
-      context.font = "700 21px 'Zen Kaku Gothic New', sans-serif";
-      drawWrappedTitle(context, entry.media.title, x + 106, y + 43, 174);
+      context.font = "700 20px 'Zen Kaku Gothic New', sans-serif";
+      drawWrappedTitle(context, entry.media.title, x + 100, y + 43, 180);
       context.fillStyle = palette.muted;
       context.font = "500 13px 'IBM Plex Mono', monospace";
       const note = entry.repeats > 0
@@ -213,25 +224,9 @@ export async function createMonthlyLogImage(
         : entry.media.rating > 0
         ? `★ ${entry.media.rating}/10`
         : "FINISHED";
-      context.fillText(note, x + 106, y + 111);
+      context.fillText(note, x + 100, y + 109);
     });
   }
-
-  context.fillStyle = palette.blue;
-  context.fillRect(76, 1262, 928, 2);
-  context.fillStyle = palette.muted;
-  context.font = "500 17px 'IBM Plex Mono', monospace";
-  context.fillText("PRIVATE BY DESIGN", 76, 1290);
-  context.fillStyle = palette.text;
-  context.font = "700 18px 'IBM Plex Mono', monospace";
-  context.fillText("MADE WITH HONNE", 443, 1289);
-  context.fillStyle = palette.muted;
-  context.font = "500 17px 'IBM Plex Mono', monospace";
-  context.fillText(
-    `${String(options.summary.entries.length).padStart(2, "0")} SHOWN`,
-    900,
-    1290,
-  );
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {

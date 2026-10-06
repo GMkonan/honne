@@ -5,6 +5,7 @@ import {
   type MonthlyLogActivity,
   monthlyLogLabel,
   type MonthlyLogMedia,
+  type MonthlyLogMediaType,
 } from "../recapModel.ts";
 import {
   createMonthlyLogImage,
@@ -29,6 +30,19 @@ const typeLabels: Record<string, string> = {
   light_novel: "Light novel",
   game: "Game",
 };
+const mediaTypeOptions: Array<{
+  value: MonthlyLogMediaType;
+  label: string;
+}> = [
+  { value: "all", label: "All media" },
+  { value: "anime", label: "Anime" },
+  { value: "series", label: "Series" },
+  { value: "movie", label: "Movies" },
+  { value: "book", label: "Books" },
+  { value: "manga", label: "Manga" },
+  { value: "light_novel", label: "Light novels" },
+  { value: "game", label: "Games" },
+];
 
 function downloadImage(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -53,9 +67,11 @@ export function MonthlyLogPage(
     "",
   );
   const [imageFeedback, setImageFeedback] = useState("");
+  const [mediaType, setMediaType] = useState<MonthlyLogMediaType>("all");
   const now = new Date();
-  const summary = buildMonthlyLog(media, activities, now);
+  const summary = buildMonthlyLog(media, activities, now, mediaType);
   const month = monthlyLogLabel(summary.startsAt);
+  const scopeLabel = mediaType === "all" ? "All media" : typeLabels[mediaType];
   const titleCount = `${summary.titles} title${
     summary.titles === 1 ? "" : "s"
   }`;
@@ -68,7 +84,7 @@ export function MonthlyLogPage(
         summary,
         profileName,
       });
-      const filename = monthlyLogFilename(summary.startsAt);
+      const filename = monthlyLogFilename(summary.startsAt, mediaType);
       if (action === "share") {
         const file = new File([blob], filename, { type: "image/png" });
         if (!navigator.canShare?.({ files: [file] })) {
@@ -119,6 +135,22 @@ export function MonthlyLogPage(
             <strong>{month}</strong>
           </span>
         </div>
+        <label className="monthly-log-media-filter">
+          <span>Media type</span>
+          <select
+            value={mediaType}
+            onChange={(event) => {
+              setMediaType(event.target.value as MonthlyLogMediaType);
+              setImageFeedback("");
+            }}
+          >
+            {mediaTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <dl className="monthly-log-summary">
           <div>
             <dt>Titles</dt>
@@ -189,7 +221,7 @@ export function MonthlyLogPage(
                 <b aria-hidden="true">本音</b>
               </header>
               <div className="monthly-log-poster-title">
-                <span>YOUR MONTH IN MEDIA</span>
+                <span>{scopeLabel.toUpperCase()} / MONTHLY LOG</span>
                 <h2>{month}</h2>
                 <p>{titleCount} recorded from Activity</p>
               </div>
@@ -242,13 +274,6 @@ export function MonthlyLogPage(
                     ))}
                   </ol>
                 )}
-              <footer>
-                <span>PRIVATE BY DESIGN</span>
-                <strong>MADE WITH HONNE</strong>
-                <span>
-                  {String(summary.entries.length).padStart(2, "0")} SHOWN
-                </span>
-              </footer>
             </article>
           )}
       </section>
