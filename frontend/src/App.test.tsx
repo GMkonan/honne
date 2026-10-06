@@ -145,8 +145,9 @@ describe("Library characterization", () => {
     const preview = screen.getByRole("region", { name: "Monthly Log preview" });
     expect(await within(preview).findByText("Cowboy Bebop")).not.toBeNull();
     expect(within(preview).getByText("Konan Library")).not.toBeNull();
-    expect(within(preview).getByText(/1 title recorded from Activity/u)).not
-      .toBeNull();
+    expect(within(preview).getByText(/finished/u)).not.toBeNull();
+    expect(within(preview).getByText("All media")).not.toBeNull();
+    expect(within(preview).queryByText(/recorded from Activity/u)).toBeNull();
     expect(within(preview).queryByText("PRIVATE BY DESIGN")).toBeNull();
 
     await user.selectOptions(screen.getByLabelText("Media type"), "movie");

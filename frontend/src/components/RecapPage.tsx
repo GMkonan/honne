@@ -215,23 +215,13 @@ export function MonthlyLogPage(
             <article className="monthly-log-poster">
               <header className="monthly-log-poster-header">
                 <div>
-                  <span>HONNE / MONTHLY LOG</span>
+                  <span>HONNE</span>
                   <strong>{profileName || "My Library"}</strong>
                 </div>
                 <b aria-hidden="true">本音</b>
               </header>
               <div className="monthly-log-poster-title">
-                <span>{scopeLabel.toUpperCase()} / MONTHLY LOG</span>
                 <h2>{month}</h2>
-                <p>{titleCount} recorded from Activity</p>
-              </div>
-              <div className="monthly-log-stat-row">
-                <span>
-                  <strong>{summary.completed}</strong> finished
-                </span>
-                <span>
-                  <strong>{summary.repeats}</strong> revisited
-                </span>
               </div>
               {summary.entries.length === 0
                 ? (
@@ -274,6 +264,17 @@ export function MonthlyLogPage(
                     ))}
                   </ol>
                 )}
+              <footer className="monthly-log-poster-footer">
+                <span>
+                  <strong>{summary.completed}</strong> finished
+                  {summary.repeats > 0 && (
+                    <>
+                      · <strong>{summary.repeats}</strong> revisited
+                    </>
+                  )}
+                </span>
+                <strong>{scopeLabel}</strong>
+              </footer>
             </article>
           )}
       </section>

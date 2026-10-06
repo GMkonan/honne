@@ -157,11 +157,11 @@ export async function createMonthlyLogImage(
   context.fillRect(76, 70, 928, 2);
 
   context.fillStyle = palette.sapphire;
-  context.font = "500 19px 'IBM Plex Mono', monospace";
-  context.fillText("HONNE / MONTHLY LOG", 76, 94);
+  context.font = "500 17px 'IBM Plex Mono', monospace";
+  context.fillText("HONNE", 76, 92);
   context.fillStyle = palette.text;
-  context.font = "700 24px 'IBM Plex Mono', monospace";
-  context.fillText(options.profileName || "My Library", 76, 128);
+  context.font = "700 34px 'Zen Kaku Gothic New', sans-serif";
+  context.fillText(options.profileName || "My Library", 76, 119, 730);
   context.fillStyle = palette.blue;
   context.fillRect(894, 91, 110, 68);
   context.fillStyle = palette.crust;
@@ -171,35 +171,28 @@ export async function createMonthlyLogImage(
   const scopeLabel = options.summary.mediaType === "all"
     ? "ALL MEDIA"
     : typeLabels[options.summary.mediaType];
-  context.fillStyle = palette.sapphire;
-  context.font = "500 17px 'IBM Plex Mono', monospace";
-  context.fillText(`${scopeLabel} / MONTHLY LOG`, 76, 194);
-  context.fillStyle = palette.text;
-  context.font = "700 50px 'Zen Kaku Gothic New', sans-serif";
-  context.fillText(monthlyLogLabel(options.summary.startsAt), 76, 220);
   context.fillStyle = palette.muted;
-  context.font = "500 16px 'IBM Plex Mono', monospace";
-  const titleLabel = options.summary.titles === 1 ? "TITLE" : "TITLES";
+  context.font = "500 24px 'IBM Plex Mono', monospace";
   context.fillText(
-    `${options.summary.titles} ${titleLabel}  /  ${options.summary.completed} FINISHED  /  ${options.summary.repeats} REVISITED`,
+    monthlyLogLabel(options.summary.startsAt).toUpperCase(),
     76,
-    281,
+    198,
   );
 
   if (options.summary.entries.length === 0) {
     context.strokeStyle = palette.surface;
     context.setLineDash([10, 8]);
-    context.strokeRect(76, 320, 928, 908);
+    context.strokeRect(76, 255, 928, 963);
     context.setLineDash([]);
     context.fillStyle = palette.text;
     context.font = "700 34px 'Zen Kaku Gothic New', sans-serif";
-    context.fillText("No completed or revisited titles", 292, 735);
+    context.fillText("No completed or revisited titles", 292, 700);
   } else {
     options.summary.entries.forEach((entry, index) => {
       const column = index % 3;
       const row = Math.floor(index / 3);
       const x = 76 + column * 316;
-      const y = 320 + row * 154;
+      const y = 255 + row * 154;
       context.fillStyle = palette.mantle;
       context.fillRect(x, y, 296, 138);
       context.strokeStyle = palette.surface;
@@ -227,6 +220,20 @@ export async function createMonthlyLogImage(
       context.fillText(note, x + 100, y + 109);
     });
   }
+
+  context.fillStyle = palette.blue;
+  context.fillRect(76, 1250, 928, 2);
+  context.font = "500 17px 'IBM Plex Mono', monospace";
+  const finishedLabel = `${options.summary.completed} FINISHED${
+    options.summary.repeats > 0
+      ? `  /  ${options.summary.repeats} REVISITED`
+      : ""
+  }`;
+  context.fillStyle = palette.text;
+  context.fillText(finishedLabel, 76, 1281);
+  context.fillStyle = palette.sapphire;
+  const scopeWidth = context.measureText(scopeLabel).width;
+  context.fillText(scopeLabel, 1004 - scopeWidth, 1281);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
