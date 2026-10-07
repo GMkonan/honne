@@ -7,9 +7,10 @@ Track what you plan to watch, read, or play, keep personal progress and ratings,
 ![Honne Home](docs/assets/home.png)
 ![Honne Library](docs/assets/library.png)
 
-## Highlights
+## Features
 
 - One Library for anime, series, movies, books, manga, light novels, and games.
+- A private Monthly Log with downloadable images for the previous month's completed and revisited titles.
 - Type-aware tracking with episodes, pages, chapters, rewatches, rereads, and plans to revisit completed titles.
 - Personal status, progress, rating, notes, and activity history.
 - Optional discovery through AniList/Kitsu, TMDB, Open Library, and RAWG.
