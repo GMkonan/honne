@@ -92,6 +92,8 @@ describe("Library characterization", () => {
     ).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Delete Cowboy Bebop/u }))
       .toBeNull();
+    expect(within(hero).queryByRole("link", { name: /Monthly Log/u }))
+      .toBeNull();
     expect(screen.getByRole("link", { name: /Monthly Log/u }))
       .toHaveProperty("hash", "#monthly-log");
     expect(

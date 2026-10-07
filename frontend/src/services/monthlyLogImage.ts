@@ -207,9 +207,9 @@ export async function createMonthlyLogImage(
     const coverOnly = options.summary.titles > 15;
     options.summary.entries.forEach((entry, index) => {
       if (coverOnly) {
-        const column = index % 7;
-        const row = Math.floor(index / 7);
-        const x = 76 + column * 134;
+        const column = index % 6;
+        const row = Math.floor(index / 6);
+        const x = 88 + column * 156;
         const y = 235 + row * 196;
         drawCover(context, covers[index], x, y, index, 124, 186);
         context.strokeStyle = palette.surface;

@@ -8,6 +8,7 @@ import {
 } from "react";
 import {
   BookOpen,
+  CalendarDays,
   Check,
   CirclePlus,
   Clapperboard,
@@ -1668,6 +1669,10 @@ function App() {
                     <span>{filtered.length} results</span>
                   </div>
                   <div className="collection-controls">
+                    <a className="monthly-log-link" href="#monthly-log">
+                      <CalendarDays size={14} aria-hidden="true" />
+                      Monthly Log
+                    </a>
                     <label className="toolbar-sort">
                       <span>Sort</span>
                       <select

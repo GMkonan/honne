@@ -1,4 +1,11 @@
-import { CalendarDays, Download, RotateCcw, Share2, Star } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronDown,
+  Download,
+  RotateCcw,
+  Share2,
+  Star,
+} from "lucide-react";
 import { useState } from "react";
 import {
   buildMonthlyLog,
@@ -124,9 +131,6 @@ export function MonthlyLogPage(
             favorites list.
           </p>
         </div>
-        <span className="monthly-log-heading-mark" aria-hidden="true">
-          本音
-        </span>
       </header>
 
       <section className="monthly-log-toolbar" aria-label="Monthly Log export">
@@ -139,19 +143,22 @@ export function MonthlyLogPage(
         </div>
         <label className="monthly-log-media-filter">
           <span>Media type</span>
-          <select
-            value={mediaType}
-            onChange={(event) => {
-              setMediaType(event.target.value as MonthlyLogMediaType);
-              setImageFeedback("");
-            }}
-          >
-            {mediaTypeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <span className="monthly-log-select">
+            <select
+              value={mediaType}
+              onChange={(event) => {
+                setMediaType(event.target.value as MonthlyLogMediaType);
+                setImageFeedback("");
+              }}
+            >
+              {mediaTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={15} aria-hidden="true" />
+          </span>
         </label>
         <dl className="monthly-log-summary">
           <div>

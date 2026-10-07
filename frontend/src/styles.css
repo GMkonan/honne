@@ -481,54 +481,6 @@ button {
 .hero-copy {
   min-width: 0;
 }
-.hero-monthly-log {
-  min-width: 285px;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-  padding: 13px 14px;
-  border: 1px solid rgba(137,180,250,.4);
-  border-radius: 3px;
-  color: var(--text);
-  background: rgba(24,24,37,.84);
-  text-decoration: none;
-  box-shadow: 0 12px 30px rgba(17,17,27,.28);
-  backdrop-filter: blur(8px);
-  transition: border-color .2s, transform .2s, background .2s;
-}
-.hero-monthly-log:hover {
-  border-color: var(--blue);
-  background: rgba(30,30,46,.94);
-  transform: translateY(-2px);
-}
-.hero-monthly-log-icon {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  color: var(--crust);
-  background: var(--blue);
-}
-.hero-monthly-log > span:nth-child(2) {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.hero-monthly-log small {
-  color: var(--sapphire);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 8px;
-  letter-spacing: .1em;
-}
-.hero-monthly-log strong {
-  font-size: 14px;
-}
-.hero-monthly-log strong + span {
-  color: var(--muted);
-  font-size: 10px;
-}
 .hero-kicker {
   color: var(--sapphire);
   font-family: 'IBM Plex Mono', monospace;
@@ -874,6 +826,26 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.monthly-log-link {
+  height: 31px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid rgba(137,180,250,.46);
+  border-radius: 2px;
+  color: var(--blue);
+  background: rgba(137,180,250,.06);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  text-decoration: none;
+  transition: border-color .2s, color .2s, background .2s;
+}
+.monthly-log-link:hover {
+  border-color: var(--blue);
+  color: var(--text);
+  background: rgba(137,180,250,.12);
 }
 .toolbar-sort {
   display: flex;
@@ -1466,17 +1438,10 @@ button {
   justify-content: space-between;
   gap: 24px;
 }
-.monthly-log-heading-mark {
-  color: var(--surface-2);
-  font-family: 'Zen Kaku Gothic New', sans-serif;
-  font-size: clamp(52px, 9vw, 96px);
-  font-weight: 700;
-  line-height: .8;
-}
 .monthly-log-toolbar {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) 150px auto auto;
-  align-items: center;
+  align-items: end;
   gap: 18px 28px;
   margin-bottom: 16px;
   padding: 18px;
@@ -1509,14 +1474,39 @@ button {
   color: var(--muted);
   font-size: 12px;
 }
-.monthly-log-media-filter select {
-  min-height: 38px;
-  padding: 0 9px;
+.monthly-log-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.monthly-log-select select {
+  width: 100%;
+  height: 38px;
+  appearance: none;
+  padding: 0 34px 0 11px;
   border: 1px solid var(--surface-2);
   border-radius: 2px;
+  outline: 0;
   color: var(--text);
   background: var(--base);
   font-size: 12px;
+  line-height: 1;
+}
+.monthly-log-select select:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+.monthly-log-select svg {
+  position: absolute;
+  right: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.monthly-log-period,
+.monthly-log-summary,
+.monthly-log-export-actions {
+  min-height: 38px;
+  align-items: center;
 }
 .monthly-log-summary {
   display: flex;
@@ -1650,7 +1640,7 @@ button {
   gap: 12px;
 }
 .monthly-log-poster.is-cover-only .monthly-log-title-grid {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-template-rows: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
@@ -1745,9 +1735,6 @@ button {
   }
 }
 @media (max-width: 700px) {
-  .monthly-log-heading-mark {
-    display: none;
-  }
   .monthly-log-preview {
     padding: 8px;
   }
@@ -4029,11 +4016,6 @@ button {
     flex-wrap: wrap;
     gap: 16px;
     padding-block: 26px;
-  }
-  .hero-monthly-log {
-    width: 100%;
-    min-width: 0;
-    margin-left: 0;
   }
   .profile-avatar,
   .profile-mark {
