@@ -31,7 +31,16 @@ This refines the behavior delivered by issue #69 without changing the meaning of
 
 Review its content, navigation value, visual hierarchy, and Honne identity as a focused interface change.
 
-## 5. Reassess the deferred frontend refactor
+## 5. Allow a custom Library banner
+
+Let the owner replace the built-in Library hero artwork with an image of their choice.
+
+- Keep the current artwork as the default and provide a clear reset action.
+- Preserve profile readability, contrast, and responsive cropping across custom images.
+- Decide whether the first implementation accepts an uploaded local asset, an image URL, or both after reviewing persistence and backup implications.
+- Keep private installation details and remote credentials out of image requests.
+
+## 6. Reassess the deferred frontend refactor
 
 Review issue #9 and the unintegrated `issue-10` work before resuming it. Clarify which parts are still valuable, especially:
 
@@ -44,7 +53,7 @@ Review issue #9 and the unintegrated `issue-10` work before resuming it. Clarify
 
 Do not resume the broad migration until its current value, sequence, and reuse of prior work are understood.
 
-## 6. Build the initial 3×3 favorites experience
+## 7. Build the initial 3×3 favorites experience
 
 Refine issue #5 around the current product direction:
 
@@ -57,11 +66,11 @@ Refine issue #5 around the current product direction:
 
 The first version may use the current versioned snapshot, with its data model designed for later SQLite import.
 
-## 7. Migrate persistence to SQLite
+## 8. Migrate persistence to SQLite
 
 Refine issue #45 against the latest snapshot version and implement a safe migration after the initial 3×3 experience. Preserve logical JSON backup and restore, IDs, Activity, planned revisits, favorites, AniList outbox state, and rollback documentation.
 
-## 8. Define an optional public profile
+## 9. Define an optional public profile
 
 Refine issue #38 after the persistence migration. The public projection must remain opt-in, expose only explicitly selected data, avoid publishing private management capabilities, and keep Honne private by default.
 
