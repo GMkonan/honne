@@ -2,7 +2,7 @@ import {
   monthlyLogLabel,
   type MonthlyLogMediaType,
   type MonthlyLogSummary,
-} from "../recapModel.ts";
+} from "../monthlyLogModel.ts";
 
 interface MonthlyLogImageOptions {
   summary: MonthlyLogSummary;

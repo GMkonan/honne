@@ -8,7 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.tsx";
-import * as monthlyLogImage from "./services/recapImage.ts";
+import * as monthlyLogImage from "./services/monthlyLogImage.ts";
 import { disconnectedAniList, mediaItems } from "./test/fixtures.ts";
 import { createFetchRouter, type FetchRouter } from "./test/fetch-router.ts";
 

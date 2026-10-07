@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMonthlyLogImage, monthlyLogFilename } from "./recapImage.ts";
+import {
+  createMonthlyLogImage,
+  monthlyLogFilename,
+} from "./monthlyLogImage.ts";
 
 const emptySummary = {
   entries: [],

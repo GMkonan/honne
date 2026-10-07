@@ -6,11 +6,11 @@ import {
   monthlyLogLabel,
   type MonthlyLogMedia,
   type MonthlyLogMediaType,
-} from "../recapModel.ts";
+} from "../monthlyLogModel.ts";
 import {
   createMonthlyLogImage,
   monthlyLogFilename,
-} from "../services/recapImage.ts";
+} from "../services/monthlyLogImage.ts";
 
 interface MonthlyLogPageProps {
   media: MonthlyLogMedia[];

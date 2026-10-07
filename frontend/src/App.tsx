@@ -49,7 +49,7 @@ import {
 } from "./components/ManageMediaModal.tsx";
 import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { ProviderAttribution } from "./components/ProviderAttribution.tsx";
-import { MonthlyLogPage } from "./components/RecapPage.tsx";
+import { MonthlyLogPage } from "./components/MonthlyLogPage.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
   formatPlaytime,

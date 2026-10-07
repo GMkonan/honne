@@ -4,7 +4,7 @@ import {
   type MonthlyLogActivity,
   monthlyLogLabel,
   type MonthlyLogMedia,
-} from "./recapModel.ts";
+} from "./monthlyLogModel.ts";
 
 const now = new Date(2026, 9, 5, 12);
 const media: MonthlyLogMedia[] = [
