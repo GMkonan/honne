@@ -1592,16 +1592,18 @@ function App() {
         </div>
       </header>
 
+      {(view === "library" || view === "monthly_log") && (
+        <LibraryHero
+          profile={profile}
+          profileLoading={profileLoading}
+          collectionLoading={loading}
+          totalTitles={items.length}
+          inProgress={inProgress}
+        />
+      )}
+
       {view === "library" && (
         <>
-          <LibraryHero
-            profile={profile}
-            profileLoading={profileLoading}
-            collectionLoading={loading}
-            totalTitles={items.length}
-            inProgress={inProgress}
-          />
-
           <main className="page-container content" id="filters">
             <LibrarySectionNav active="collection" />
             <section className="filter-section" aria-label="Media type filters">

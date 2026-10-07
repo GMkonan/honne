@@ -127,10 +127,9 @@ export function MonthlyLogPage(
       <header className="page-heading monthly-log-heading">
         <div>
           <span className="eyebrow">PREVIOUS MONTH</span>
-          <h1>Monthly Log</h1>
+          <h2>Monthly Log</h2>
           <p>
-            A chronological record of what you finished and revisited—never a
-            favorites list.
+            A record of what you finished and revisited last month.
           </p>
         </div>
       </header>
@@ -201,8 +200,7 @@ export function MonthlyLogPage(
           <p className="monthly-log-feedback" role="status">{imageFeedback}</p>
         )}
         <p className="monthly-log-privacy">
-          <strong>Private by design.</strong>{" "}
-          Built locally from your Activity; nothing is uploaded.
+          <strong>Private by design.</strong> Built locally from your Activity.
         </p>
       </section>
 

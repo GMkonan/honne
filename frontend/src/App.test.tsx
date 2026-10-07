@@ -154,7 +154,10 @@ describe("Library characterization", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Monthly Log" }))
+    expect(
+      await screen.findByRole("heading", { name: "Konan Library", level: 1 }),
+    ).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Monthly Log", level: 2 }))
       .not.toBeNull();
     const librarySections = screen.getByRole("navigation", {
       name: "Library sections",
