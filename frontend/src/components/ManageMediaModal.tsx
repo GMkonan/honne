@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pencil, X } from "lucide-react";
+import { Check, FilePenLine, Trash2, X } from "lucide-react";
 import {
   type DetailLibraryMedia,
   type DetailMediaStatus,
@@ -384,36 +384,47 @@ export function ManageMediaModal(
           )}
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="form-actions manage-media-actions">
-            <button
-              type="button"
-              className="edit-details-button"
-              aria-disabled={saving || deleting}
-              onClick={handleEditDetails}
-            >
-              Edit title details
-            </button>
-            <button
-              type="button"
-              className="delete-media-button"
-              aria-disabled={saving || deleting}
-              onClick={handleDelete}
-            >
-              {deleting ? "Removing…" : "Remove from Library"}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving || deleting}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="primary-button"
-              aria-disabled={saving || deleting}
-            >
-              <Pencil size={15} /> {saving ? "Saving…" : "Save changes"}
-            </button>
+            <div className="manage-media-entry-actions">
+              <button
+                type="button"
+                className="edit-details-button"
+                disabled={saving || deleting}
+                onClick={handleEditDetails}
+              >
+                <FilePenLine size={14} aria-hidden="true" />
+                Edit title details
+              </button>
+              <button
+                type="button"
+                className="delete-media-button"
+                disabled={saving || deleting}
+                aria-label={deleting
+                  ? "Removing from Library"
+                  : "Remove from Library"}
+                onClick={handleDelete}
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                {deleting ? "Removing…" : "Remove"}
+              </button>
+            </div>
+            <div className="manage-media-submit-actions">
+              <button
+                type="button"
+                className="cancel-button"
+                onClick={onClose}
+                disabled={saving || deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={saving || deleting}
+              >
+                <Check size={15} aria-hidden="true" />
+                {saving ? "Saving…" : "Save changes"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
