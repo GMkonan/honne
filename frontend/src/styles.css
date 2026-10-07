@@ -948,25 +948,25 @@ button {
   --status-accent: var(--muted);
   position: absolute;
   z-index: 2;
-  top: 8px;
-  left: 8px;
+  top: 7px;
+  left: 7px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
+  gap: 5px;
+  padding: 4px 7px;
   border: 1px solid rgba(205,214,244,.2);
   border-radius: 3px;
   color: #fff;
   background: rgba(17,17,27,.9);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
   text-transform: uppercase;
   box-shadow: 0 2px 7px rgba(0,0,0,.3);
 }
 .status::before {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--status-accent);
@@ -987,18 +987,20 @@ button {
 .status.dropped {
   --status-accent: var(--red);
 }
-.card-repeat-plan {
+.card-repeat-plan-icon {
+  width: 24px;
+  height: 24px;
   position: absolute;
   z-index: 2;
-  top: 43px;
-  left: 8px;
-  padding: 4px 7px;
-  border: 1px solid rgba(116,199,236,.5);
-  border-radius: 3px;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(116,199,236,.42);
+  border-radius: 50%;
   color: var(--sapphire);
   background: rgba(17,17,27,.9);
-  font-size: 9px;
-  font-weight: 600;
+  box-shadow: 0 2px 7px rgba(0,0,0,.3);
 }
 .card-content {
   padding: 9px;
@@ -1012,14 +1014,20 @@ button {
 .card-title > div {
   min-width: 0;
 }
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
 .media-type {
+  flex: 0 0 auto;
   color: var(--sapphire);
   font-size: 7px;
   font-weight: 600;
   text-transform: uppercase;
 }
 .sync-state {
-  margin-left: 5px;
   color: var(--overlay);
   font-size: 6px;
   text-transform: uppercase;
@@ -3203,23 +3211,34 @@ button {
   line-height: 1.45;
 }
 .modal label.planned-repeat-field {
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--surface-2);
-  background: var(--base);
-}
-.planned-repeat-field > span {
-  display: flex;
-  align-items: center;
+  flex-direction: row;
+  align-items: flex-start;
   gap: 9px;
+  padding-top: 2px;
+  cursor: pointer;
+}
+.planned-repeat-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.planned-repeat-copy strong {
   color: var(--text);
+  font-size: 12px;
+}
+.manage-media-modal .planned-repeat-copy small {
+  font-size: 11px;
+  line-height: 1.35;
 }
 .manage-media-modal .planned-repeat-field input {
-  width: 24px;
-  min-height: 24px;
-  margin: 0;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
   padding: 0;
   accent-color: var(--blue);
+  cursor: pointer;
 }
 .manage-media-modal .form-error {
   font-size: 12px;

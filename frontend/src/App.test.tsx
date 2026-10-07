@@ -306,9 +306,15 @@ describe("Library characterization", () => {
     ]);
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByRole("button", {
+    const cover = await screen.findByRole("button", {
       name: /^View details for Spirited Away/,
     });
+    const card = cover.closest("article");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).queryByText("Plan to rewatch"))
+      .toBeNull();
+    expect(within(cover).getByTitle("Plan to rewatch")).not.toBeNull();
+    expect(cover.getAttribute("aria-label")).toContain("Plan to rewatch");
 
     const statusFilters = screen.getByRole("complementary", {
       name: "Status filters",
@@ -2797,6 +2803,9 @@ describe("Library characterization", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("combobox", { name: "Status" }),
     );
+    expect(
+      screen.queryByRole("checkbox", { name: "Plan to rewatch" }),
+    ).toBeNull();
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Status" }),
       "completed",
@@ -2804,7 +2813,9 @@ describe("Library characterization", () => {
     const plannedRepeat = screen.getByRole("checkbox", {
       name: "Plan to rewatch",
     });
-    expect((plannedRepeat as HTMLInputElement).disabled).toBe(false);
+    expect(
+      screen.getByText("Remember this completed title for another time."),
+    ).not.toBeNull();
     await user.click(plannedRepeat);
     const progress = screen.getByRole("spinbutton", {
       name: "Episodes watched 26 episodes total",

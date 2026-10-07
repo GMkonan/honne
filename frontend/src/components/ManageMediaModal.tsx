@@ -266,23 +266,6 @@ export function ManageMediaModal(
               ))}
             </select>
           </label>
-          <label className="wide planned-repeat-field">
-            <span>
-              <input
-                type="checkbox"
-                name="plannedRepeat"
-                checked={form.plannedRepeat}
-                disabled={form.status !== "completed"}
-                aria-label={plannedRepeatLabel(item.type)}
-                aria-describedby="planned-repeat-help"
-                onChange={handleChange}
-              />
-              {plannedRepeatLabel(item.type)}
-            </span>
-            <small id="planned-repeat-help">
-              Keep this title completed while marking it for another time.
-            </small>
-          </label>
           <label>
             {tracking.repeatLabel}
             <input
@@ -381,6 +364,24 @@ export function ManageMediaModal(
               placeholder="What did you think?"
             />
           </label>
+          {form.status === "completed" && (
+            <label className="wide planned-repeat-field">
+              <input
+                type="checkbox"
+                name="plannedRepeat"
+                checked={form.plannedRepeat}
+                aria-label={plannedRepeatLabel(item.type)}
+                aria-describedby="planned-repeat-help"
+                onChange={handleChange}
+              />
+              <span className="planned-repeat-copy">
+                <strong>{plannedRepeatLabel(item.type)}</strong>
+                <small id="planned-repeat-help">
+                  Remember this completed title for another time.
+                </small>
+              </span>
+            </label>
+          )}
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="form-actions manage-media-actions">
             <button

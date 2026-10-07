@@ -2949,8 +2949,12 @@ function MediaCard(
             {status ? mediaStatusLabel(status.value, item.type) : ""}
           </span>
           {item.plannedRepeat && (
-            <span className="card-repeat-plan">
-              {plannedRepeatLabel(item.type)}
+            <span
+              className="card-repeat-plan-icon"
+              title={plannedRepeatLabel(item.type)}
+              aria-hidden="true"
+            >
+              <RotateCcw size={12} />
             </span>
           )}
         </button>
@@ -2967,15 +2971,17 @@ function MediaCard(
       <div className="card-content">
         <div className="card-title">
           <div>
-            <span className="media-type">{type?.label}</span>
-            {item.syncStatus && (
-              <span
-                className={`sync-state ${item.syncStatus}`}
-                title={item.syncError || "AniList synchronization status"}
-              >
-                {item.syncStatus.replace("_", " ")}
-              </span>
-            )}
+            <div className="card-meta">
+              <span className="media-type">{type?.label}</span>
+              {item.syncStatus && (
+                <span
+                  className={`sync-state ${item.syncStatus}`}
+                  title={item.syncError || "AniList synchronization status"}
+                >
+                  {item.syncStatus.replace("_", " ")}
+                </span>
+              )}
+            </div>
             <h3 title={item.title}>{item.title}</h3>
           </div>
           {item.rating > 0 && (
