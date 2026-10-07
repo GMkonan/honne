@@ -1940,14 +1940,14 @@ function App() {
         />
       )}
 
-      <footer className="site-footer">
-        <div className="page-container">
-          <span>Made by Konan</span>
-          {pageUsesRawg && (
-            <ProviderAttribution className="site-provider-attribution" />
-          )}
-        </div>
-      </footer>
+      {pageUsesRawg && (
+        <aside
+          className="page-container page-provider-credit"
+          aria-label="Data attribution"
+        >
+          <ProviderAttribution />
+        </aside>
+      )}
       {integrationOpen && (
         <AniListIntegrationModal
           status={anilistStatus}

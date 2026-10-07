@@ -17,7 +17,7 @@ Monthly Log is a chronological record. It remains separate from manually curated
 
 - Replace the current prominent edit control with a simpler option.
 - Preserve type-aware language for rewatching, rereading, replaying, or revisiting.
-- Move the Library-card indicator away from the cover artwork and make it visually secondary to the primary status.
+- Replace the full Library-card label with a compact cover icon that remains visually secondary to the primary status.
 
 This refines the behavior delivered by issue #69 without changing the meaning of `Completed` or repeat counts.
 
@@ -27,9 +27,9 @@ This refines the behavior delivered by issue #69 without changing the meaning of
 - Keep `Save changes` primary and make `Cancel`, title editing, and removal compact and intentional.
 - Avoid oversized text actions and excessive spacing.
 
-## 4. Improve the application footer
+## 4. Remove the application footer
 
-Review its content, navigation value, visual hierarchy, and Honne identity as a focused interface change.
+Keep the application chrome focused on the primary header and page content. Required provider attribution remains contextual and appears only when the current page uses that provider's data.
 
 ## 5. Allow a custom Library banner
 

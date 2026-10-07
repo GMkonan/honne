@@ -3068,10 +3068,11 @@ describe("Library characterization", () => {
 
     expect(await screen.findByRole("heading", { name: "Activity" })).not
       .toBeNull();
+    expect(screen.queryByRole("contentinfo")).toBeNull();
     expect(
-      within(screen.getByRole("contentinfo")).getByRole("link", {
-        name: "RAWG",
-      }),
+      within(
+        screen.getByRole("complementary", { name: "Data attribution" }),
+      ).getByRole("link", { name: "RAWG" }),
     ).not.toBeNull();
   });
 
