@@ -442,17 +442,38 @@ button {
 .profile-avatar .profile-mark {
   width: 100%;
   height: 100%;
+  position: relative;
+  z-index: 1;
 }
 .profile-cat {
   width: 100px;
   height: auto;
   position: absolute;
-  z-index: 2;
-  top: -43px;
-  left: 9px;
+  top: -33px;
+  left: -30px;
   pointer-events: none;
   user-select: none;
+  transform: scaleX(-1);
   filter: drop-shadow(0 6px 7px rgba(17,17,27,.5));
+}
+.profile-cat-back {
+  z-index: 0;
+}
+.profile-cat-front {
+  z-index: 2;
+  filter: none;
+}
+.profile-cat-head {
+  clip-path: polygon(8% 0, 63% 0, 63% 20%, 59% 29%, 60% 40%, 56% 50%,
+    49% 59%, 37% 64%, 24% 63%, 14% 58%, 7% 48%, 4% 32%);
+}
+.profile-cat-left-paw {
+  clip-path: polygon(0 38%, 29% 38%, 31% 47%, 27% 57%, 20% 63%, 5% 64%,
+    0 58%);
+}
+.profile-cat-right-paw {
+  clip-path: polygon(37% 42%, 60% 40%, 58% 47%, 56% 55%, 55% 66%,
+    56% 77%, 54% 87%, 47% 92%, 36% 89%, 31% 78%, 33% 58%);
 }
 .profile-mark {
   width: 104px;
@@ -480,6 +501,8 @@ button {
 }
 .hero-copy {
   min-width: 0;
+  position: relative;
+  z-index: 3;
 }
 .hero-kicker {
   color: var(--sapphire);
@@ -4120,8 +4143,8 @@ button {
   }
   .profile-cat {
     width: 72px;
-    top: -31px;
-    left: 7px;
+    top: -23px;
+    left: -22px;
   }
   .hero-content h1 {
     margin-bottom: 11px;

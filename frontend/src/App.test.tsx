@@ -77,7 +77,7 @@ describe("Library characterization", () => {
       "Spirited Away",
       "Cowboy Bebop",
     ]);
-    expect(document.querySelector('img[src="/profile-cat.svg"]')).toBeNull();
+    expect(document.querySelector('img[src="/profile-cat.png"]')).toBeNull();
     const duneCard = screen.getByRole("button", {
       name: /^View details for Dune/,
     });
@@ -235,10 +235,13 @@ describe("Library characterization", () => {
       name: "Konan Library default profile mark",
     });
     expect(defaultMark.textContent).toBe("本音");
-    const cat = container.querySelector(
-      'img[src="/profile-cat.svg"][aria-hidden="true"]',
+    const cats = container.querySelectorAll(
+      'img[src="/profile-cat.png"][aria-hidden="true"]',
     );
-    expect(cat?.getAttribute("alt")).toBe("");
+    expect(cats).toHaveLength(4);
+    expect([...cats].every((cat) => cat.getAttribute("alt") === "")).toBe(
+      true,
+    );
   });
 
   it("renders a textual badge for every media status", async () => {

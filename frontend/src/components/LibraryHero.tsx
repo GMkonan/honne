@@ -40,8 +40,8 @@ export function LibraryHero(
         <div className="profile-avatar">
           {!profileLoading && profile.catEnabled && (
             <img
-              className="profile-cat"
-              src="/profile-cat.svg"
+              className="profile-cat profile-cat-back"
+              src="/profile-cat.png"
               alt=""
               aria-hidden="true"
             />
@@ -66,6 +66,28 @@ export function LibraryHero(
                 </span>
               )}
           </div>
+          {!profileLoading && profile.catEnabled && (
+            <>
+              <img
+                className="profile-cat profile-cat-front profile-cat-head"
+                src="/profile-cat.png"
+                alt=""
+                aria-hidden="true"
+              />
+              <img
+                className="profile-cat profile-cat-front profile-cat-left-paw"
+                src="/profile-cat.png"
+                alt=""
+                aria-hidden="true"
+              />
+              <img
+                className="profile-cat profile-cat-front profile-cat-right-paw"
+                src="/profile-cat.png"
+                alt=""
+                aria-hidden="true"
+              />
+            </>
+          )}
         </div>
         <div className="hero-copy">
           <span className="hero-kicker">
