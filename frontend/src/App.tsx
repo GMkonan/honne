@@ -8,7 +8,6 @@ import {
 } from "react";
 import {
   BookOpen,
-  CalendarDays,
   Check,
   CirclePlus,
   Clapperboard,
@@ -51,6 +50,7 @@ import {
 import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { ProviderAttribution } from "./components/ProviderAttribution.tsx";
 import { MonthlyLogPage } from "./components/MonthlyLogPage.tsx";
+import { LibrarySectionNav } from "./components/LibrarySectionNav.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
   formatPlaytime,
@@ -1496,11 +1496,18 @@ function App() {
             <span className="brand-glyph">本音</span>
             <span>honne</span>
           </a>
-          <nav className={menuOpen ? "main-nav open" : "main-nav"}>
+          <nav
+            className={menuOpen ? "main-nav open" : "main-nav"}
+            aria-label="Primary navigation"
+          >
             <a
-              className={view === "library" ? "active" : ""}
+              className={view === "library" || view === "monthly_log"
+                ? "active"
+                : ""}
               href="#library"
-              aria-current={view === "library" ? "page" : undefined}
+              aria-current={view === "library" || view === "monthly_log"
+                ? "page"
+                : undefined}
               onClick={() => setMenuOpen(false)}
             >
               Library
@@ -1596,6 +1603,7 @@ function App() {
           />
 
           <main className="page-container content" id="filters">
+            <LibrarySectionNav active="collection" />
             <section className="filter-section" aria-label="Media type filters">
               <div className="filter-surface">
                 <div className="filter-group format-filter">
@@ -1669,10 +1677,6 @@ function App() {
                     <span>{filtered.length} results</span>
                   </div>
                   <div className="collection-controls">
-                    <a className="monthly-log-link" href="#monthly-log">
-                      <CalendarDays size={14} aria-hidden="true" />
-                      Monthly Log
-                    </a>
                     <label className="toolbar-sort">
                       <span>Sort</span>
                       <select

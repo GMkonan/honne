@@ -94,12 +94,19 @@ describe("Library characterization", () => {
       .toBeNull();
     expect(within(hero).queryByRole("link", { name: /Monthly Log/u }))
       .toBeNull();
-    expect(screen.getByRole("link", { name: /Monthly Log/u }))
+    const librarySections = screen.getByRole("navigation", {
+      name: "Library sections",
+    });
+    expect(
+      within(librarySections).getByRole("link", { name: "Collection" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+    expect(within(librarySections).getByRole("link", { name: "Monthly Log" }))
       .toHaveProperty("hash", "#monthly-log");
     expect(
-      within(screen.getByRole("navigation")).queryByRole("link", {
-        name: "Recap",
-      }),
+      within(
+        screen.getByRole("navigation", { name: "Primary navigation" }),
+      ).queryByRole("link", { name: "Recap" }),
     ).toBeNull();
   });
 
@@ -149,6 +156,20 @@ describe("Library characterization", () => {
 
     expect(await screen.findByRole("heading", { name: "Monthly Log" }))
       .not.toBeNull();
+    const librarySections = screen.getByRole("navigation", {
+      name: "Library sections",
+    });
+    expect(
+      within(librarySections).getByRole("link", { name: "Monthly Log" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+    expect(within(librarySections).getByRole("link", { name: "Collection" }))
+      .toHaveProperty("hash", "#library");
+    expect(
+      within(
+        screen.getByRole("navigation", { name: "Primary navigation" }),
+      ).getByRole("link", { name: "Library" }).getAttribute("aria-current"),
+    ).toBe("page");
     const preview = screen.getByRole("region", { name: "Monthly Log preview" });
     expect(await within(preview).findByText("Cowboy Bebop")).not.toBeNull();
     expect(within(preview).getByText("Konan Library")).not.toBeNull();

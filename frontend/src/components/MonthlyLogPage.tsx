@@ -7,6 +7,7 @@ import {
   Star,
 } from "lucide-react";
 import { useState } from "react";
+import { LibrarySectionNav } from "./LibrarySectionNav.tsx";
 import {
   buildMonthlyLog,
   type MonthlyLogActivity,
@@ -122,6 +123,7 @@ export function MonthlyLogPage(
 
   return (
     <main className="page-container standalone-page monthly-log-page">
+      <LibrarySectionNav active="monthly_log" />
       <header className="page-heading monthly-log-heading">
         <div>
           <span className="eyebrow">PREVIOUS MONTH</span>
