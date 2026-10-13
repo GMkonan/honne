@@ -66,10 +66,11 @@ type aniListSync struct {
 	store  *store
 	client *http.Client
 
-	mu       sync.RWMutex
-	auth     *aniListAuth
-	attempts map[string]oauthAttempt
-	wake     chan struct{}
+	mu          sync.RWMutex
+	operationMu sync.Mutex
+	auth        *aniListAuth
+	attempts    map[string]oauthAttempt
+	wake        chan struct{}
 }
 
 type aniListIntegrationStatus struct {
@@ -304,6 +305,9 @@ func (s *aniListSync) run(ctx context.Context) {
 }
 
 func (s *aniListSync) processNext(ctx context.Context) bool {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+
 	now := time.Now().UTC()
 	s.store.mu.Lock()
 	jobIndex := slices.IndexFunc(s.store.syncJobs, func(job syncJob) bool { return !job.NextAttemptAt.After(now) })
@@ -821,6 +825,8 @@ func (s *aniListSync) callbackHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "could not complete AniList authorization")
 		return
 	}
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
 	s.mu.RLock()
 	previousUserID := 0
 	if s.auth != nil {

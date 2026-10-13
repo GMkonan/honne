@@ -92,3 +92,111 @@ func TestDownloadBackupDoesNotSendPartialSnapshotOnSerializationFailure(t *testi
 		t.Fatalf("unexpected error payload: %+v", payload)
 	}
 }
+
+func TestPreviewAndRestoreBackupReplaceSQLiteSnapshot(t *testing.T) {
+	directory := t.TempDir()
+	databasePath := filepath.Join(directory, "honne.db")
+	store, _, err := openRuntimeStore(databasePath, filepath.Join(directory, "missing.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store.mu.Lock()
+	store.items = []Media{{ID: 1, Title: "Old title", Type: "movie", Status: "completed", PlayedOnPlatforms: []string{}, CatalogPlatforms: []string{}}}
+	store.nextID = 2
+	if err := store.persistLocked(); err != nil {
+		store.mu.Unlock()
+		t.Fatal(err)
+	}
+	store.mu.Unlock()
+
+	backup := `{
+		"version": 6,
+		"items": [{"id": 9, "title": "Restored title", "type": "anime", "status": "planned", "playedOnPlatforms": [], "catalogPlatforms": []}],
+		"syncJobs": [],
+		"activities": [{"id": 4, "mediaId": 9, "title": "Restored title", "mediaType": "anime", "action": "created", "occurredAt": "2026-09-06T23:00:00Z"}],
+		"nextId": 10,
+		"nextJobId": 1,
+		"nextActivityId": 5
+	}`
+	application := &app{store: store}
+
+	previewRequest := httptest.NewRequest(http.MethodPost, "/api/backup/preview", strings.NewReader(backup))
+	previewRequest.Header.Set("Content-Type", "application/json")
+	previewResponse := httptest.NewRecorder()
+	application.previewBackupRestore(previewResponse, previewRequest)
+	if previewResponse.Code != http.StatusOK || !strings.Contains(previewResponse.Body.String(), `"items":1`) || !strings.Contains(previewResponse.Body.String(), `"activities":1`) {
+		t.Fatalf("unexpected preview response %d: %s", previewResponse.Code, previewResponse.Body.String())
+	}
+
+	restoreRequest := httptest.NewRequest(http.MethodPost, "/api/backup/restore", strings.NewReader(backup))
+	restoreRequest.Header.Set("Content-Type", "application/json")
+	restoreRequest.Header.Set(restoreConfirmationHeader, "replace")
+	restoreResponse := httptest.NewRecorder()
+	application.restoreBackup(restoreResponse, restoreRequest)
+	if restoreResponse.Code != http.StatusOK {
+		t.Fatalf("unexpected restore response %d: %s", restoreResponse.Code, restoreResponse.Body.String())
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := newSQLiteStore(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if len(reopened.items) != 1 || reopened.items[0].ID != 9 || reopened.items[0].Title != "Restored title" || len(reopened.activities) != 1 || reopened.nextID != 10 || reopened.nextActivityID != 5 {
+		t.Fatalf("restored SQLite snapshot was not durable: %+v", reopened.snapshotLocked())
+	}
+}
+
+func TestRestoreBackupRequiresConfirmationAndDisconnectedAniList(t *testing.T) {
+	backup := `{"version":6,"items":[],"syncJobs":[],"activities":[],"nextId":1,"nextJobId":1,"nextActivityId":1}`
+	store := emptyStore(filepath.Join(t.TempDir(), "media.json"))
+	configured := config{AniListClientID: "client", AniListClientSecret: "secret", AniListRedirectURL: "http://localhost/callback"}
+	application := &app{store: store, anilist: &aniListSync{cfg: configured, auth: &aniListAuth{AccessToken: "token", Username: "owner"}}}
+
+	missingConfirmation := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/backup/restore", strings.NewReader(backup))
+	request.Header.Set("Content-Type", "application/json")
+	application.restoreBackup(missingConfirmation, request)
+	if missingConfirmation.Code != http.StatusPreconditionRequired {
+		t.Fatalf("expected confirmation requirement, got %d: %s", missingConfirmation.Code, missingConfirmation.Body.String())
+	}
+
+	connected := httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPost, "/api/backup/restore", strings.NewReader(backup))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(restoreConfirmationHeader, "replace")
+	application.restoreBackup(connected, request)
+	if connected.Code != http.StatusConflict || !strings.Contains(connected.Body.String(), "disconnect AniList") {
+		t.Fatalf("expected connected AniList conflict, got %d: %s", connected.Code, connected.Body.String())
+	}
+}
+
+func TestRestoreBackupRejectsInvalidInputAndRollsBackPersistenceFailure(t *testing.T) {
+	store := emptyStore(filepath.Join(t.TempDir(), "media.json"))
+	store.items = []Media{{ID: 1, Title: "Keep me", Type: "book", Status: "planned", PlayedOnPlatforms: []string{}, CatalogPlatforms: []string{}}}
+	store.nextID = 2
+	application := &app{store: store}
+
+	invalid := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/backup/preview", strings.NewReader(`{"version":99,"items":[]}`))
+	request.Header.Set("Content-Type", "application/json")
+	application.previewBackupRestore(invalid, request)
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected invalid backup rejection, got %d: %s", invalid.Code, invalid.Body.String())
+	}
+
+	store.closed = true
+	valid := `{"version":6,"items":[],"syncJobs":[],"activities":[],"nextId":1,"nextJobId":1,"nextActivityId":1}`
+	failed := httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPost, "/api/backup/restore", strings.NewReader(valid))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(restoreConfirmationHeader, "replace")
+	application.restoreBackup(failed, request)
+	if failed.Code != http.StatusInternalServerError || len(store.items) != 1 || store.items[0].Title != "Keep me" || store.nextID != 2 {
+		t.Fatalf("failed restore did not roll memory back: code=%d store=%+v", failed.Code, store.snapshotLocked())
+	}
+}

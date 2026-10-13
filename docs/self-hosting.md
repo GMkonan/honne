@@ -105,7 +105,21 @@ docker compose start backend
 
 ## Restore a downloaded backup
 
-Restore only into the same or a newer Honne version. Preserve the existing private data directory first. The current database must be moved aside; otherwise it remains authoritative and the restored JSON is intentionally ignored:
+### From Settings
+
+The normal restore path does not require container access:
+
+1. open **Settings → Local-first data** and download the current backup first;
+2. disconnect AniList, so imported pending changes cannot run under the wrong account;
+3. choose **Import backup** and select a Honne JSON backup;
+4. review the title, Activity, and AniList queue counts;
+5. confirm **Replace with this backup**.
+
+The backend accepts versioned Honne snapshots v1–v6 and the legacy array format, up to 32 MiB. It validates the entire file before enabling confirmation and replaces Library, Activity, ID counters, and the AniList outbox in one SQLite transaction. A validation or persistence failure leaves the current state unchanged. A successful restore intentionally replaces it, so keep the pre-restore download until the result is verified. OAuth authorization is never imported; reconnect only the matching AniList account afterward.
+
+### From the data volume
+
+Use this recovery path when the web interface is unavailable. Restore only into the same or a newer Honne version. Preserve the existing private data directory first. The current database must be moved aside; otherwise it remains authoritative and the restored JSON is intentionally ignored:
 
 ```bash
 docker compose stop backend

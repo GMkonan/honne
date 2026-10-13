@@ -150,6 +150,8 @@ func applicationHandler(application *app, cfg config) http.Handler {
 	mux.HandleFunc("GET /api/media", application.listMedia)
 	mux.HandleFunc("GET /api/activity", application.listActivity)
 	mux.HandleFunc("GET /api/backup", application.downloadBackup)
+	mux.HandleFunc("POST /api/backup/preview", application.previewBackupRestore)
+	mux.HandleFunc("POST /api/backup/restore", application.restoreBackup)
 	mux.HandleFunc("GET /api/images/cover", application.proxyImage)
 	mux.HandleFunc("GET /api/discovery/search", application.searchDiscovery)
 	mux.HandleFunc("GET /api/discovery/global", application.searchGlobalDiscovery)
@@ -676,7 +678,7 @@ func cors(next http.Handler, allowedOrigin string) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Honne-Restore-Confirmation")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

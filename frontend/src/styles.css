@@ -1925,6 +1925,80 @@ button {
 .settings-feedback.error {
   color: var(--red) !important;
 }
+.backup-restore-preview {
+  margin-top: 17px;
+  padding: 15px;
+  border: 1px solid var(--surface-2);
+  border-left: 3px solid var(--yellow);
+  border-radius: 3px;
+  background: var(--base);
+}
+.backup-restore-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--yellow);
+}
+.backup-restore-heading > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.backup-restore-heading strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.backup-restore-heading span {
+  overflow: hidden;
+  color: var(--overlay);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.backup-restore-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 13px 0;
+  background: var(--surface);
+}
+.backup-restore-counts > div {
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+  background: var(--mantle);
+}
+.backup-restore-counts dt {
+  color: var(--overlay);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.backup-restore-counts dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+.backup-restore-warning {
+  margin-top: 10px !important;
+  color: var(--yellow) !important;
+}
+.backup-restore-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 13px;
+  color: var(--subtext);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.backup-restore-confirmation input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--blue);
+}
 
 .search-page {
   padding-block: 48px 72px;

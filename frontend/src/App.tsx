@@ -1331,6 +1331,18 @@ function App() {
     setActivities(recent);
   }
 
+  async function refreshAfterBackupRestore() {
+    const [library, integration, recentActivity] = await Promise.all([
+      request<Media[]>("/api/media"),
+      request<AniListIntegrationStatus>("/api/integrations/anilist"),
+      request<ActivityEvent[]>("/api/activity?limit=100"),
+    ]);
+    setItems(library);
+    setAniListStatus(integration);
+    setActivities(recentActivity);
+    setMonthlyLogGeneration((current) => current + 1);
+  }
+
   const filtered = items.filter((item) => {
     const matchesSearch = item.title.toLocaleLowerCase("en").includes(
       search.toLocaleLowerCase("en"),
@@ -1908,6 +1920,7 @@ function App() {
           status={anilistStatus}
           onManageAniList={() => setIntegrationOpen(true)}
           onImportAniList={() => setImportOpen(true)}
+          onBackupRestored={refreshAfterBackupRestore}
         />
       )}
 
@@ -2139,10 +2152,11 @@ function ActivityPage(
 }
 
 function SettingsPage(
-  { status, onManageAniList, onImportAniList }: {
+  { status, onManageAniList, onImportAniList, onBackupRestored }: {
     status: AniListIntegrationStatus | null;
     onManageAniList: () => void;
     onImportAniList: () => void;
+    onBackupRestored: () => Promise<void>;
   },
 ) {
   return (
@@ -2212,7 +2226,10 @@ function SettingsPage(
           </div>
         </div>
       </section>
-      <BackupSettingsCard />
+      <BackupSettingsCard
+        anilistConnected={status?.connected}
+        onRestored={onBackupRestored}
+      />
     </main>
   );
 }

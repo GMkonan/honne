@@ -530,6 +530,84 @@ describe("Library characterization", () => {
     expect(router.fetch).toHaveBeenCalledTimes(6);
   });
 
+  it("previews and restores a JSON backup with explicit replacement confirmation", async () => {
+    globalThis.history.replaceState(null, "", "/#settings");
+    const router = createFetchRouter();
+    let restored = false;
+    const restoredItem = { ...mediaItems[0], id: 42, title: "Restored title" };
+    bootstrap(router);
+    router
+      .json(
+        "GET",
+        "/api/media",
+        () => Response.json(restored ? [restoredItem] : mediaItems),
+      )
+      .json("POST", "/api/backup/preview", (request: Request) => {
+        expect(request.headers.get("Content-Type")).toBe("application/json");
+        return Response.json({
+          version: 6,
+          items: 1,
+          activities: 3,
+          pendingAniListChanges: 0,
+        });
+      })
+      .json("POST", "/api/backup/restore", (request: Request) => {
+        expect(request.headers.get("X-Honne-Restore-Confirmation")).toBe(
+          "replace",
+        );
+        restored = true;
+        return Response.json({
+          version: 6,
+          items: 1,
+          activities: 3,
+          pendingAniListChanges: 0,
+        });
+      });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const input = await screen.findByLabelText("Choose backup JSON");
+    const file = new File(
+      [
+        '{"version":6,"items":[{"id":42,"title":"Restored title"}]}',
+      ],
+      "honne-backup.json",
+      { type: "application/json" },
+    );
+    await user.upload(input, file);
+
+    expect(await screen.findByText("Ready to restore")).not.toBeNull();
+    expect(screen.getByText("honne-backup.json")).not.toBeNull();
+    const preview = screen.getByText("Ready to restore").closest(
+      ".backup-restore-preview",
+    );
+    if (!(preview instanceof HTMLElement)) {
+      throw new Error("missing restore preview");
+    }
+    expect(within(preview).getByText("3")).not.toBeNull();
+    const replace = within(preview).getByRole("button", {
+      name: "Replace with this backup",
+    }) as HTMLButtonElement;
+    expect(replace.disabled).toBe(true);
+
+    await user.click(within(preview).getByRole("checkbox"));
+    expect(replace.disabled).toBe(false);
+    await user.click(replace);
+
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "Backup restored: 1 title and 3 activity events.",
+    );
+    expect(router.fetch).toHaveBeenCalledWith(
+      "/api/backup/restore",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "X-Honne-Restore-Confirmation": "replace",
+        }),
+      }),
+    );
+  });
+
   it("waits for submit before searching every catalog and keeps Library items local", async () => {
     const router = createFetchRouter();
     bootstrap(router);
