@@ -87,4 +87,4 @@ All application responses disable caching. When Basic Auth is configured, every 
 - `DELETE /api/integrations/anilist`: disconnect (`?discardPending=true` abandons queued work)
 - `POST /api/integrations/anilist/retry`: retry queued jobs now
 
-Legacy unversioned `media.json` arrays and supported older snapshots are migrated to the current persistence format on the next successful write.
+SQLite is the operational store at `SQLITE_PATH` (`data/honne.db` by default). When the database is absent, a non-empty legacy `DATA_PATH` (`data/media.json`) using an unversioned array or supported versioned snapshot is validated and imported transactionally at startup. The JSON source remains unchanged.

@@ -19,6 +19,130 @@ import (
 
 const sqliteSchemaVersion = 1
 
+// openRuntimeStore opens the operational SQLite store. On the first start it
+// migrates a non-empty legacy JSON snapshot without changing that source. A
+// missing or empty source creates a fresh database.
+func openRuntimeStore(sqlitePath, legacyJSONPath string) (*store, bool, error) {
+	sqlitePath = filepath.Clean(sqlitePath)
+	legacyJSONPath = filepath.Clean(legacyJSONPath)
+	if sqlitePath == legacyJSONPath {
+		return nil, false, errors.New("SQLite and legacy JSON paths must differ")
+	}
+	if info, err := os.Lstat(sqlitePath); err == nil {
+		if !info.Mode().IsRegular() {
+			return nil, false, errors.New("SQLite store path must be a regular file")
+		}
+		s, err := newSQLiteStore(sqlitePath)
+		return s, false, err
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, false, fmt.Errorf("inspect SQLite store: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(sqlitePath), 0o755); err != nil {
+		return nil, false, fmt.Errorf("create SQLite store directory: %w", err)
+	}
+	migrated := false
+	if info, err := os.Stat(legacyJSONPath); err == nil && info.Size() > 0 {
+		if !info.Mode().IsRegular() {
+			return nil, false, errors.New("legacy JSON store path must be a regular file")
+		}
+		if err := migrateJSONToSQLite(legacyJSONPath, sqlitePath); err != nil {
+			return nil, false, fmt.Errorf("migrate legacy JSON store: %w", err)
+		}
+		migrated = true
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, false, fmt.Errorf("inspect legacy JSON store: %w", err)
+	} else if err := createEmptySQLiteDatabase(sqlitePath); err != nil {
+		return nil, false, err
+	}
+
+	s, err := newSQLiteStore(sqlitePath)
+	if err != nil {
+		return nil, false, err
+	}
+	return s, migrated, nil
+}
+
+func createEmptySQLiteDatabase(path string) (err error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("exclusively create SQLite store: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("close new SQLite store: %w", err)
+	}
+	complete := false
+	defer func() {
+		if !complete {
+			_ = os.Remove(path)
+			_ = os.Remove(path + "-journal")
+		}
+	}()
+	db, err := openSQLiteDatabase(path, "rw")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if db == nil {
+			return
+		}
+		if closeErr := db.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+	if err := configureSQLiteImport(db); err != nil {
+		return err
+	}
+	empty := persistedStore{
+		Version: persistedStoreVersion, Items: []Media{}, SyncJobs: []syncJob{}, Activities: []Activity{},
+		NextID: 1, NextJobID: 1, NextActivityID: 1,
+	}
+	if err := writeSQLiteSnapshot(db, empty); err != nil {
+		return err
+	}
+	if err := verifySQLiteIntegrity(db); err != nil {
+		return err
+	}
+	if err := db.Close(); err != nil {
+		return fmt.Errorf("close new SQLite store: %w", err)
+	}
+	db = nil
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("restrict SQLite store permissions: %w", err)
+	}
+	if err := syncFileParent(path); err != nil {
+		return err
+	}
+	complete = true
+	return nil
+}
+
+func newSQLiteStore(path string) (*store, error) {
+	snapshot, err := loadSQLiteSnapshot(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := openSQLiteDatabase(path, "rw")
+	if err != nil {
+		return nil, err
+	}
+	if err := configureSQLiteRuntime(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("restrict SQLite store permissions: %w", err)
+	}
+	s := emptyStore(path)
+	s.sqlite = true
+	s.db = db
+	s.loadSnapshot(snapshot)
+	s.normalizeLoadedState()
+	return s, nil
+}
+
 // migrateJSONToSQLite imports a validated JSON snapshot into a newly created
 // SQLite database. It never changes the source and removes an incomplete
 // destination on every failure.
@@ -99,22 +223,10 @@ func migrateJSONToSQLite(source, destination string) (err error) {
 	if err := os.Chmod(destination, 0o600); err != nil {
 		return fmt.Errorf("restrict SQLite destination permissions: %w", err)
 	}
-	if err := syncParentDirectory(destination); err != nil {
+	if err := syncFileParent(destination); err != nil {
 		return err
 	}
 	complete = true
-	return nil
-}
-
-func syncParentDirectory(path string) error {
-	directory, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return fmt.Errorf("open SQLite destination directory: %w", err)
-	}
-	defer directory.Close()
-	if err := directory.Sync(); err != nil {
-		return fmt.Errorf("sync SQLite destination directory: %w", err)
-	}
 	return nil
 }
 
@@ -162,6 +274,16 @@ func openSQLiteDatabase(path, mode string) (*sql.DB, error) {
 }
 
 func configureSQLiteImport(db *sql.DB) error {
+	return configureSQLite(db, "import")
+}
+
+func configureSQLiteRuntime(db *sql.DB) error {
+	return configureSQLite(db, "runtime")
+}
+
+func configureSQLite(db *sql.DB, operation string) error {
+	// DELETE journal mode avoids live sidecar files and keeps stopped-volume
+	// backups straightforward for this single-instance, in-memory runtime.
 	for _, statement := range []string{
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = DELETE",
@@ -169,7 +291,7 @@ func configureSQLiteImport(db *sql.DB) error {
 		"PRAGMA busy_timeout = 5000",
 	} {
 		if _, err := db.Exec(statement); err != nil {
-			return fmt.Errorf("configure SQLite import: %w", err)
+			return fmt.Errorf("configure SQLite %s: %w", operation, err)
 		}
 	}
 	return nil
@@ -184,6 +306,41 @@ func writeSQLiteSnapshot(db *sql.DB, snapshot persistedStore) error {
 	if _, err := tx.Exec(sqliteSchema); err != nil {
 		return fmt.Errorf("create SQLite schema: %w", err)
 	}
+	if err := insertSQLiteSnapshot(tx, snapshot); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit SQLite import: %w", err)
+	}
+	return nil
+}
+
+func replaceSQLiteSnapshot(db *sql.DB, snapshot persistedStore) error {
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return fmt.Errorf("begin SQLite snapshot: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, statement := range []string{
+		"DELETE FROM activities",
+		"DELETE FROM sync_jobs",
+		"DELETE FROM media",
+		"DELETE FROM store_meta",
+	} {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("replace SQLite snapshot: %w", err)
+		}
+	}
+	if err := insertSQLiteSnapshot(tx, snapshot); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit SQLite snapshot: %w", err)
+	}
+	return nil
+}
+
+func insertSQLiteSnapshot(tx *sql.Tx, snapshot persistedStore) error {
 	if _, err := tx.Exec(
 		"INSERT INTO store_meta (singleton, json_version, next_media_id, next_job_id, next_activity_id) VALUES (1, ?, ?, ?, ?)",
 		snapshot.Version, snapshot.NextID, snapshot.NextJobID, snapshot.NextActivityID,
@@ -216,9 +373,6 @@ func writeSQLiteSnapshot(db *sql.DB, snapshot persistedStore) error {
 		if _, err := tx.Exec("INSERT INTO activities (id, media_id, position, payload) VALUES (?, ?, ?, ?)", activity.ID, activity.MediaID, position, string(payload)); err != nil {
 			return fmt.Errorf("write SQLite activity payload: %w", err)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit SQLite import: %w", err)
 	}
 	return nil
 }

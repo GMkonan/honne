@@ -25,7 +25,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Open `http://localhost:7417`. Collection data, activities, pending synchronization jobs, and ID counters are stored in the named `honne-data` volume.
+Open `http://localhost:7417`. Collection data, activities, pending synchronization jobs, and ID counters are stored transactionally in `/data/honne.db` inside the named `honne-data` volume. Existing installations with `/data/media.json` are imported automatically on the first SQLite start; the source JSON remains unchanged as a pre-migration recovery point.
 
 Useful commands:
 
@@ -94,7 +94,7 @@ Use **Settings → Download backup** for a coherent JSON snapshot containing:
 
 The download intentionally excludes the AniList OAuth token. Reconnect AniList after restoring into a fresh installation.
 
-For a complete operational backup, including AniList authorization, stop the backend and copy its private data directory. This copy contains a usable OAuth token and must be stored as a secret:
+For a complete operational backup, including the SQLite database and AniList authorization, stop the backend and copy its private data directory. Stopping first guarantees there is no active SQLite transaction. This copy contains a usable OAuth token and must be stored as a secret:
 
 ```bash
 mkdir -p backup
@@ -105,12 +105,14 @@ docker compose start backend
 
 ## Restore a downloaded backup
 
-Restore only into the same or a newer Honne version. Preserve the existing private data directory first:
+Restore only into the same or a newer Honne version. Preserve the existing private data directory first. The current database must be moved aside; otherwise it remains authoritative and the restored JSON is intentionally ignored:
 
 ```bash
 docker compose stop backend
 mkdir -p ./pre-restore-data
 docker compose cp backend:/data/. ./pre-restore-data/
+docker compose run --rm --no-deps --user root --entrypoint sh backend \
+  -c 'set -eu; stamp=$(date +%Y%m%dT%H%M%SZ); [ ! -e /data/honne.db ] || mv /data/honne.db /data/honne.db.pre-restore-$stamp; rm -f /data/honne.db-journal /data/honne.db-wal /data/honne.db-shm'
 docker compose cp ./honne-backup-YYYYMMDDTHHMMSSZ.json backend:/data/media.json
 docker compose run --rm --no-deps --user root --entrypoint sh backend \
   -c 'chown honne:honne /data/media.json && chmod 600 /data/media.json'
@@ -118,7 +120,7 @@ docker compose start backend
 docker compose logs backend
 ```
 
-When restoring over an existing installation, the separate authorization file at `/data/anilist-auth.json` remains in place. Pending jobs are account-bound and pause instead of running against a different AniList account.
+Startup validates and imports `/data/media.json` into a new `/data/honne.db`. Keep the pre-restore copy until the Library, Activity, and pending jobs are verified. The separate authorization file at `/data/anilist-auth.json` remains in place. Pending jobs are account-bound and pause instead of running against a different AniList account.
 
 ## Update and roll back
 
@@ -138,6 +140,10 @@ docker compose up -d
 The temporary file keeps the current Compose file intact if the download or validation fails. The existing `.env`, provider credentials, and `honne-data` volume are not replaced. Explicit host-port and `APP_ORIGIN` values are also preserved, so a v0.1.0 installation remains on port 8080 unless both are intentionally changed. New optional settings use Compose defaults; release notes will call out any future setting that requires manual action.
 
 After the containers are healthy, reload every open Honne tab so it uses the frontend contract shipped with the new backend.
+
+### Roll back from a SQLite release
+
+Before switching to a JSON-only backend, use **Settings → Download backup** to export the latest SQLite state. The unchanged `/data/media.json` from the original migration does not contain post-migration writes. Stop the backend, preserve the complete data directory, move `honne.db` aside, restore the latest download as `/data/media.json`, and only then start the older image. Pending AniList jobs in the export remain account-bound.
 
 For a rollback to v0.2.0 or newer, download the Compose asset from the exact previous tag:
 

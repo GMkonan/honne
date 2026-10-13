@@ -1,6 +1,7 @@
--- Draft schema: not activated by the runtime. The migrator must execute this
--- inside its import transaction on a newly, exclusively created destination.
--- Payloads preserve the complete supported JSON contract during the first slice.
+-- Runtime schema. Initial creation and JSON import execute it inside a
+-- transaction on a newly, exclusively created destination. Runtime writes
+-- replace the complete logical snapshot in one transaction. Payloads preserve
+-- the complete supported JSON contract during this first SQLite version.
 -- No cascading foreign keys: history and delete jobs can reference removed media.
 CREATE TABLE store_meta (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),

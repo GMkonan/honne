@@ -13,6 +13,7 @@ import (
 type config struct {
 	Port              string
 	DataPath          string
+	SQLitePath        string
 	AllowedOrigin     string
 	AppUsername       string
 	AppPassword       string
@@ -57,9 +58,14 @@ func loadConfig() (config, error) {
 	}
 
 	dataPath := envOr("DATA_PATH", "data/media.json")
+	sqlitePath := envOr("SQLITE_PATH", filepath.Join(filepath.Dir(dataPath), "honne.db"))
+	if sameFilePath(dataPath, sqlitePath) {
+		return config{}, errors.New("SQLITE_PATH and DATA_PATH must refer to different files")
+	}
 	cfg := config{
 		Port:                 envOr("PORT", "7417"),
 		DataPath:             dataPath,
+		SQLitePath:           sqlitePath,
 		AllowedOrigin:        envOr("APP_ORIGIN", "http://localhost:5173"),
 		AppUsername:          os.Getenv("APP_USERNAME"),
 		AppPassword:          os.Getenv("APP_PASSWORD"),
@@ -77,7 +83,7 @@ func loadConfig() (config, error) {
 		AniListClientID:      os.Getenv("ANILIST_CLIENT_ID"),
 		AniListClientSecret:  os.Getenv("ANILIST_CLIENT_SECRET"),
 		AniListRedirectURL:   os.Getenv("ANILIST_REDIRECT_URL"),
-		AniListAuthPath:      envOr("ANILIST_AUTH_PATH", filepath.Join(filepath.Dir(dataPath), "anilist-auth.json")),
+		AniListAuthPath:      envOr("ANILIST_AUTH_PATH", filepath.Join(filepath.Dir(sqlitePath), "anilist-auth.json")),
 		AniListAuthorizeURL:  envOr("ANILIST_AUTHORIZE_URL", "https://anilist.co/api/v2/oauth/authorize"),
 		AniListTokenURL:      envOr("ANILIST_TOKEN_URL", "https://anilist.co/api/v2/oauth/token"),
 		AniListDeleteEnabled: deleteEnabled,
@@ -100,6 +106,12 @@ func loadConfig() (config, error) {
 		return config{}, errors.New("RAWG_API_URL must be an absolute HTTP or HTTPS URL without credentials")
 	}
 	return cfg, nil
+}
+
+func sameFilePath(first, second string) bool {
+	firstAbsolute, firstErr := filepath.Abs(first)
+	secondAbsolute, secondErr := filepath.Abs(second)
+	return firstErr == nil && secondErr == nil && filepath.Clean(firstAbsolute) == filepath.Clean(secondAbsolute)
 }
 
 func (c config) aniListConfigured() bool {

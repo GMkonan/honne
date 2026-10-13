@@ -64,11 +64,11 @@ Refine issue #5 around the current product direction:
 - keep favorites separate from Monthly Log history;
 - consider a shareable image without making public publishing a requirement.
 
-The first version may use the current versioned snapshot, with its data model designed for later SQLite import.
+Persist the first version inside the existing versioned SQLite snapshot transaction so favorite selection and ordering remain covered by the same backup and rollback contract.
 
 ## 8. Migrate persistence to SQLite
 
-Owner priority update (2026-10-11): prepare SQLite now, without waiting for the initial 3×3 experience. The pure-Go driver and transactional synthetic importer are now implemented locally; the runtime still uses JSON. Preserve logical JSON backup and restore, IDs, Activity, planned revisits, any favorites supported at activation time, AniList outbox state, and rollback documentation. See [the implementation and activation plan](../development/sqlite-migration.md). Runtime activation, deployment changes and real owner-data migration remain unauthorized.
+Owner priority update (2026-10-11): SQLite no longer waits for the initial 3×3 experience. The pure-Go driver, transactional JSON importer, operational SQLite store, graceful shutdown, portable JSON backup, and rollback path are implemented locally. IDs, Activity, planned revisits, favorites present at activation time, and AniList outbox state remain part of the snapshot transaction. See [the runtime and migration notes](../development/sqlite-migration.md). Push, release, deployment, and migration of real owner data remain unauthorized.
 
 ## 9. Define an optional public profile
 

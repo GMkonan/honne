@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 )
 
 const persistedStoreVersion = 6
+
+var errStoreClosed = errors.New("store is closed")
 
 type persistedStore struct {
 	Version        int        `json:"version"`
@@ -26,6 +29,9 @@ type persistedStore struct {
 type store struct {
 	mu             sync.RWMutex
 	path           string
+	db             *sql.DB
+	sqlite         bool
+	closed         bool
 	items          []Media
 	syncJobs       []syncJob
 	activities     []Activity
@@ -35,7 +41,7 @@ type store struct {
 }
 
 func newStore(path string) (*store, error) {
-	s := &store{path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{}, nextID: 1, nextJobID: 1, nextActivityID: 1}
+	s := emptyStore(path)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -59,20 +65,45 @@ func newStore(path string) (*store, error) {
 		if persisted.Version < 1 || persisted.Version > persistedStoreVersion {
 			return nil, fmt.Errorf("unsupported data file version %d", persisted.Version)
 		}
-		s.items = persisted.Items
-		s.syncJobs = persisted.SyncJobs
-		if persisted.Activities != nil {
-			s.activities = persisted.Activities
-		}
-		if persisted.NextID > s.nextID {
-			s.nextID = persisted.NextID
-		}
-		if persisted.NextJobID > s.nextJobID {
-			s.nextJobID = persisted.NextJobID
-		}
-		if persisted.NextActivityID > s.nextActivityID {
-			s.nextActivityID = persisted.NextActivityID
-		}
+		s.loadSnapshot(persisted)
+	}
+	s.normalizeLoadedState()
+	return s, nil
+}
+
+func emptyStore(path string) *store {
+	return &store{
+		path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{},
+		nextID: 1, nextJobID: 1, nextActivityID: 1,
+	}
+}
+
+func (s *store) loadSnapshot(snapshot persistedStore) {
+	s.items = snapshot.Items
+	s.syncJobs = snapshot.SyncJobs
+	if snapshot.Activities != nil {
+		s.activities = snapshot.Activities
+	}
+	if snapshot.NextID > s.nextID {
+		s.nextID = snapshot.NextID
+	}
+	if snapshot.NextJobID > s.nextJobID {
+		s.nextJobID = snapshot.NextJobID
+	}
+	if snapshot.NextActivityID > s.nextActivityID {
+		s.nextActivityID = snapshot.NextActivityID
+	}
+}
+
+func (s *store) normalizeLoadedState() {
+	if s.items == nil {
+		s.items = []Media{}
+	}
+	if s.syncJobs == nil {
+		s.syncJobs = []syncJob{}
+	}
+	if s.activities == nil {
+		s.activities = []Activity{}
 	}
 	for index := range s.items {
 		if s.items[index].PlayedOnPlatforms == nil {
@@ -98,21 +129,57 @@ func newStore(path string) (*store, error) {
 		if activity.ID >= s.nextActivityID {
 			s.nextActivityID = activity.ID + 1
 		}
+		if activity.MediaID >= s.nextID {
+			s.nextID = activity.MediaID + 1
+		}
 	}
 	if overflow := len(s.activities) - maxStoredActivities; overflow > 0 {
 		s.activities = slices.Delete(s.activities, 0, overflow)
 	}
-	return s, nil
+}
+
+func (s *store) snapshotLocked() persistedStore {
+	return persistedStore{
+		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
+		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
+	}
+}
+
+func (s *store) cloneSnapshotLocked() persistedStore {
+	snapshot := s.snapshotLocked()
+	snapshot.Items = slices.Clone(snapshot.Items)
+	snapshot.SyncJobs = slices.Clone(snapshot.SyncJobs)
+	snapshot.Activities = slices.Clone(snapshot.Activities)
+	return snapshot
+}
+
+func (s *store) restoreSnapshotLocked(snapshot persistedStore) {
+	s.items = snapshot.Items
+	s.syncJobs = snapshot.SyncJobs
+	s.activities = snapshot.Activities
+	s.nextID = snapshot.NextID
+	s.nextJobID = snapshot.NextJobID
+	s.nextActivityID = snapshot.NextActivityID
 }
 
 func (s *store) marshalSnapshotLocked() ([]byte, error) {
-	return json.MarshalIndent(persistedStore{
-		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
-		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
-	}, "", "  ")
+	return json.MarshalIndent(s.snapshotLocked(), "", "  ")
 }
 
 func (s *store) persistLocked() error {
+	if s.closed {
+		return errStoreClosed
+	}
+	if s.sqlite {
+		if s.db == nil {
+			return errStoreClosed
+		}
+		return replaceSQLiteSnapshot(s.db, s.snapshotLocked())
+	}
+	return s.persistJSONLocked()
+}
+
+func (s *store) persistJSONLocked() (err error) {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
@@ -121,8 +188,91 @@ func (s *store) persistLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	defer func() {
+		if file != nil {
+			_ = file.Close()
+		}
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err = file.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err = file.Write(data); err != nil {
+		return err
+	}
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	if err = file.Close(); err != nil {
+		file = nil
+		return err
+	}
+	file = nil
+	if err = os.Rename(tmp, s.path); err != nil {
+		return err
+	}
+	if err = syncFileParent(s.path); err != nil {
+		return err
+	}
+	return nil
+}
+
+func syncFileParent(path string) error {
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open parent directory: %w", err)
+	}
+	defer directory.Close()
+	if err := directory.Sync(); err != nil {
+		return fmt.Errorf("sync parent directory: %w", err)
+	}
+	return nil
+}
+
+func (s *store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	if s.db == nil {
+		return nil
+	}
+	err := s.db.Close()
+	s.db = nil
+	return err
+}
+
+func writeAndSyncFile(path string, data []byte, mode os.FileMode) (err error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if file != nil {
+			_ = file.Close()
+		}
+	}()
+	if err = file.Chmod(mode); err != nil {
+		return err
+	}
+	if _, err = file.Write(data); err != nil {
+		return err
+	}
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	if err = file.Close(); err != nil {
+		file = nil
+		return err
+	}
+	file = nil
+	return nil
 }

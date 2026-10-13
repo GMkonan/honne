@@ -1,13 +1,43 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestServeApplicationStopsOnContextCancellation(t *testing.T) {
+	dir := t.TempDir()
+	store, _, err := openRuntimeStore(filepath.Join(dir, "honne.db"), filepath.Join(dir, "media.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	cfg := testAniListConfig(filepath.Join(dir, "media.json"))
+	cfg.Port = "0"
+	syncer, err := newAniListSync(cfg, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application := &app{store: store, discovery: newDiscoveryService(cfg), anilist: syncer, config: cfg}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- serveApplication(ctx, cfg, application) }()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("server and worker did not stop after cancellation")
+	}
+}
 
 func TestValidateInput(t *testing.T) {
 	valid := mediaInput{
@@ -555,6 +585,8 @@ func TestLoadConfigValidatesOptionalAuthentication(t *testing.T) {
 	t.Setenv("ANILIST_REDIRECT_URL", "")
 	t.Setenv("APP_USERNAME", "owner")
 	t.Setenv("APP_PASSWORD", "")
+	t.Setenv("DATA_PATH", "data/media.json")
+	t.Setenv("SQLITE_PATH", "")
 	if _, err := loadConfig(); err == nil {
 		t.Fatal("expected incomplete credentials to be rejected")
 	}
@@ -565,8 +597,13 @@ func TestLoadConfigValidatesOptionalAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Port != "7417" || cfg.AppUsername != "owner" || cfg.AniListDeleteEnabled {
+	if cfg.Port != "7417" || cfg.AppUsername != "owner" || cfg.AniListDeleteEnabled || cfg.SQLitePath != "data/honne.db" {
 		t.Fatalf("unexpected config: %+v", cfg)
+	}
+
+	t.Setenv("SQLITE_PATH", "data/../data/media.json")
+	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "must refer to different files") {
+		t.Fatalf("expected colliding persistence paths to be rejected, got %v", err)
 	}
 }
 

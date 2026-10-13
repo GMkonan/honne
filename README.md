@@ -49,6 +49,7 @@ Monthly Log turns the previous month's completed and revisited titles into a pri
 ## Own the collection
 
 - Runs as two Docker containers with a persistent local volume.
+- Stores Library state and the AniList outbox transactionally in embedded SQLite.
 - Keeps the Library usable when optional catalog providers are unavailable.
 - Provides portable JSON backups for the collection, Activity, counters, and synchronization queue.
 - Sends no analytics, telemetry, collection data, or generated Monthly Log images to third parties by default.

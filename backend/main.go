@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -105,22 +107,42 @@ type app struct {
 }
 
 func main() {
-	loadEnvFile(envOr("ENV_FILE", ".env"))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := runBackend(ctx); err != nil {
+		slog.Error("backend_stopped", "error", err)
+		os.Exit(1)
+	}
+}
 
+func runBackend(ctx context.Context) (err error) {
+	loadEnvFile(envOr("ENV_FILE", ".env"))
 	cfg, err := loadConfig()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	s, err := newStore(cfg.DataPath)
+	s, migrated, err := openRuntimeStore(cfg.SQLitePath, cfg.DataPath)
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	defer func() {
+		if closeErr := s.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close store: %w", closeErr))
+		}
+	}()
+	if migrated {
+		slog.Info("sqlite_store_migrated", "source", cfg.DataPath, "destination", cfg.SQLitePath)
 	}
 
 	anilist, err := newAniListSync(cfg, s)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	application := &app{store: s, discovery: newDiscoveryService(cfg), anilist: anilist, config: cfg}
+	return serveApplication(ctx, cfg, application)
+}
+
+func applicationHandler(application *app, cfg config) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", application.health)
 	mux.HandleFunc("GET /api/auth/check", application.authCheck)
@@ -144,16 +166,51 @@ func main() {
 	mux.HandleFunc("PATCH /api/media/{id}", application.updateMedia)
 	mux.HandleFunc("POST /api/media/{id}/refresh-metadata", application.refreshMediaMetadata)
 	mux.HandleFunc("DELETE /api/media/{id}", application.deleteMedia)
+	return cors(basicAuth(mux, cfg), cfg.AllowedOrigin)
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go application.anilist.run(ctx)
+func serveApplication(ctx context.Context, cfg config, application *app) error {
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		application.anilist.run(workerCtx)
+	}()
 
 	addr := ":" + cfg.Port
-	log.Printf("API listening on http://localhost%s", addr)
-	handler := cors(basicAuth(mux, cfg), cfg.AllowedOrigin)
-	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatal(err)
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           applicationHandler(application, cfg),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	serverErrors := make(chan error, 1)
+	go func() {
+		slog.Info("api_listening", "address", addr)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	select {
+	case serveErr := <-serverErrors:
+		cancelWorker()
+		<-workerDone
+		if errors.Is(serveErr, http.ErrServerClosed) {
+			return nil
+		}
+		return fmt.Errorf("serve API: %w", serveErr)
+	case <-ctx.Done():
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownErr := server.Shutdown(shutdownCtx)
+		cancelShutdown()
+		cancelWorker()
+		<-workerDone
+		if shutdownErr != nil {
+			_ = server.Close()
+			return fmt.Errorf("gracefully shut down API: %w", shutdownErr)
+		}
+		return nil
 	}
 }
 

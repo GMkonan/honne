@@ -316,8 +316,14 @@ func (s *aniListSync) processNext(ctx context.Context) bool {
 	if job.Operation == syncUpsert {
 		itemIndex := slices.IndexFunc(s.store.items, func(candidate Media) bool { return candidate.ID == job.MediaID })
 		if itemIndex < 0 {
+			original := s.store.cloneSnapshotLocked()
 			s.store.syncJobs = slices.Delete(s.store.syncJobs, jobIndex, jobIndex+1)
-			_ = s.store.persistLocked()
+			if err := s.store.persistLocked(); err != nil {
+				s.store.restoreSnapshotLocked(original)
+				s.store.mu.Unlock()
+				slog.Error("anilist_sync_persist_failed", "job_id", job.ID, "media_id", job.MediaID, "operation", "drop_orphan", "error", err)
+				return false
+			}
 			s.store.mu.Unlock()
 			return true
 		}
@@ -327,13 +333,18 @@ func (s *aniListSync) processNext(ctx context.Context) bool {
 
 	auth, connected := s.authSnapshot()
 	if !connected {
-		s.deferForAuth(job)
+		if err := s.deferForAuth(job); err != nil {
+			slog.Error("anilist_sync_persist_failed", "job_id", job.ID, "media_id", job.MediaID, "operation", "wait_for_auth", "error", err)
+		}
 		return false
 	}
 	if job.AniListUserID == 0 {
 		exists, err := s.bindJobToUser(job.ID, auth.UserID)
 		if err != nil {
-			s.recordFailure(job, err)
+			if recordErr := s.recordFailure(job, err); recordErr != nil {
+				slog.Error("anilist_sync_persist_failed", "job_id", job.ID, "media_id", job.MediaID, "operation", "record_failure", "error", recordErr)
+				return false
+			}
 			return true
 		}
 		if !exists {
@@ -342,7 +353,9 @@ func (s *aniListSync) processNext(ctx context.Context) bool {
 		job.AniListUserID = auth.UserID
 	}
 	if job.AniListUserID != auth.UserID {
-		s.deferForDifferentAccount(job)
+		if err := s.deferForDifferentAccount(job); err != nil {
+			slog.Error("anilist_sync_persist_failed", "job_id", job.ID, "media_id", job.MediaID, "operation", "wait_for_account", "error", err)
+		}
 		return false
 	}
 
@@ -355,11 +368,18 @@ func (s *aniListSync) processNext(ctx context.Context) bool {
 	}
 	if err != nil {
 		if errors.Is(err, errAniListUnauthorized) {
-			s.invalidateAuth()
-			s.deferForAuth(job)
+			if authErr := s.invalidateAuth(); authErr != nil {
+				slog.Error("anilist_auth_persist_failed", "error", authErr)
+			}
+			if deferErr := s.deferForAuth(job); deferErr != nil {
+				slog.Error("anilist_sync_persist_failed", "job_id", job.ID, "media_id", job.MediaID, "operation", "wait_for_auth", "error", deferErr)
+			}
 			return false
 		}
-		s.recordFailure(job, err)
+		if recordErr := s.recordFailure(job, err); recordErr != nil {
+			slog.Error("anilist_sync_persist_failed", "job_id", job.ID, "media_id", job.MediaID, "operation", "record_failure", "error", recordErr)
+			return false
+		}
 		return true
 	}
 	if err := s.recordSuccess(job, result, item, auth.UserID); err != nil {
@@ -391,13 +411,14 @@ func (s *aniListSync) bindJobToUser(jobID int64, userID int) (bool, error) {
 	return true, nil
 }
 
-func (s *aniListSync) deferForDifferentAccount(snapshot syncJob) {
+func (s *aniListSync) deferForDifferentAccount(snapshot syncJob) error {
 	s.store.mu.Lock()
 	defer s.store.mu.Unlock()
 	index := slices.IndexFunc(s.store.syncJobs, func(job syncJob) bool { return job.ID == snapshot.ID })
 	if index < 0 {
-		return
+		return nil
 	}
+	original := s.store.cloneSnapshotLocked()
 	job := &s.store.syncJobs[index]
 	job.NextAttemptAt = time.Now().UTC().Add(time.Minute)
 	job.LastError = "pending change belongs to a different AniList account"
@@ -405,58 +426,77 @@ func (s *aniListSync) deferForDifferentAccount(snapshot syncJob) {
 		s.store.items[itemIndex].SyncStatus = "waiting_auth"
 		s.store.items[itemIndex].SyncError = "Reconnect the AniList account that owns this pending change, or discard it"
 	}
-	_ = s.store.persistLocked()
-}
-
-func (s *aniListSync) invalidateAuth() {
-	s.mu.Lock()
-	if s.auth != nil {
-		s.auth.ExpiresAt = time.Now().UTC()
-		_ = s.persistAuth(*s.auth)
+	if err := s.store.persistLocked(); err != nil {
+		s.store.restoreSnapshotLocked(original)
+		return fmt.Errorf("persist account deferral: %w", err)
 	}
-	s.mu.Unlock()
+	return nil
 }
 
-func (s *aniListSync) deferForAuth(snapshot syncJob) {
+func (s *aniListSync) invalidateAuth() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.auth == nil {
+		return nil
+	}
+	originalExpiry := s.auth.ExpiresAt
+	s.auth.ExpiresAt = time.Now().UTC()
+	if err := s.persistAuth(*s.auth); err != nil {
+		s.auth.ExpiresAt = originalExpiry
+		return fmt.Errorf("persist expired AniList authorization: %w", err)
+	}
+	return nil
+}
+
+func (s *aniListSync) deferForAuth(snapshot syncJob) error {
 	s.store.mu.Lock()
 	defer s.store.mu.Unlock()
 	index := slices.IndexFunc(s.store.syncJobs, func(job syncJob) bool { return job.ID == snapshot.ID })
 	if index < 0 {
-		return
+		return nil
 	}
+	original := s.store.cloneSnapshotLocked()
 	s.store.syncJobs[index].NextAttemptAt = time.Now().UTC().Add(time.Minute)
 	if itemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID }); itemIndex >= 0 {
 		s.store.items[itemIndex].SyncStatus = "waiting_auth"
 	}
-	_ = s.store.persistLocked()
+	if err := s.store.persistLocked(); err != nil {
+		s.store.restoreSnapshotLocked(original)
+		return fmt.Errorf("persist authorization deferral: %w", err)
+	}
+	return nil
 }
 
-func (s *aniListSync) recordFailure(snapshot syncJob, syncErr error) {
+func (s *aniListSync) recordFailure(snapshot syncJob, syncErr error) error {
 	s.store.mu.Lock()
 	defer s.store.mu.Unlock()
 	index := slices.IndexFunc(s.store.syncJobs, func(job syncJob) bool { return job.ID == snapshot.ID })
 	if index < 0 {
-		return
+		return nil
 	}
+	original := s.store.cloneSnapshotLocked()
 	job := &s.store.syncJobs[index]
 	if job.Generation != snapshot.Generation || job.Operation != snapshot.Operation {
 		job.NextAttemptAt = time.Now().UTC()
-		_ = s.store.persistLocked()
-		return
+	} else {
+		job.Attempts++
+		delay := time.Duration(1<<min(job.Attempts, 10)) * time.Second
+		if delay > time.Hour {
+			delay = time.Hour
+		}
+		job.NextAttemptAt = time.Now().UTC().Add(delay)
+		job.LastError = syncErr.Error()
+		job.UpdatedAt = time.Now().UTC()
+		if itemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID }); itemIndex >= 0 {
+			s.store.items[itemIndex].SyncStatus = "error"
+			s.store.items[itemIndex].SyncError = "AniList synchronization failed; it will be retried"
+		}
 	}
-	job.Attempts++
-	delay := time.Duration(1<<min(job.Attempts, 10)) * time.Second
-	if delay > time.Hour {
-		delay = time.Hour
+	if err := s.store.persistLocked(); err != nil {
+		s.store.restoreSnapshotLocked(original)
+		return fmt.Errorf("persist AniList failure state: %w", err)
 	}
-	job.NextAttemptAt = time.Now().UTC().Add(delay)
-	job.LastError = syncErr.Error()
-	job.UpdatedAt = time.Now().UTC()
-	if itemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID }); itemIndex >= 0 {
-		s.store.items[itemIndex].SyncStatus = "error"
-		s.store.items[itemIndex].SyncError = "AniList synchronization failed; it will be retried"
-	}
-	_ = s.store.persistLocked()
+	return nil
 }
 
 func (s *aniListSync) recordSuccess(snapshot syncJob, result aniListUpsertResult, sentItem Media, authUserID int) error {
@@ -517,18 +557,6 @@ func (s *aniListSync) recordSuccess(snapshot syncJob, result aniListUpsertResult
 		s.store.items = originalItems
 		s.store.syncJobs = originalJobs
 		s.store.nextJobID = originalNextJobID
-		retryIndex := slices.IndexFunc(s.store.syncJobs, func(job syncJob) bool { return job.ID == snapshot.ID })
-		if retryIndex >= 0 {
-			retry := &s.store.syncJobs[retryIndex]
-			retry.Attempts++
-			retry.NextAttemptAt = time.Now().UTC().Add(15 * time.Second)
-			retry.LastError = "could not persist AniList synchronization result"
-			retry.UpdatedAt = time.Now().UTC()
-		}
-		if retryItemIndex := slices.IndexFunc(s.store.items, func(item Media) bool { return item.ID == snapshot.MediaID }); retryItemIndex >= 0 {
-			s.store.items[retryItemIndex].SyncStatus = "error"
-			s.store.items[retryItemIndex].SyncError = "AniList synchronization succeeded, but the local result could not be saved; it will be retried"
-		}
 		return fmt.Errorf("persist AniList synchronization result: %w", err)
 	}
 	return nil
@@ -816,7 +844,9 @@ func (s *aniListSync) callbackHandler(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.auth = &auth
 	s.mu.Unlock()
-	s.retryAll()
+	if _, err := s.retryAll(); err != nil {
+		slog.Error("anilist_sync_persist_failed", "operation", "retry_after_connect", "error", err)
+	}
 	http.Redirect(w, r, strings.TrimRight(s.cfg.AllowedOrigin, "/")+"/?anilist=connected#settings", http.StatusFound)
 }
 
@@ -880,7 +910,7 @@ func (s *aniListSync) exchangeCode(ctx context.Context, code string) (aniListAut
 	return auth, nil
 }
 
-func (s *aniListSync) persistAuth(auth aniListAuth) error {
+func (s *aniListSync) persistAuth(auth aniListAuth) (err error) {
 	if err := os.MkdirAll(filepath.Dir(s.cfg.AniListAuthPath), 0o755); err != nil {
 		return err
 	}
@@ -889,13 +919,24 @@ func (s *aniListSync) persistAuth(auth aniListAuth) error {
 		return err
 	}
 	tmp := s.cfg.AniListAuthPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err = writeAndSyncFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp, 0o600); err != nil {
+	if err = os.Chmod(tmp, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.cfg.AniListAuthPath)
+	if err = os.Rename(tmp, s.cfg.AniListAuthPath); err != nil {
+		return err
+	}
+	if err = syncFileParent(s.cfg.AniListAuthPath); err != nil {
+		return err
+	}
+	return nil
 }
 
 var errPendingAniListJobs = errors.New("pending AniList changes must finish before switching or disconnecting accounts")
@@ -949,13 +990,18 @@ func (s *aniListSync) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *aniListSync) retryHandler(w http.ResponseWriter, _ *http.Request) {
-	count := s.retryAll()
+	count, err := s.retryAll()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save AniList retry state")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]int{"queued": count})
 }
 
-func (s *aniListSync) retryAll() int {
+func (s *aniListSync) retryAll() (int, error) {
 	now := time.Now().UTC()
 	s.store.mu.Lock()
+	original := s.store.cloneSnapshotLocked()
 	for index := range s.store.syncJobs {
 		s.store.syncJobs[index].Attempts = 0
 		s.store.syncJobs[index].LastError = ""
@@ -966,8 +1012,12 @@ func (s *aniListSync) retryAll() int {
 		}
 	}
 	count := len(s.store.syncJobs)
-	_ = s.store.persistLocked()
+	if err := s.store.persistLocked(); err != nil {
+		s.store.restoreSnapshotLocked(original)
+		s.store.mu.Unlock()
+		return 0, fmt.Errorf("persist AniList retry state: %w", err)
+	}
 	s.store.mu.Unlock()
 	s.wakeWorker()
-	return count
+	return count, nil
 }

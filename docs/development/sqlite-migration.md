@@ -1,61 +1,53 @@
-# SQLite migration — implementation and activation gate
+# SQLite runtime and JSON migration
 
-Owner request: prioritize SQLite persistence now (2026-10-11), instead of waiting for the 3×3 feature. Preparation and the synthetic migration path now live on local `main`; runtime activation and owner-data migration remain separate approval gates.
+Owner request: prioritize SQLite persistence now (2026-10-11). The runtime implementation and activation are complete on local `main`; deployment and migration of the owner's real data still require a separately authorized release/update.
 
-## Current evidence
+## Runtime model
 
-The Go backend uses a version-6 JSON snapshot. `store` owns the mutex, collection, Activity (currently capped at 500), AniList outbox and monotonic counters. OAuth credentials are stored separately. Logical JSON downloads use the same snapshot. The runtime image builds with `CGO_ENABLED=0`.
+The Go backend keeps one in-memory `store` as the authority for locking, collection state, Activity (capped at 500), AniList outbox, and monotonic counters. SQLite is the operational durable store. Every successful domain mutation replaces the complete logical snapshot inside one SQLite transaction, so media, Activity, counters, and outbox commit together. SQL-native querying is intentionally deferred until measurements justify it.
 
-Preparation extracts the existing persistence concern from `main.go` into `store.go`, without changing serialization, file paths, HTTP contracts or writes. The real `backend/data/media.json` is not opened for migration or changed.
+The implementation uses **modernc.org/sqlite v1.60.1**, a pinned BSD-3-Clause pure-Go driver compatible with the existing Go 1.26 and `CGO_ENABLED=0` image. The runtime uses `foreign_keys=ON`, a five-second busy timeout, `synchronous=FULL`, and `DELETE` journal mode. DELETE mode is deliberate for this single-instance application: readers use the in-memory store, and stopped-volume backups do not need a WAL checkpoint or live sidecar handling.
 
-## Driver decision
+`SQLITE_PATH` defaults to `data/honne.db`. `DATA_PATH` defaults to `data/media.json` and now identifies only the legacy JSON source used during first activation. The two paths must differ.
 
-The approved implementation uses **modernc.org/sqlite v1.60.1**, a BSD-3-Clause, pure-Go `database/sql` driver whose module targets Go 1.26. It preserves the non-CGO build and is pinned in `go.mod`/`go.sum`, at the cost of a larger transitive dependency tree. `mattn/go-sqlite3` was not selected because it would require CGO and build/runtime changes. The application does not shell out to a SQLite CLI.
+## First-start activation
 
-Selecting the driver does not authorize runtime activation, deployment changes or migration of owner data.
+At startup:
 
-## Delivery slices
+1. if `honne.db` exists, the backend validates its schema, integrity, payloads, positions, counters, and opens it as the runtime store;
+2. if the database is absent and a non-empty legacy `media.json` exists, the backend validates JSON versions 1–6, creates the database exclusively, imports the complete snapshot transactionally, closes/reopens it, verifies logical equality, and leaves `media.json` unchanged;
+3. if neither store exists, or the legacy source is empty, the backend creates an empty versioned database.
 
-1. **Preparation — complete locally:** store persistence is isolated, invariants and rollback are documented, and bounded JSON preflight covers versions 1–6.
-2. **Transactional importer — complete locally:** the pinned driver creates a new versioned database exclusively, imports media, Activity, AniList outbox and counters in one transaction, runs `integrity_check`, closes/reopens, verifies logical equality, restricts permissions and syncs the destination directory. Tables retain complete payloads and positions without cascading history/tombstone loss.
-3. **Runtime store — next:** add concrete SQLite-backed persistence while keeping one store authority and the current in-memory domain behavior. Every domain mutation must atomically persist items, Activity, counters and outbox with complete in-memory rollback on failure. SQL-native query optimization is a separate measured task.
-4. **Activation and operations — gated:** add graceful server/worker shutdown and database close; update configuration, Docker and volume documentation; rehearse on synthetic and disposable copied data; preserve logical JSON backup/rollback. Owner-authorized real migration only after those checks.
+A failed migration removes incomplete database and journal artifacts and does not change the JSON source. A pre-existing destination is never overwritten. Once SQLite receives new writes, the frozen legacy JSON is only a pre-migration recovery point and is no longer a current backup.
 
-## Atomicity and durability
+## Preserved data and validation
 
-Each domain operation must commit items, Activity, counters and outbox as one transaction. On failure restore the complete in-memory pre-operation state; never return success before commit. Use foreign keys only where compatible with retained historical references, a bounded busy timeout and durable SQLite settings. Review WAL versus rollback-journal explicitly; if WAL is used, raw file backup must include a checkpoint or SQLite online-backup strategy, not a live `.db` copy. Set restrictive file/volume permissions. Close connections on shutdown.
+Migration and runtime persistence preserve:
 
-Existing JSON writes currently use a temp-file rename but do not perform the file/directory `fsync` required by `backend/GUIDELINES.md`; do not claim their current behavior guarantees power-loss durability. SQLite transaction durability is part of the migration acceptance bar, not an excuse to weaken the JSON contract.
+- media IDs and monotonic counters, including deleted IDs referenced by Activity or jobs;
+- collection metadata, notes, platforms, planned revisits, and empty-array contracts;
+- Activity order and payloads;
+- AniList jobs, generation, account ownership, retry state, and tombstone references.
 
-## Backup and rollback
+The importer bounds input at 32 MiB, rejects unknown fields, unsupported versions, corruption, trailing JSON, invalid or duplicate IDs, and inconsistent counters. It records and rechecks the source SHA-256 before import. SQLite startup runs `integrity_check` and rejects unsupported schema versions or malformed payloads.
 
-- Maintain the logical versioned JSON export as a portable owner-readable backup; exclude OAuth credentials as today.
-- Keep the original JSON source immutable. It is a pre-migration recovery point, **not** a current backup after SQLite receives new writes.
-- Before rollback: stop the service and AniList worker, export the latest SQLite state to a legacy-readable snapshot and validate reopening it with the previous binary in isolation. Restoring only the original source loses post-migration writes; communicate this explicitly.
-- Treat pending remote jobs carefully: preserve IDs, generation, account binding and tombstones, and never replay against another account. Do not start providers during a migration rehearsal.
-- Do not delete sources, change production Compose, run a real migration or release automatically.
+## Durability and shutdown
 
-## Acceptance tests for the implementation
+Runtime writes use one SQLite transaction and report failures to the domain operation, whose in-memory mutation is rolled back. AniList worker transitions no longer discard persistence errors; failed state changes restore the prior in-memory snapshot and stop that worker pass instead of claiming success.
 
-Use `t.TempDir`, synthetic fixtures and no external providers:
+The HTTP server owns explicit read/header/write/idle timeouts. On `SIGINT` or `SIGTERM`, it stops accepting requests, gives active handlers up to ten seconds to finish, cancels and joins the AniList worker, then closes the database. OAuth authorization writes and the retained JSON writer use synced temporary files, atomic rename, and parent-directory sync.
 
-- Legacy array and supported versioned snapshots → SQLite → close/reopen → logically identical JSON export.
-- Planned revisits, platform arrays, notes/metadata, Activity, pending jobs and tombstones preserved; arrays remain `[]`.
-- Reconstructed counters consider deleted IDs referenced by jobs/history; IDs are not reused.
-- Empty, corrupt, unsupported and duplicate-ID sources; pre-existing destination; interruption/failed commit; repeated import cannot duplicate data.
-- Full in-memory rollback on failed transaction, atomic outbox/activity writes, concurrent readers/writers with `go test -race`.
-- Busy/read-only/corrupt database fails clearly, unsupported schema fails startup, shutdown closes resources.
-- Old application opens a latest-state rollback export, without losing post-migration changes.
-- CGO-disabled Docker build and volume permissions; normal API/backup contracts and frontend validations remain passing.
+## Backup, restore, and rollback
 
-The transactional JSON-to-SQLite importer is implemented and tested, but SQLite is **not the runtime store and is not activated**.
+- **Portable backup:** `GET /api/backup` continues to export the current logical versioned JSON snapshot and excludes OAuth credentials.
+- **Operational backup:** stop the backend before copying `/data`; the directory contains `honne.db`, the frozen legacy source when upgraded, and the separate AniList authorization file.
+- **Restore:** stop the backend, preserve `/data`, remove or move the current `honne.db`, place the downloaded snapshot at `/data/media.json`, and start the current backend. It imports that snapshot into a new database.
+- **Rollback to a JSON-only binary:** while the SQLite version is still available, download a fresh portable backup. Stop the backend, preserve `/data`, place that latest export at `/data/media.json`, then start the older binary. Restoring only the frozen migration source loses every post-migration write.
 
-## Implemented migration safeguards
+Pending remote jobs remain account-bound. Never run two backend instances against the same volume, and never rehearse migration with real provider calls enabled.
 
-The bounded preflight supports legacy arrays and JSON versions 1–6; validates IDs/counters, rejects unknown fields, corruption, trailing data and existing destinations, computes the source SHA-256, normalizes platform arrays and retains all Activity/outbox payloads. Deleted IDs referenced only by Activity or jobs contribute to counters.
+## Automated evidence
 
-The importer rechecks that digest after exclusively creating the destination, removes incomplete database artifacts on failure, uses `DELETE` journal mode with `synchronous=FULL`, commits the complete snapshot in one transaction and validates `PRAGMA integrity_check`. Readback rejects unsupported schemas, malformed payloads, non-contiguous positions and counters inconsistent with retained IDs. A logical JSON export can be reopened by the existing JSON store. No provider is contacted, source written, runtime switched or owner data opened.
+Synthetic tests cover import and logical JSON round-trip, immutable sources, fresh databases, runtime write/restart, current-state backup, destination exclusivity, invalid counters and corruption, failed transaction atomicity, close behavior, worker persistence rollback, and graceful cancellation. The complete release gate remains Go format/vet/race tests, frontend format/lint/typecheck/tests/build, Compose validation, a CGO-disabled backend build, and Docker image construction.
 
-### Runtime activation blockers found during review
-
-Existing AniList paths still discard some `persistLocked` errors. Before SQLite activation, audit every mutation/worker for full-state rollback and error propagation; do not simply replace the persistence function and declare atomic durable operations. The runtime server also needs owned shutdown/worker termination and DB close. These issues are not resolved by the preflight or draft schema.
+No owner data is migrated by these source changes alone. A push, release, deployment, or restart of the real installation remains a separate authorized action.

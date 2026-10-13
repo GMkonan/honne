@@ -320,8 +320,8 @@ func TestAniListSuccessRollsBackWhenPersistenceFails(t *testing.T) {
 	remoteRepeat := 4
 	err := syncer.recordSuccess(job, aniListUpsertResult{ListEntryID: 99, Repeat: &remoteRepeat}, sentItem, 7)
 	if err == nil || store.items[0].ProviderListEntryID != 0 || store.items[0].RepeatCount != 0 ||
-		store.items[0].AniListRepeatKnown || len(store.syncJobs) != 1 || store.syncJobs[0].Attempts != 1 ||
-		store.items[0].SyncStatus != "error" {
+		store.items[0].AniListRepeatKnown || len(store.syncJobs) != 1 || store.syncJobs[0].Attempts != 0 ||
+		store.items[0].SyncStatus != "pending" {
 		t.Fatalf("failed success persistence did not roll back safely: err=%v item=%+v jobs=%+v", err, store.items[0], store.syncJobs)
 	}
 	reopened, err := newStore(path)
@@ -554,6 +554,41 @@ func TestOAuthCallbackPersistsPrivateTokenAndViewer(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("auth file mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestAniListWorkerRestoresOrphanJobWhenPersistenceFails(t *testing.T) {
+	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+	now := time.Now().UTC().Add(-time.Second)
+	store.syncJobs = []syncJob{{ID: 1, MediaID: 99, Operation: syncUpsert, Generation: 1, NextAttemptAt: now}}
+	store.path = t.TempDir()
+	syncer, _ := newAniListSync(testAniListConfig(store.path), store)
+
+	if syncer.processNext(context.Background()) {
+		t.Fatal("worker continued after orphan cleanup could not be persisted")
+	}
+	if len(store.syncJobs) != 1 || store.syncJobs[0].ID != 1 {
+		t.Fatalf("failed orphan cleanup was not rolled back: %+v", store.syncJobs)
+	}
+}
+
+func TestAniListRetryReturnsFailureAndRestoresState(t *testing.T) {
+	store, _ := newStore(filepath.Join(t.TempDir(), "media.json"))
+	originalAttempt := time.Now().UTC().Add(time.Hour)
+	store.items = []Media{{ID: 1, SyncStatus: "error", SyncError: "keep"}}
+	store.syncJobs = []syncJob{{ID: 1, MediaID: 1, Attempts: 3, LastError: "keep", NextAttemptAt: originalAttempt}}
+	store.path = t.TempDir()
+	syncer, _ := newAniListSync(testAniListConfig(store.path), store)
+	response := httptest.NewRecorder()
+
+	syncer.retryHandler(response, httptest.NewRequest(http.MethodPost, "/api/integrations/anilist/retry", nil))
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("retry response = %d, want 500", response.Code)
+	}
+	if store.syncJobs[0].Attempts != 3 || store.syncJobs[0].LastError != "keep" || !store.syncJobs[0].NextAttemptAt.Equal(originalAttempt) ||
+		store.items[0].SyncStatus != "error" || store.items[0].SyncError != "keep" {
+		t.Fatalf("failed retry persistence changed memory: item=%+v job=%+v", store.items[0], store.syncJobs[0])
 	}
 }
 
