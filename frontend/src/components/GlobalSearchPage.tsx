@@ -27,6 +27,7 @@ interface GlobalSearchPageProps {
   catalogResults: SearchCatalogResult[];
   unavailableTypes: SearchMediaType[];
   loading: boolean;
+  retryingUnavailable: boolean;
   error: string;
   onInput: (value: string) => void;
   onScopeChange: (scope: SearchScope) => void;
@@ -65,6 +66,7 @@ export function GlobalSearchPage({
   catalogResults,
   unavailableTypes,
   loading,
+  retryingUnavailable,
   error,
   onInput,
   onScopeChange,
@@ -262,6 +264,8 @@ export function GlobalSearchPage({
           >
             {allProvidersUnavailable
               ? "Catalogs unavailable"
+              : retryingUnavailable
+              ? "Retrying unavailable catalogs…"
               : unavailableTypes.length
               ? `${unavailableTypes.length} catalogs unavailable`
               : loading
@@ -291,8 +295,13 @@ export function GlobalSearchPage({
               Some catalogs could not respond:{" "}
               {unavailableTypes.map((type) => typeLabels[type]).join(", ")}.
             </span>
-            <button type="button" onClick={onRetry}>
-              <RefreshCw size={11} /> Retry
+            <button
+              type="button"
+              disabled={retryingUnavailable}
+              onClick={onRetry}
+            >
+              <RefreshCw size={11} />
+              {retryingUnavailable ? "Retrying…" : "Retry unavailable"}
             </button>
           </div>
         )}

@@ -530,7 +530,7 @@ describe("Library characterization", () => {
     expect(router.fetch).toHaveBeenCalledTimes(6);
   });
 
-  it("keeps Library items in catalog search without promoting them", async () => {
+  it("waits for submit before searching every catalog and keeps Library items local", async () => {
     const router = createFetchRouter();
     bootstrap(router);
     router.json("GET", "/api/discovery/global?q=Dun", {
@@ -560,17 +560,14 @@ describe("Library characterization", () => {
       screen.getByRole("combobox", { name: "Search Honne" }),
       "Dun",
     );
-    const suggestions = await screen.findByRole("listbox", {
-      name: "Catalog suggestions",
-    });
+    expect(screen.getByRole("status").textContent).toContain(
+      "Press Enter to search all catalogs",
+    );
     expect(
-      (await within(suggestions).findAllByRole("option")).map((option) =>
-        option.textContent
+      router.fetch.mock.calls.some(([path]) =>
+        path === "/api/discovery/global?q=Dun"
       ),
-    ).toEqual([
-      "Dune MessiahBookCatalog",
-      "DuneBookCatalog",
-    ]);
+    ).toBe(false);
 
     await user.click(
       screen.getByRole("button", { name: "View all results for “Dun”" }),
@@ -589,38 +586,37 @@ describe("Library characterization", () => {
     ]);
   });
 
-  it("debounces catalog suggestions and limits the dropdown to five", async () => {
+  it("debounces scoped catalog suggestions and limits the dropdown to five", async () => {
     const router = createFetchRouter();
     bootstrap(router);
-    router.json("GET", "/api/discovery/global?q=Nar", {
-      results: [
-        ["anime", "Naruto"],
-        ["series", "Narcos"],
-        ["movie", "Narc"],
-        ["book", "Narrative Economics"],
-        ["manga", "Naruto Gaiden"],
-        ["light_novel", "Naruto: Innocent Heart"],
-      ].map(([type, title], index) => ({
-        provider: `provider-${index}`,
+    router.json("GET", "/api/discovery/search?type=anime&q=Nar&page=1", {
+      results: Array.from({ length: 6 }, (_, index) => ({
+        provider: "anilist",
         providerId: String(index),
         providerUrl: `https://example.com/${index}`,
-        type,
-        title,
+        type: "anime",
+        title: `Naruto ${index}`,
       })),
-      unavailableTypes: [],
+      page: 1,
+      hasMore: false,
     });
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("button", { name: /^View details for Dune/ });
 
+    await user.click(
+      screen.getByRole("button", { name: "Search media type: All media" }),
+    );
+    await user.click(
+      within(screen.getByRole("listbox", { name: "Search media type" }))
+        .getByRole("option", { name: "Anime" }),
+    );
     await user.type(
-      screen.getByRole("combobox", {
-        name: "Search Honne",
-      }),
+      screen.getByRole("combobox", { name: "Search Honne" }),
       "Nar",
     );
     expect(screen.getByRole("status").textContent).toContain(
-      "Searching catalogs",
+      "Searching Anime",
     );
 
     const suggestions = await screen.findByRole("listbox", {
@@ -631,7 +627,7 @@ describe("Library characterization", () => {
       { timeout: 1500 },
     );
     expect(router.fetch).toHaveBeenCalledWith(
-      "/api/discovery/global?q=Nar",
+      "/api/discovery/search?type=anime&q=Nar&page=1",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
@@ -804,21 +800,25 @@ describe("Library characterization", () => {
     );
   });
 
-  it("cancels suggestions and hides stale results when the scope changes", async () => {
+  it("cancels scoped suggestions and hides stale results when the scope changes", async () => {
     const router = createFetchRouter();
     bootstrap(router);
-    let allMediaSignal: AbortSignal | undefined;
-    router.json("GET", "/api/discovery/global?q=Nar", (request: Request) => {
-      allMediaSignal = request.signal;
-      return new Promise<Response>(() => {});
-    });
-    router.json("GET", "/api/discovery/search?type=anime&q=Nar&page=1", {
+    let animeSignal: AbortSignal | undefined;
+    router.json(
+      "GET",
+      "/api/discovery/search?type=anime&q=Nar&page=1",
+      (request: Request) => {
+        animeSignal = request.signal;
+        return new Promise<Response>(() => {});
+      },
+    );
+    router.json("GET", "/api/discovery/search?type=book&q=Nar&page=1", {
       results: [{
-        provider: "anilist",
-        providerId: "20",
-        providerUrl: "https://anilist.co/anime/20",
-        type: "anime",
-        title: "Naruto",
+        provider: "openlibrary",
+        providerId: "nar-book",
+        providerUrl: "https://openlibrary.org/works/nar-book",
+        type: "book",
+        title: "Narrative",
       }],
       page: 1,
       hasMore: false,
@@ -827,13 +827,6 @@ describe("Library characterization", () => {
     render(<App />);
     await screen.findByRole("button", { name: /^View details for Dune/ });
 
-    await user.type(
-      screen.getByRole("combobox", { name: "Search Honne" }),
-      "Nar",
-    );
-    await waitFor(() => expect(allMediaSignal).toBeDefined(), {
-      timeout: 1500,
-    });
     await user.click(
       screen.getByRole("button", { name: "Search media type: All media" }),
     );
@@ -841,10 +834,22 @@ describe("Library characterization", () => {
       within(screen.getByRole("listbox", { name: "Search media type" }))
         .getByRole("option", { name: "Anime" }),
     );
+    await user.type(
+      screen.getByRole("combobox", { name: "Search Honne" }),
+      "Nar",
+    );
+    await waitFor(() => expect(animeSignal).toBeDefined(), { timeout: 1500 });
+    await user.click(
+      screen.getByRole("button", { name: "Search media type: Anime" }),
+    );
+    await user.click(
+      within(screen.getByRole("listbox", { name: "Search media type" }))
+        .getByRole("option", { name: "Books" }),
+    );
 
-    await waitFor(() => expect(allMediaSignal?.aborted).toBe(true));
+    await waitFor(() => expect(animeSignal?.aborted).toBe(true));
     expect(
-      await screen.findByRole("option", { name: /Naruto.*Catalog/u }),
+      await screen.findByRole("option", { name: /Narrative.*Catalog/u }),
     ).not.toBeNull();
   });
 
@@ -893,32 +898,43 @@ describe("Library characterization", () => {
     let catalogRequests = 0;
     router.json("GET", "/api/discovery/global?q=Mix", () => {
       catalogRequests++;
-      const results = [
-        {
-          provider: "anilist",
-          providerId: "anime-1",
-          providerUrl: "https://example.com/anime-1",
-          type: "anime",
-          title: "Mixed Anime",
-        },
-        ...(catalogRequests === 1
-          ? [{
+      return Response.json({
+        results: [
+          {
+            provider: "anilist",
+            providerId: "anime-1",
+            providerUrl: "https://example.com/anime-1",
+            type: "anime",
+            title: "Mixed Anime",
+          },
+          {
             provider: "openlibrary",
             providerId: "book-1",
             providerUrl: "https://example.com/book-1",
             type: "book",
             title: "Mixed Book",
-          }]
-          : []),
-      ];
-      return new Response(
-        JSON.stringify({
-          results,
-          unavailableTypes: catalogRequests === 1 ? ["series"] : [],
-        }),
-        { headers: { "Content-Type": "application/json" } },
-      );
+          },
+        ],
+        unavailableTypes: ["series"],
+      });
     });
+    router.json(
+      "GET",
+      "/api/discovery/global?q=Mix&types=series",
+      () => {
+        catalogRequests++;
+        return Response.json({
+          results: [{
+            provider: "tmdb",
+            providerId: "series-1",
+            providerUrl: "https://example.com/series-1",
+            type: "series",
+            title: "Mixed Series",
+          }],
+          unavailableTypes: [],
+        });
+      },
+    );
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("button", { name: /^View details for Dune/ });
@@ -949,14 +965,29 @@ describe("Library characterization", () => {
       screen.getByRole("button", { name: "Review Mixed Book from Books" }),
     ).not.toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await user.click(
+      screen.getByRole("button", { name: "Retry unavailable" }),
+    );
     await waitFor(() => expect(catalogRequests).toBe(2));
+    await user.click(screen.getByRole("button", { name: "All 3" }));
     expect(
       await screen.findByRole("button", {
         name: "Review Mixed Anime from Anime",
       }),
     ).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Books1" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Review Mixed Book from Books" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Review Mixed Series from Series",
+      }),
+    ).not.toBeNull();
+    expect(
+      router.fetch.mock.calls.some(([path]) =>
+        path === "/api/discovery/global?q=Mix&types=series"
+      ),
+    ).toBe(true);
   });
 
   it("moves persistent manual entry from the Library to full search", async () => {

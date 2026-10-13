@@ -313,10 +313,13 @@ async function requestCatalogSearch(
   query: string,
   scope: SearchScope,
   signal: AbortSignal,
+  types: MediaType[] = [],
 ): Promise<GlobalDiscoveryResponse> {
   if (scope === "all") {
+    const params = new URLSearchParams({ q: query });
+    if (types.length > 0) params.set("types", types.join(","));
     return await request<GlobalDiscoveryResponse>(
-      `/api/discovery/global?q=${encodeURIComponent(query)}`,
+      `/api/discovery/global?${params}`,
       { signal },
     );
   }
@@ -326,6 +329,23 @@ async function requestCatalogSearch(
     { signal },
   );
   return { results: response.results, unavailableTypes: [] };
+}
+
+function mergeCatalogResults(
+  current: DiscoveryResult[],
+  incoming: DiscoveryResult[],
+): DiscoveryResult[] {
+  const merged = [...current];
+  const seen = new Set(
+    current.map((result) => `${result.provider}\u0000${result.providerId}`),
+  );
+  for (const result of incoming) {
+    const key = `${result.provider}\u0000${result.providerId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(result);
+  }
+  return merged;
 }
 
 function findExistingLibraryItem(
@@ -857,6 +877,8 @@ function App() {
   const [unavailableTypes, setUnavailableTypes] = useState<MediaType[]>([]);
   const [globalLoading, setGlobalLoading] = useState(false);
   const [globalError, setGlobalError] = useState("");
+  const [partialRetryLoading, setPartialRetryLoading] = useState(false);
+  const partialRetryController = useRef<AbortController | null>(null);
   const [searchGeneration, setSearchGeneration] = useState(0);
   const [suggestionQuery, setSuggestionQuery] = useState("");
   const [suggestionResults, setSuggestionResults] = useState<
@@ -1117,8 +1139,9 @@ function App() {
     setSuggestionResults([]);
     setSuggestionUnavailableTypes([]);
     setSuggestionsError("");
-    setSuggestionsLoading(queryLength >= 3);
-    if (queryLength < 3) return;
+    const shouldSearchCatalog = queryLength >= 3 && scope !== "all";
+    setSuggestionsLoading(shouldSearchCatalog);
+    if (!shouldSearchCatalog) return;
 
     const controller = new AbortController();
     let active = true;
@@ -1151,6 +1174,8 @@ function App() {
 
   useEffect(() => {
     if (Array.from(submittedQuery.trim()).length < 2) return;
+    partialRetryController.current?.abort();
+    setPartialRetryLoading(false);
     const controller = new AbortController();
     let active = true;
     setGlobalLoading(true);
@@ -1246,6 +1271,41 @@ function App() {
     const hash = searchHash(query, scope);
     if (globalThis.location.hash === hash) setView("search");
     else globalThis.location.hash = hash;
+  }
+
+  async function retryUnavailableCatalogs() {
+    if (submittedSearchScope !== "all" || unavailableTypes.length === 0) {
+      setSearchGeneration((current) => current + 1);
+      return;
+    }
+    partialRetryController.current?.abort();
+    const controller = new AbortController();
+    partialRetryController.current = controller;
+    const retriedTypes = [...unavailableTypes];
+    setPartialRetryLoading(true);
+    setGlobalError("");
+    try {
+      const response = await requestCatalogSearch(
+        submittedQuery.trim(),
+        "all",
+        controller.signal,
+        retriedTypes,
+      );
+      if (controller.signal.aborted) return;
+      setGlobalResults((current) =>
+        mergeCatalogResults(current, response.results)
+      );
+      setUnavailableTypes(response.unavailableTypes);
+    } catch (caught: unknown) {
+      if (
+        !(caught instanceof DOMException && caught.name === "AbortError")
+      ) setGlobalError(errorMessage(caught));
+    } finally {
+      if (partialRetryController.current === controller) {
+        partialRetryController.current = null;
+        setPartialRetryLoading(false);
+      }
+    }
   }
 
   function leaveDetail() {
@@ -1860,12 +1920,13 @@ function App() {
           catalogResults={catalogSearchResults}
           unavailableTypes={unavailableTypes}
           loading={globalLoading}
+          retryingUnavailable={partialRetryLoading}
           error={globalError}
           onInput={changeGlobalQuery}
           onScopeChange={changeGlobalSearchScope}
           onSubmit={submitGlobalSearch}
           onBack={() => navigate("library")}
-          onRetry={() => setSearchGeneration((current) => current + 1)}
+          onRetry={() => void retryUnavailableCatalogs()}
           onOpenCatalog={openExternalDetail}
           onAddManually={() =>
             openManualEntry(

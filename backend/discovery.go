@@ -242,22 +242,27 @@ func (a *app) searchGlobalDiscovery(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "query must contain between 2 and 100 characters")
 		return
 	}
+	requestedTypes, err := requestedGlobalDiscoveryTypes(r.URL.Query().Get("types"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	type searchOutcome struct {
 		index    int
 		response discoveryResponse
 		err      error
 	}
-	outcomes := make(chan searchOutcome, len(catalogTypes))
-	for index, mediaType := range catalogTypes {
+	outcomes := make(chan searchOutcome, len(requestedTypes))
+	for index, mediaType := range requestedTypes {
 		go func() {
 			response, err := a.discovery.search(r.Context(), mediaType, query, 1)
 			outcomes <- searchOutcome{index: index, response: response, err: err}
 		}()
 	}
 
-	ordered := make([]searchOutcome, len(catalogTypes))
-	for range catalogTypes {
+	ordered := make([]searchOutcome, len(requestedTypes))
+	for range requestedTypes {
 		outcome := <-outcomes
 		ordered[outcome.index] = outcome
 	}
@@ -266,7 +271,7 @@ func (a *app) searchGlobalDiscovery(w http.ResponseWriter, r *http.Request) {
 	seen := make(map[string]bool)
 	successes := 0
 	for index, outcome := range ordered {
-		mediaType := catalogTypes[index]
+		mediaType := requestedTypes[index]
 		if outcome.err != nil {
 			result.UnavailableTypes = append(result.UnavailableTypes, mediaType)
 			logProviderError(mediaType, outcome.err)
@@ -288,10 +293,31 @@ func (a *app) searchGlobalDiscovery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if successes == 0 {
-		writeError(w, http.StatusBadGateway, "all metadata providers are temporarily unavailable")
+		writeError(w, http.StatusBadGateway, "all requested metadata providers are temporarily unavailable")
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func requestedGlobalDiscoveryTypes(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return append([]string(nil), catalogTypes...), nil
+	}
+	requested := make(map[string]bool)
+	for _, mediaType := range strings.Split(raw, ",") {
+		mediaType = strings.TrimSpace(mediaType)
+		if mediaType == "" || !slicesContains(catalogTypes, mediaType) || requested[mediaType] {
+			return nil, errors.New("types must contain unique supported media types")
+		}
+		requested[mediaType] = true
+	}
+	ordered := make([]string, 0, len(requested))
+	for _, mediaType := range catalogTypes {
+		if requested[mediaType] {
+			ordered = append(ordered, mediaType)
+		}
+	}
+	return ordered, nil
 }
 
 func (s *discoveryService) search(ctx context.Context, mediaType, query string, page int) (discoveryResponse, error) {

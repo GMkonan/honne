@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -90,14 +91,45 @@ func TestGlobalDiscoveryReportsUnconfiguredRAWGAsPartial(t *testing.T) {
 	}
 }
 
-func TestGlobalDiscoveryFailsOnlyWhenEveryTypeFails(t *testing.T) {
+func TestGlobalDiscoveryRetriesOnlyRequestedTypes(t *testing.T) {
+	var mu sync.Mutex
+	paths := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		globalDiscoveryProviderHandler(false).ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	application := globalDiscoveryTestApp(server.URL, "tmdb-token")
+
+	response := httptest.NewRecorder()
+	application.searchGlobalDiscovery(response, httptest.NewRequest(http.MethodGet, "/api/discovery/global?q=story&types=series%2Cgame", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("scoped retry = %d: %s", response.Code, response.Body.String())
+	}
+	var payload globalDiscoveryResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Results) != 2 || payload.Results[0].Type != "series" || payload.Results[1].Type != "game" {
+		t.Fatalf("scoped retry results = %+v", payload.Results)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(paths, ",") != "/search/tv,/games" && strings.Join(paths, ",") != "/games,/search/tv" {
+		t.Fatalf("scoped retry contacted unexpected providers: %v", paths)
+	}
+}
+
+func TestGlobalDiscoveryFailsOnlyWhenEveryRequestedTypeFails(t *testing.T) {
 	server := httptest.NewServer(globalDiscoveryProviderHandler(true))
 	defer server.Close()
 	application := globalDiscoveryTestApp(server.URL, "tmdb-token")
 
 	response := httptest.NewRecorder()
 	application.searchGlobalDiscovery(response, httptest.NewRequest(http.MethodGet, "/api/discovery/global?q=story", nil))
-	if response.Code != http.StatusBadGateway || !strings.Contains(response.Body.String(), "all metadata providers") {
+	if response.Code != http.StatusBadGateway || !strings.Contains(response.Body.String(), "all requested metadata providers") {
 		t.Fatalf("all-failed global search = %d: %s", response.Code, response.Body.String())
 	}
 }
@@ -121,6 +153,9 @@ func TestGlobalDiscoveryValidatesQuery(t *testing.T) {
 		"/api/discovery/global",
 		"/api/discovery/global?q=x",
 		"/api/discovery/global?q=" + strings.Repeat("x", 101),
+		"/api/discovery/global?q=story&types=unknown",
+		"/api/discovery/global?q=story&types=anime%2Canime",
+		"/api/discovery/global?q=story&types=anime%2C",
 	} {
 		response := httptest.NewRecorder()
 		application.searchGlobalDiscovery(response, httptest.NewRequest(http.MethodGet, target, nil))

@@ -628,6 +628,8 @@ export function GlobalSearchBox({
                 ? "Some catalogs are unavailable."
                 : catalogSuggestions.length
                 ? `${optionCount} suggestions available.`
+                : parsedQuery.scope === "all"
+                ? "Press Enter to search all catalogs."
                 : "No catalog suggestions found."}
             </div>
           )}
