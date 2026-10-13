@@ -68,7 +68,7 @@ The first version may use the current versioned snapshot, with its data model de
 
 ## 8. Migrate persistence to SQLite
 
-Owner priority update (2026-10-11): prepare SQLite now, without waiting for the initial 3×3 experience. Refine issue #45 against the latest snapshot version. Preserve logical JSON backup and restore, IDs, Activity, planned revisits, any favorites supported at implementation time, AniList outbox state, and rollback documentation. See [the preparation and approval plan](../development/sqlite-migration.md); the driver needs explicit approval and no real data migration is authorized yet.
+Owner priority update (2026-10-11): prepare SQLite now, without waiting for the initial 3×3 experience. The pure-Go driver and transactional synthetic importer are now implemented locally; the runtime still uses JSON. Preserve logical JSON backup and restore, IDs, Activity, planned revisits, any favorites supported at activation time, AniList outbox state, and rollback documentation. See [the implementation and activation plan](../development/sqlite-migration.md). Runtime activation, deployment changes and real owner-data migration remain unauthorized.
 
 ## 9. Define an optional public profile
 

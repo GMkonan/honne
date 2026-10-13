@@ -1,6 +1,6 @@
-# SQLite migration — preparation and approval gate
+# SQLite migration — implementation and activation gate
 
-Owner request: prioritize SQLite persistence now (2026-10-11), instead of waiting for the 3×3 feature. This is a local preparation branch, not a released migration.
+Owner request: prioritize SQLite persistence now (2026-10-11), instead of waiting for the 3×3 feature. Preparation and the synthetic migration path now live on local `main`; runtime activation and owner-data migration remain separate approval gates.
 
 ## Current evidence
 
@@ -8,18 +8,18 @@ The Go backend uses a version-6 JSON snapshot. `store` owns the mutex, collectio
 
 Preparation extracts the existing persistence concern from `main.go` into `store.go`, without changing serialization, file paths, HTTP contracts or writes. The real `backend/data/media.json` is not opened for migration or changed.
 
-## Decision requiring owner approval
+## Driver decision
 
-Proposed dependency: **modernc.org/sqlite**, a pure-Go `database/sql` driver. Pin a reviewed, Go-1.26-compatible version and commit `go.sum` after approval. It preserves the current non-CGO Docker build, but brings a larger dependency tree. Alternative: `mattn/go-sqlite3`, requiring CGO, a C toolchain and runtime/build changes. Do not shell out to a SQLite CLI as the application persistence layer.
+The approved implementation uses **modernc.org/sqlite v1.60.1**, a BSD-3-Clause, pure-Go `database/sql` driver whose module targets Go 1.26. It preserves the non-CGO build and is pinned in `go.mod`/`go.sum`, at the cost of a larger transitive dependency tree. `mattn/go-sqlite3` was not selected because it would require CGO and build/runtime changes. The application does not shell out to a SQLite CLI.
 
-No driver has been added or downloaded. Driver choice, migration activation and rollback behavior must be reviewed before implementation.
+Selecting the driver does not authorize runtime activation, deployment changes or migration of owner data.
 
-## Proposed delivery slices
+## Delivery slices
 
-1. **Preparation (this branch):** isolate store persistence, inventory invariants, define safety/rollback and run existing restart/concurrency tests.
-2. **Driver + transactional store:** versioned SQLite schema and concrete storage functions; keep one store authority, not a generic repository framework. Tables for media, activities, sync jobs and counters; preserve full payloads and supported metadata. Keep tombstoned job/activity media references even after deleting a title; do not add cascading deletes that lose them. Initially keep in-memory domain behavior and transactional durable writes to minimize API changes; SQL-native query optimization is a separate measured task.
-3. **Migration + activation:** explicitly import a supported JSON snapshot into a new database, transactionally, validating IDs, all counters, arrays, metadata, Activity and outbox. Use exclusive process ownership; never run old and new writers together. Reject corrupt/unsupported sources and existing non-empty destinations rather than guessing or merging. Preserve the source byte-for-byte. Validate a close/reopen round trip and SQLite integrity before switching deployment configuration.
-4. **Operational delivery:** update Docker copy of `go.mod`/`go.sum`, env examples, volume/config paths, documentation and JSON backup compatibility. Owner-authorized real migration only after backup and rehearsal on a disposable copy.
+1. **Preparation — complete locally:** store persistence is isolated, invariants and rollback are documented, and bounded JSON preflight covers versions 1–6.
+2. **Transactional importer — complete locally:** the pinned driver creates a new versioned database exclusively, imports media, Activity, AniList outbox and counters in one transaction, runs `integrity_check`, closes/reopens, verifies logical equality, restricts permissions and syncs the destination directory. Tables retain complete payloads and positions without cascading history/tombstone loss.
+3. **Runtime store — next:** add concrete SQLite-backed persistence while keeping one store authority and the current in-memory domain behavior. Every domain mutation must atomically persist items, Activity, counters and outbox with complete in-memory rollback on failure. SQL-native query optimization is a separate measured task.
+4. **Activation and operations — gated:** add graceful server/worker shutdown and database close; update configuration, Docker and volume documentation; rehearse on synthetic and disposable copied data; preserve logical JSON backup/rollback. Owner-authorized real migration only after those checks.
 
 ## Atomicity and durability
 
@@ -48,13 +48,13 @@ Use `t.TempDir`, synthetic fixtures and no external providers:
 - Old application opens a latest-state rollback export, without losing post-migration changes.
 - CGO-disabled Docker build and volume permissions; normal API/backup contracts and frontend validations remain passing.
 
-SQLite migration is **not implemented or activated** in this slice.
+The transactional JSON-to-SQLite importer is implemented and tested, but SQLite is **not the runtime store and is not activated**.
 
-## Continued local preparation (owner approved continuation)
+## Implemented migration safeguards
 
-Added a bounded, read-only migration preflight and a draft schema. Preflight supports legacy arrays and JSON versions 1–6; validates IDs/counters, rejects unknown fields/corruption/trailing data and existing destinations, computes the original source SHA-256, normalizes platform arrays and retains all Activity/outbox payloads. Deleted IDs referenced only by Activity or jobs contribute to counters. No provider is contacted, destination created, source written, or runtime switched. The future migrator must recheck the digest and use exclusive destination creation; a successful preflight is not a migration or a concurrency guarantee. Draft tables preserve complete payloads plus positions, avoiding cascading history/tombstone loss.
+The bounded preflight supports legacy arrays and JSON versions 1–6; validates IDs/counters, rejects unknown fields, corruption, trailing data and existing destinations, computes the source SHA-256, normalizes platform arrays and retains all Activity/outbox payloads. Deleted IDs referenced only by Activity or jobs contribute to counters.
 
-Driver approval remains explicit under repository policy: **may we add `modernc.org/sqlite` pinned to a reviewed version?** No dependency added in this slice. After approval: transactional import/write/read, failure rollback, restart/integrity/concurrency tests, graceful close, then rehearsal on synthetic/copy data. Real owner data and deployment remain untouched.
+The importer rechecks that digest after exclusively creating the destination, removes incomplete database artifacts on failure, uses `DELETE` journal mode with `synchronous=FULL`, commits the complete snapshot in one transaction and validates `PRAGMA integrity_check`. Readback rejects unsupported schemas, malformed payloads, non-contiguous positions and counters inconsistent with retained IDs. A logical JSON export can be reopened by the existing JSON store. No provider is contacted, source written, runtime switched or owner data opened.
 
 ### Runtime activation blockers found during review
 
