@@ -17,13 +17,13 @@ The code should remain understandable, intentional, and consistent with how the 
 7. Self-review the full diff for correctness, security, accessibility, compatibility, scope, and unnecessary complexity.
 8. Prepare English local commits when a change is ready, then wait for the owner to authorize any remote delivery action.
 
-## Delivery paths
+## Git and delivery
 
-A small, coherent, reversible, low-risk change may be committed directly to a synchronized local `main` after complete validation and self-review. Committing locally does not authorize a push, pull request, merge, or release.
-
-Use a descriptive local branch for experiments, work that is still under evaluation, or changes that benefit from isolation. Use a descriptive branch and pull request for larger changes and for persistence migrations, authentication, public exposure, provider integrations, new dependencies, release changes, security-sensitive behavior, and other high-risk work.
-
-Any push or pull-request creation or update requires explicit owner authorization for that remote action on the current change. General permission to work or commit on local `main` is not standing authorization for remote delivery. Direct commits must not bypass planning, validation, review, scope limits, or authorization for irreversible actions.
+- Small changes may be committed to the local `main` after validation.
+- A local commit does not authorize a push.
+- Pushes, pull requests, merges, and releases require current explicit authorization.
+- Use Conventional Commits in English.
+- Do not force-push, bypass hooks, or self-approve or self-merge.
 
 ## Planning and tracking
 

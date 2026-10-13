@@ -2,10 +2,10 @@
 
 ## Fronteira da persistência
 
-- Mantenha o `store` como única autoridade sobre estado, locking, IDs e persistência; nenhum handler, worker ou integração deve abrir ou alterar o arquivo de dados diretamente.
-- Exponha novas operações de domínio por métodos do `store`; mantenha structs e serialização específicas do JSON dentro da camada de persistência.
-- Continue usando JSON durante o MVP; não crie uma interface genérica de repository antes do projeto explícito de migração para SQLite.
-- Trate SQLite como evolução planejada quando consultas, relações, volume ou múltiplos usuários justificarem a mudança; não introduza PostgreSQL ou outro serviço obrigatório para resolver o mesmo caso single-instance.
+- Mantenha o `store` como única autoridade sobre estado, locking, IDs e persistência; nenhum handler, worker ou integração deve abrir ou alterar o armazenamento diretamente.
+- Exponha novas operações de domínio por métodos do `store`; mantenha structs e serialização específicas do formato dentro da camada de persistência.
+- Não crie uma interface genérica de repository sem mais de uma implementação real ou uma fronteira de teste que justifique a abstração.
+- Preserve o deployment single-instance com persistência embutida; não introduza PostgreSQL ou outro serviço obrigatório sem necessidade operacional aprovada.
 
 ## Durabilidade do snapshot
 
@@ -13,7 +13,7 @@
 - Propague falhas de escrita, `Sync`, `Close`, `Rename` e sync do diretório; remova o temporário quando uma etapa falhar.
 - Propague e trate toda falha de persistência, inclusive transições executadas pelo worker AniList; nunca descarte o retorno de `persistLocked`.
 - Mantenha a mutação em memória e sua outbox/atividade na mesma região crítica e restaure todos os campos e contadores afetados quando a gravação falhar.
-- Preserve o `media.json` original como fonte recuperável durante uma futura migração para SQLite e mantenha os IDs existentes.
+- Durante qualquer migração de persistência, preserve a fonte original como recuperação, mantenha os IDs existentes e ofereça rollback verificável.
 
 ## Concorrência
 

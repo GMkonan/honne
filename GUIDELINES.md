@@ -76,7 +76,7 @@
 - Solicite aprovação explícita antes de adicionar qualquer pacote ausente do lockfile.
 - Justifique uma nova dependência pelo risco ou complexidade que ela elimina; não a adicione apenas por conveniência.
 - Declare versões intencionais; não introduza nem preserve `latest` ao modificar um manifest.
-- Corrija declarações `latest` preexistentes em uma card própria, sem ampliar o escopo de PRs não relacionados.
+- Corrija declarações `latest` preexistentes separadamente, sem ampliar o escopo de mudanças não relacionadas.
 - Atualize e revise o lockfile junto de qualquer alteração de dependência.
 
 ## Dados e migrations
@@ -85,7 +85,7 @@
 - Restaure completamente o estado em memória quando a persistência falhar; nunca confirme sucesso antes da gravação.
 - Versione mudanças no formato persistido e mantenha um caminho explícito de leitura/migração para estados suportados.
 - Faça migrations additive-first quando possível e nunca destrua dados silenciosamente.
-- Entregue migration, código consumidor e testes de upgrade, restart e rollback no mesmo PR.
+- Entregue migration, código consumidor e testes de upgrade, restart e rollback na mesma mudança.
 - Documente backup e recuperação antes de qualquer mudança incompatível.
 - Preserve IDs referenciados por tombstones e reconstrua contadores considerando todo estado durável.
 - Preserve arrays vazios como `[]`, não `null`, nos contratos JSON existentes.
@@ -102,16 +102,16 @@
 ## Testes e validação
 
 - Mantenha testes backend determinísticos e autocontidos com `testing`, `httptest` e `t.TempDir`; nunca contate provedores reais.
-- Execute o backend com `go test -race ./...` e `go vet ./...` antes de entregar uma mudança por commit direto ou pull request.
+- Execute o backend com `go test -race ./...` e `go vet ./...` antes de entregar uma mudança.
 - Adicione testes de restart, rollback, concorrência e compatibilidade a toda alteração de persistência ou outbox.
 - Cubra timeouts, respostas inválidas, falhas parciais e idempotência ao alterar integrações externas.
-- Adicione testes automatizados para fluxos frontend críticos de navegação, busca, modal e acessibilidade após a aprovação da stack de testes frontend.
-- Documente validação manual reproduzível para comportamento frontend enquanto essa stack ainda não existir.
-- Execute lint, typecheck, build frontend e validação do Docker Compose antes de entregar uma mudança por commit direto ou pull request.
+- Adicione testes automatizados para fluxos frontend críticos de navegação, busca, modal e acessibilidade.
+- Documente validação manual reproduzível quando um comportamento relevante não puder ser coberto automaticamente.
+- Execute lint, typecheck, testes, build frontend e validação do Docker Compose antes de entregar uma mudança.
 
 ## Acessibilidade frontend
 
-- Atenda aos critérios WCAG 2.2 AA aplicáveis em toda interface nova ou alterada e registre a validação manual ou automatizada no artefato de entrega, seja commit direto ou pull request.
+- Atenda aos critérios WCAG 2.2 AA aplicáveis em toda interface nova ou alterada e registre a validação manual ou automatizada na entrega.
 - Garanta operação completa por teclado e nunca comunique estado somente por cor.
 - Não use texto essencial abaixo de 12 px nem controles cujo alvo interativo seja menor que 24 por 24 px sem justificar e validar uma alternativa acessível.
 - Gerencie foco inicial, contenção, Escape e restauração de foco em modais.
@@ -126,16 +126,13 @@
 - Mova foco e scroll de forma previsível após mudanças de rota.
 - Mantenha estado temporário fora da URL apenas quando ele não precisar sobreviver a reload nem ser compartilhado.
 
-## Git e pull requests
+## Git e entrega
 
-- Mudanças pequenas, coerentes, reversíveis e de baixo risco podem ser implementadas e commitadas diretamente em uma `main` local sincronizada após validação completa e self-review.
-- Um commit na `main` local não autoriza `push`. Não faça `push` de nenhuma branch nem abra ou atualize uma pull request sem autorização explícita do owner para essa ação na mudança atual; permissão geral para commits locais não é autorização remota permanente.
-- Use uma branch descritiva e pull request para mudanças maiores ou de maior risco; inclua o ID da card ou issue quando uma existir, mas não exija tracker para mudanças pequenas e coerentes.
-- Escreva em inglês todo conteúdo publicado no GitHub, incluindo issues/cards, branches, commits, pull requests, reviews e comentários; a conversa com o usuário permanece em pt-BR.
-- Use commits pequenos com Conventional Commits (`feat:`, `fix:`, `test:`, `docs:` ou `chore:`).
-- Quando houver uma card ou issue associada, vincule o PR; sempre descreva contexto, mudanças e comandos de validação.
-- Limite cada PR a 500 linhas de produção alteradas; obtenha aprovação e documente a justificativa antes de exceder o limite.
-- Nunca faça force-push, ignore hooks ou aprove/mescle o próprio PR.
+- Mudanças pequenas podem ser commitadas na `main` local após validação.
+- Commit local não autoriza `push`.
+- `Push`, pull request, merge ou release exigem autorização explícita atual.
+- Use Conventional Commits em inglês.
+- Não faça force-push, bypass de hooks ou autoaprovação/merge.
 
 ## Criticidade do domínio
 
