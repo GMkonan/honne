@@ -17,7 +17,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 1
+const sqliteSchemaVersion = 2
 
 // openRuntimeStore opens the operational SQLite store. On the first start it
 // migrates a non-empty legacy JSON snapshot without changing that source. A
@@ -119,6 +119,9 @@ func createEmptySQLiteDatabase(path string) (err error) {
 }
 
 func newSQLiteStore(path string) (*store, error) {
+	if err := migrateSQLiteSchema(path); err != nil {
+		return nil, err
+	}
 	snapshot, err := loadSQLiteSnapshot(path)
 	if err != nil {
 		return nil, err
@@ -141,6 +144,57 @@ func newSQLiteStore(path string) (*store, error) {
 	s.loadSnapshot(snapshot)
 	s.normalizeLoadedState()
 	return s, nil
+}
+
+func migrateSQLiteSchema(path string) error {
+	db, err := openSQLiteDatabase(path, "rw")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := configureSQLiteRuntime(db); err != nil {
+		return err
+	}
+	var version int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read SQLite schema version: %w", err)
+	}
+	if version == sqliteSchemaVersion {
+		return nil
+	}
+	if version != 1 {
+		return fmt.Errorf("unsupported SQLite schema version %d", version)
+	}
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return fmt.Errorf("begin SQLite schema migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	statements := []string{
+		"ALTER TABLE store_meta RENAME TO store_meta_v1",
+		"CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 7), next_media_id INTEGER NOT NULL CHECK (next_media_id > 0), next_job_id INTEGER NOT NULL CHECK (next_job_id > 0), next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0))",
+		"INSERT INTO store_meta SELECT singleton, json_version, next_media_id, next_job_id, next_activity_id FROM store_meta_v1",
+		"DROP TABLE store_meta_v1",
+		"CREATE TABLE favorites (media_id INTEGER PRIMARY KEY CHECK (media_id > 0), position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 8), FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE RESTRICT)",
+		"CREATE TABLE library_appearance (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), banner_content_type TEXT NOT NULL DEFAULT '' CHECK (banner_content_type IN ('', 'image/jpeg', 'image/png', 'image/webp', 'image/gif')), banner_data BLOB NOT NULL DEFAULT X'' CHECK (length(banner_data) <= 8388608), CHECK ((banner_content_type = '') = (length(banner_data) = 0)))",
+		"INSERT INTO library_appearance (singleton, banner_content_type, banner_data) VALUES (1, '', X'')",
+		"PRAGMA user_version = 2",
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("migrate SQLite schema: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit SQLite schema migration: %w", err)
+	}
+	if err := verifySQLiteIntegrity(db); err != nil {
+		return err
+	}
+	if err := syncFileParent(path); err != nil {
+		return err
+	}
+	return nil
 }
 
 // migrateJSONToSQLite imports a validated JSON snapshot into a newly created
@@ -322,6 +376,8 @@ func replaceSQLiteSnapshot(db *sql.DB, snapshot persistedStore) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, statement := range []string{
+		"DELETE FROM favorites",
+		"DELETE FROM library_appearance",
 		"DELETE FROM activities",
 		"DELETE FROM sync_jobs",
 		"DELETE FROM media",
@@ -374,6 +430,21 @@ func insertSQLiteSnapshot(tx *sql.Tx, snapshot persistedStore) error {
 			return fmt.Errorf("write SQLite activity payload: %w", err)
 		}
 	}
+	for position, mediaID := range snapshot.FavoriteMediaIDs {
+		if _, err := tx.Exec("INSERT INTO favorites (media_id, position) VALUES (?, ?)", mediaID, position); err != nil {
+			return fmt.Errorf("write SQLite favorite: %w", err)
+		}
+	}
+	bannerData := snapshot.Appearance.BannerData
+	if bannerData == nil {
+		bannerData = []byte{}
+	}
+	if _, err := tx.Exec(
+		"INSERT INTO library_appearance (singleton, banner_content_type, banner_data) VALUES (1, ?, ?)",
+		snapshot.Appearance.BannerContentType, bannerData,
+	); err != nil {
+		return fmt.Errorf("write SQLite Library appearance: %w", err)
+	}
 	return nil
 }
 
@@ -419,6 +490,12 @@ func loadSQLiteSnapshot(path string) (persistedStore, error) {
 	if snapshot.Activities, err = readSQLiteActivities(db); err != nil {
 		return snapshot, err
 	}
+	if snapshot.FavoriteMediaIDs, err = readSQLiteFavorites(db); err != nil {
+		return snapshot, err
+	}
+	if snapshot.Appearance, err = readSQLiteAppearance(db); err != nil {
+		return snapshot, err
+	}
 	canonical, err := json.Marshal(snapshot)
 	if err != nil {
 		return snapshot, err
@@ -427,10 +504,14 @@ func loadSQLiteSnapshot(path string) (persistedStore, error) {
 	if err != nil {
 		return snapshot, fmt.Errorf("validate SQLite snapshot: %w", err)
 	}
+	snapshot.Version = persistedStoreVersion
+	if snapshot.FavoriteMediaIDs == nil {
+		snapshot.FavoriteMediaIDs = []int{}
+	}
 	if !reflect.DeepEqual(normalized, snapshot) {
 		return snapshot, errors.New("SQLite snapshot contains inconsistent counters or defaults")
 	}
-	return snapshot, nil
+	return normalized, nil
 }
 
 func readSQLiteMedia(db *sql.DB) ([]Media, error) {
@@ -499,6 +580,36 @@ func readSQLiteActivities(db *sql.DB) ([]Activity, error) {
 		activities = append(activities, activity)
 	}
 	return activities, rows.Err()
+}
+
+func readSQLiteFavorites(db *sql.DB) ([]int, error) {
+	rows, err := db.Query("SELECT media_id, position FROM favorites ORDER BY position")
+	if err != nil {
+		return nil, fmt.Errorf("read SQLite favorites: %w", err)
+	}
+	defer rows.Close()
+	favorites := []int{}
+	for rows.Next() {
+		var mediaID, position int
+		if err := rows.Scan(&mediaID, &position); err != nil {
+			return nil, err
+		}
+		if position != len(favorites) || len(favorites) >= maxFavorites {
+			return nil, errors.New("invalid SQLite favorite position")
+		}
+		favorites = append(favorites, mediaID)
+	}
+	return favorites, rows.Err()
+}
+
+func readSQLiteAppearance(db *sql.DB) (libraryAppearance, error) {
+	var appearance libraryAppearance
+	if err := db.QueryRow(
+		"SELECT banner_content_type, banner_data FROM library_appearance WHERE singleton = 1",
+	).Scan(&appearance.BannerContentType, &appearance.BannerData); err != nil {
+		return appearance, fmt.Errorf("read SQLite Library appearance: %w", err)
+	}
+	return appearance, nil
 }
 
 func decodeStrictSQLitePayload(payload string, target any) error {

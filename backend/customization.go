@@ -1,0 +1,159 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"slices"
+	"strings"
+)
+
+const (
+	maxBannerBytes = 8 << 20
+	maxFavorites   = 9
+)
+
+var allowedBannerTypes = []string{"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+type favoritesInput struct {
+	MediaIDs []int `json:"mediaIds"`
+}
+
+type favoritesResponse struct {
+	MediaIDs []int `json:"mediaIds"`
+}
+
+func (s *store) bannerRevision() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.appearance.BannerData) == 0 {
+		return ""
+	}
+	digest := sha256.Sum256(s.appearance.BannerData)
+	return hex.EncodeToString(digest[:8])
+}
+
+func (a *app) getLibraryBanner(w http.ResponseWriter, _ *http.Request) {
+	a.store.mu.RLock()
+	contentType := a.store.appearance.BannerContentType
+	data := slices.Clone(a.store.appearance.BannerData)
+	a.store.mu.RUnlock()
+	if len(data) == 0 {
+		writeError(w, http.StatusNotFound, "custom banner not found")
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+func (a *app) updateLibraryBanner(w http.ResponseWriter, r *http.Request) {
+	contentType, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";")
+	contentType = strings.TrimSpace(contentType)
+	if !slices.Contains(allowedBannerTypes, contentType) {
+		writeError(w, http.StatusUnsupportedMediaType, "banner must be a JPEG, PNG, WebP, or GIF image")
+		return
+	}
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBannerBytes+1))
+	if err != nil || len(data) == 0 || len(data) > maxBannerBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, "banner must be no larger than 8 MiB")
+		return
+	}
+	detectedType := http.DetectContentType(data)
+	if detectedType != contentType || !slices.Contains(allowedBannerTypes, detectedType) {
+		writeError(w, http.StatusUnprocessableEntity, "banner contents do not match the selected image type")
+		return
+	}
+
+	a.store.mu.Lock()
+	previous := a.store.cloneSnapshotLocked()
+	a.store.appearance = libraryAppearance{BannerContentType: contentType, BannerData: slices.Clone(data)}
+	err = a.store.persistLocked()
+	if err != nil {
+		a.store.restoreSnapshotLocked(previous)
+	}
+	a.store.mu.Unlock()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save custom banner")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"revision": a.store.bannerRevision()})
+}
+
+func (a *app) resetLibraryBanner(w http.ResponseWriter, _ *http.Request) {
+	a.store.mu.Lock()
+	if len(a.store.appearance.BannerData) == 0 {
+		a.store.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	previous := a.store.cloneSnapshotLocked()
+	a.store.appearance = libraryAppearance{}
+	err := a.store.persistLocked()
+	if err != nil {
+		a.store.restoreSnapshotLocked(previous)
+	}
+	a.store.mu.Unlock()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not reset custom banner")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *app) listFavorites(w http.ResponseWriter, _ *http.Request) {
+	a.store.mu.RLock()
+	ids := slices.Clone(a.store.favoriteMediaIDs)
+	a.store.mu.RUnlock()
+	writeJSON(w, http.StatusOK, favoritesResponse{MediaIDs: ids})
+}
+
+func (a *app) replaceFavorites(w http.ResponseWriter, r *http.Request) {
+	var input favoritesInput
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if input.MediaIDs == nil {
+		input.MediaIDs = []int{}
+	}
+	if len(input.MediaIDs) > maxFavorites {
+		writeError(w, http.StatusUnprocessableEntity, "favorites cannot contain more than 9 titles")
+		return
+	}
+
+	a.store.mu.Lock()
+	seen := make(map[int]bool, len(input.MediaIDs))
+	for _, id := range input.MediaIDs {
+		if id < 1 || seen[id] || slices.IndexFunc(a.store.items, func(item Media) bool { return item.ID == id }) == -1 {
+			a.store.mu.Unlock()
+			writeError(w, http.StatusUnprocessableEntity, "favorites must contain unique titles from the current Library")
+			return
+		}
+		seen[id] = true
+	}
+	previous := a.store.cloneSnapshotLocked()
+	a.store.favoriteMediaIDs = slices.Clone(input.MediaIDs)
+	err := a.store.persistLocked()
+	if err != nil {
+		a.store.restoreSnapshotLocked(previous)
+	}
+	a.store.mu.Unlock()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save favorites")
+		return
+	}
+	writeJSON(w, http.StatusOK, favoritesResponse{MediaIDs: input.MediaIDs})
+}

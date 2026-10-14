@@ -84,7 +84,7 @@ func TestProfileConfigRejectsInvalidValues(t *testing.T) {
 }
 
 func TestProfileEndpointReturnsOnlyPublicFields(t *testing.T) {
-	application := &app{config: config{
+	application := &app{store: emptyStore("unused.json"), config: config{
 		ProfileName:       "Konan",
 		ProfileAvatarURL:  "https://images.example.com/avatar.png",
 		ProfileCatEnabled: true,
@@ -106,7 +106,7 @@ func TestProfileEndpointReturnsOnlyPublicFields(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body) != 3 || body["name"] != "Konan" || body["avatarUrl"] != "https://images.example.com/avatar.png" || body["catEnabled"] != true {
+	if len(body) != 4 || body["name"] != "Konan" || body["avatarUrl"] != "https://images.example.com/avatar.png" || body["catEnabled"] != true || body["bannerUrl"] != "" {
 		t.Fatalf("unexpected response: %#v", body)
 	}
 }

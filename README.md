@@ -84,6 +84,7 @@ Open [http://localhost:7417](http://localhost:7417). Your collection is stored i
 - **[Self-hosting](docs/self-hosting.md)** — installation, configuration, authentication, backup, restore, updates, and rollback.
 - **[AniList synchronization](docs/anilist-sync.md)** — connect an account and understand synchronization behavior.
 - **[Development](docs/development.md)** — build from source, run validation, and use the API.
+- **[Architecture diagrams](DIAGRAMS.MD)** — runtime boundaries, SQLite model, transactions, migration, and backup projection.
 - **[Product roadmap](docs/product/roadmap.md)** — current priorities and future product direction.
 
 ## Build from source

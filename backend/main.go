@@ -147,6 +147,11 @@ func applicationHandler(application *app, cfg config) http.Handler {
 	mux.HandleFunc("GET /api/health", application.health)
 	mux.HandleFunc("GET /api/auth/check", application.authCheck)
 	mux.HandleFunc("GET /api/profile", application.getProfile)
+	mux.HandleFunc("GET /api/profile/banner", application.getLibraryBanner)
+	mux.HandleFunc("PUT /api/profile/banner", application.updateLibraryBanner)
+	mux.HandleFunc("DELETE /api/profile/banner", application.resetLibraryBanner)
+	mux.HandleFunc("GET /api/favorites", application.listFavorites)
+	mux.HandleFunc("PUT /api/favorites", application.replaceFavorites)
 	mux.HandleFunc("GET /api/media", application.listMedia)
 	mux.HandleFunc("GET /api/activity", application.listActivity)
 	mux.HandleFunc("GET /api/backup", application.downloadBackup)
@@ -405,6 +410,7 @@ func (a *app) deleteMedia(w http.ResponseWriter, r *http.Request) {
 	originalItems := slices.Clone(a.store.items)
 	originalJobs := slices.Clone(a.store.syncJobs)
 	originalActivities := slices.Clone(a.store.activities)
+	originalFavorites := slices.Clone(a.store.favoriteMediaIDs)
 	originalNextJobID := a.store.nextJobID
 	originalNextActivityID := a.store.nextActivityID
 	deleted := a.store.items[index]
@@ -412,6 +418,7 @@ func (a *app) deleteMedia(w http.ResponseWriter, r *http.Request) {
 		a.anilist.queueDeleteLocked(deleted)
 	}
 	a.store.items = slices.Delete(a.store.items, index, index+1)
+	a.store.favoriteMediaIDs = slices.DeleteFunc(a.store.favoriteMediaIDs, func(favoriteID int) bool { return favoriteID == id })
 	a.store.appendActivityLocked(Activity{
 		MediaID: deleted.ID, Title: deleted.Title, MediaType: deleted.Type, Action: "deleted",
 		Changes: ActivityChanges{FromStatus: deleted.Status}, OccurredAt: time.Now().UTC(),
@@ -421,6 +428,7 @@ func (a *app) deleteMedia(w http.ResponseWriter, r *http.Request) {
 		a.store.items = originalItems
 		a.store.syncJobs = originalJobs
 		a.store.activities = originalActivities
+		a.store.favoriteMediaIDs = originalFavorites
 		a.store.nextJobID = originalNextJobID
 		a.store.nextActivityID = originalNextActivityID
 	}
@@ -679,7 +687,7 @@ func cors(next http.Handler, allowedOrigin string) http.Handler {
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Honne-Restore-Confirmation")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

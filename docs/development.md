@@ -67,7 +67,12 @@ All application responses disable caching. When Basic Auth is configured, every 
 
 - `GET /api/health`: health check
 - `GET /api/auth/check`: reverse-proxy authentication check
-- `GET /api/profile`: public Library profile
+- `GET /api/profile`: public Library profile and current banner URL
+- `GET /api/profile/banner`: read the local custom banner
+- `PUT /api/profile/banner`: store a validated local image (JPEG, PNG, WebP, or GIF; maximum 8 MiB)
+- `DELETE /api/profile/banner`: restore the bundled default banner
+- `GET /api/favorites`: read the ordered favorite media IDs
+- `PUT /api/favorites`: replace the ordered selection with up to nine Library IDs
 - `GET /api/media`: list the collection
 - `POST /api/media`: add media
 - `PATCH /api/media/{id}`: update media
@@ -75,6 +80,8 @@ All application responses disable caching. When Basic Auth is configured, every 
 - `POST /api/media/{id}/refresh-metadata`: refresh linked catalog metadata
 - `GET /api/activity`: list recent activity (`?limit=30`, maximum 100)
 - `GET /api/backup`: download a restorable snapshot without AniList credentials
+- `POST /api/backup/preview`: validate and summarize a portable backup
+- `POST /api/backup/restore`: explicitly replace the current snapshot after preview
 - `GET /api/discovery/search?type=anime&q=bebop&page=1`: search one catalog
 - `GET /api/discovery/global?q=bebop`: search all available catalogs
 - `GET /api/discovery/detail?provider=rawg&type=game&id=3498`: load one game's full catalog metadata

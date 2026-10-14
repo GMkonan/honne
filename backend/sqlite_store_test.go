@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,59 @@ import (
 	"reflect"
 	"testing"
 )
+
+func TestSQLiteSchemaOneUpgradesWithoutLosingLibraryState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "honne.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSchema := `
+		CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 6), next_media_id INTEGER NOT NULL, next_job_id INTEGER NOT NULL, next_activity_id INTEGER NOT NULL);
+		CREATE TABLE media (id INTEGER PRIMARY KEY, position INTEGER NOT NULL UNIQUE, payload TEXT NOT NULL);
+		CREATE TABLE sync_jobs (id INTEGER PRIMARY KEY, media_id INTEGER NOT NULL, position INTEGER NOT NULL UNIQUE, payload TEXT NOT NULL);
+		CREATE TABLE activities (id INTEGER PRIMARY KEY, media_id INTEGER NOT NULL, position INTEGER NOT NULL UNIQUE, payload TEXT NOT NULL);
+		INSERT INTO store_meta VALUES (1, 6, 8, 1, 1);
+		INSERT INTO media VALUES (7, 0, '{"id":7,"title":"Preserved","type":"book","status":"planned","progress":0,"total":0,"rating":0,"repeatCount":0,"playtimeMinutes":0,"playedOnPlatforms":[],"catalogPlatforms":[],"notes":"","coverUrl":"","createdAt":"0001-01-01T00:00:00Z","updatedAt":"0001-01-01T00:00:00Z"}');
+		PRAGMA user_version = 1;
+	`
+	if _, err := db.Exec(oldSchema); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := newSQLiteStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.favoriteMediaIDs = []int{7}
+	store.appearance = libraryAppearance{BannerContentType: "image/png", BannerData: append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 32)...)}
+	store.mu.Lock()
+	err = store.persistLocked()
+	store.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := newSQLiteStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if len(reopened.items) != 1 || reopened.items[0].Title != "Preserved" || len(reopened.favoriteMediaIDs) != 1 || reopened.favoriteMediaIDs[0] != 7 || reopened.appearance.BannerContentType != "image/png" {
+		t.Fatalf("schema upgrade lost state: %+v", reopened.snapshotLocked())
+	}
+	var version int
+	if err := reopened.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != sqliteSchemaVersion {
+		t.Fatalf("schema version = %d, err=%v", version, err)
+	}
+}
 
 func TestSQLiteMigrationRoundTripPreservesSnapshotAndJSONSource(t *testing.T) {
 	input := persistedStore{
@@ -87,8 +141,8 @@ func TestSQLiteMigrationRoundTripPreservesSnapshotAndJSONSource(t *testing.T) {
 	}
 	legacySnapshot := persistedStore{
 		Version: persistedStoreVersion, Items: legacy.items, SyncJobs: legacy.syncJobs,
-		Activities: legacy.activities, NextID: legacy.nextID, NextJobID: legacy.nextJobID,
-		NextActivityID: legacy.nextActivityID,
+		Activities: legacy.activities, FavoriteMediaIDs: legacy.favoriteMediaIDs, Appearance: legacy.appearance,
+		NextID: legacy.nextID, NextJobID: legacy.nextJobID, NextActivityID: legacy.nextActivityID,
 	}
 	if !reflect.DeepEqual(legacySnapshot, plan.Snapshot) {
 		t.Fatal("rollback JSON export is not logically identical")
@@ -114,7 +168,7 @@ func TestSQLiteMigrationRejectsUnsafeDestinationsAndCleansFailures(t *testing.T)
 	}
 
 	invalidDestination := filepath.Join(dir, "invalid.db")
-	if err := os.WriteFile(source, []byte(`{"version":7}`), 0o600); err != nil {
+	if err := os.WriteFile(source, []byte(`{"version":8}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := migrateJSONToSQLite(source, invalidDestination); err == nil {

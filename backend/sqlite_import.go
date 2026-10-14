@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 const maxSQLiteImportBytes = 32 << 20
@@ -107,6 +109,9 @@ func decodeSQLiteImport(data []byte) (persistedStore, error) {
 	if snapshot.Activities == nil {
 		snapshot.Activities = []Activity{}
 	}
+	if snapshot.FavoriteMediaIDs == nil {
+		snapshot.FavoriteMediaIDs = []int{}
+	}
 	if snapshot.NextID < 0 || snapshot.NextJobID < 0 || snapshot.NextActivityID < 0 {
 		return snapshot, errors.New("migration counters must be nonnegative")
 	}
@@ -126,6 +131,27 @@ func decodeSQLiteImport(data []byte) (persistedStore, error) {
 		}
 		if item.CatalogPlatforms == nil {
 			item.CatalogPlatforms = []string{}
+		}
+	}
+	if len(snapshot.FavoriteMediaIDs) > maxFavorites {
+		return snapshot, errors.New("migration favorites cannot contain more than 9 titles")
+	}
+	seenFavorites := map[int]bool{}
+	for _, mediaID := range snapshot.FavoriteMediaIDs {
+		if !seenMedia[mediaID] || seenFavorites[mediaID] {
+			return snapshot, errors.New("migration favorites contain an invalid or duplicate media reference")
+		}
+		seenFavorites[mediaID] = true
+	}
+	if len(snapshot.Appearance.BannerData) > maxBannerBytes {
+		return snapshot, errors.New("migration banner exceeds 8 MiB")
+	}
+	if (snapshot.Appearance.BannerContentType == "") != (len(snapshot.Appearance.BannerData) == 0) {
+		return snapshot, errors.New("migration banner content type and data must be provided together")
+	}
+	if len(snapshot.Appearance.BannerData) > 0 {
+		if !slices.Contains(allowedBannerTypes, snapshot.Appearance.BannerContentType) || http.DetectContentType(snapshot.Appearance.BannerData) != snapshot.Appearance.BannerContentType {
+			return snapshot, errors.New("migration banner has an invalid image type")
 		}
 	}
 	seenJobs := map[int64]bool{}

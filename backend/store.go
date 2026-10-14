@@ -12,32 +12,41 @@ import (
 	"sync"
 )
 
-const persistedStoreVersion = 6
+const persistedStoreVersion = 7
+
+type libraryAppearance struct {
+	BannerContentType string `json:"bannerContentType,omitempty"`
+	BannerData        []byte `json:"bannerData,omitempty"`
+}
 
 var errStoreClosed = errors.New("store is closed")
 
 type persistedStore struct {
-	Version        int        `json:"version"`
-	Items          []Media    `json:"items"`
-	SyncJobs       []syncJob  `json:"syncJobs,omitempty"`
-	Activities     []Activity `json:"activities,omitempty"`
-	NextID         int        `json:"nextId,omitempty"`
-	NextJobID      int64      `json:"nextJobId,omitempty"`
-	NextActivityID int64      `json:"nextActivityId,omitempty"`
+	Version          int               `json:"version"`
+	Items            []Media           `json:"items"`
+	SyncJobs         []syncJob         `json:"syncJobs,omitempty"`
+	Activities       []Activity        `json:"activities,omitempty"`
+	FavoriteMediaIDs []int             `json:"favoriteMediaIds,omitempty"`
+	Appearance       libraryAppearance `json:"appearance,omitempty"`
+	NextID           int               `json:"nextId,omitempty"`
+	NextJobID        int64             `json:"nextJobId,omitempty"`
+	NextActivityID   int64             `json:"nextActivityId,omitempty"`
 }
 
 type store struct {
-	mu             sync.RWMutex
-	path           string
-	db             *sql.DB
-	sqlite         bool
-	closed         bool
-	items          []Media
-	syncJobs       []syncJob
-	activities     []Activity
-	nextID         int
-	nextJobID      int64
-	nextActivityID int64
+	mu               sync.RWMutex
+	path             string
+	db               *sql.DB
+	sqlite           bool
+	closed           bool
+	items            []Media
+	syncJobs         []syncJob
+	activities       []Activity
+	favoriteMediaIDs []int
+	appearance       libraryAppearance
+	nextID           int
+	nextJobID        int64
+	nextActivityID   int64
 }
 
 func newStore(path string) (*store, error) {
@@ -73,7 +82,7 @@ func newStore(path string) (*store, error) {
 
 func emptyStore(path string) *store {
 	return &store{
-		path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{},
+		path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{}, favoriteMediaIDs: []int{},
 		nextID: 1, nextJobID: 1, nextActivityID: 1,
 	}
 }
@@ -84,6 +93,10 @@ func (s *store) loadSnapshot(snapshot persistedStore) {
 	if snapshot.Activities != nil {
 		s.activities = snapshot.Activities
 	}
+	if snapshot.FavoriteMediaIDs != nil {
+		s.favoriteMediaIDs = snapshot.FavoriteMediaIDs
+	}
+	s.appearance = snapshot.Appearance
 	if snapshot.NextID > s.nextID {
 		s.nextID = snapshot.NextID
 	}
@@ -104,6 +117,9 @@ func (s *store) normalizeLoadedState() {
 	}
 	if s.activities == nil {
 		s.activities = []Activity{}
+	}
+	if s.favoriteMediaIDs == nil {
+		s.favoriteMediaIDs = []int{}
 	}
 	for index := range s.items {
 		if s.items[index].PlayedOnPlatforms == nil {
@@ -141,6 +157,7 @@ func (s *store) normalizeLoadedState() {
 func (s *store) snapshotLocked() persistedStore {
 	return persistedStore{
 		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
+		FavoriteMediaIDs: s.favoriteMediaIDs, Appearance: s.appearance,
 		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
 	}
 }
@@ -150,6 +167,8 @@ func (s *store) cloneSnapshotLocked() persistedStore {
 	snapshot.Items = slices.Clone(snapshot.Items)
 	snapshot.SyncJobs = slices.Clone(snapshot.SyncJobs)
 	snapshot.Activities = slices.Clone(snapshot.Activities)
+	snapshot.FavoriteMediaIDs = slices.Clone(snapshot.FavoriteMediaIDs)
+	snapshot.Appearance.BannerData = slices.Clone(snapshot.Appearance.BannerData)
 	return snapshot
 }
 
@@ -157,6 +176,8 @@ func (s *store) restoreSnapshotLocked(snapshot persistedStore) {
 	s.items = snapshot.Items
 	s.syncJobs = snapshot.SyncJobs
 	s.activities = snapshot.Activities
+	s.favoriteMediaIDs = snapshot.FavoriteMediaIDs
+	s.appearance = snapshot.Appearance
 	s.nextID = snapshot.NextID
 	s.nextJobID = snapshot.NextJobID
 	s.nextActivityID = snapshot.NextActivityID

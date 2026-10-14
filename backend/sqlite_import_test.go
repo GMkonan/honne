@@ -64,13 +64,13 @@ func TestSQLiteImportPreflightPreservesSourceAndDurableState(t *testing.T) {
 }
 
 func TestSQLiteImportSupportedLegacyVersions(t *testing.T) {
-	for _, source := range []string{`[]`, `[{"id":1,"title":"Legacy","type":"anime"}]`, `{"version":1,"items":[]}`, `{"version":2,"items":[]}`, `{"version":3,"items":[]}`, `{"version":4,"items":[]}`, `{"version":5,"items":[]}`, `{"version":6,"items":[]}`} {
+	for _, source := range []string{`[]`, `[{"id":1,"title":"Legacy","type":"anime"}]`, `{"version":1,"items":[]}`, `{"version":2,"items":[]}`, `{"version":3,"items":[]}`, `{"version":4,"items":[]}`, `{"version":5,"items":[]}`, `{"version":6,"items":[]}`, `{"version":7,"items":[]}`} {
 		t.Run(source, func(t *testing.T) {
 			snapshot, err := decodeSQLiteImport([]byte(source))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if snapshot.Version != 6 || snapshot.Items == nil || snapshot.SyncJobs == nil || snapshot.Activities == nil {
+			if snapshot.Version != 7 || snapshot.Items == nil || snapshot.SyncJobs == nil || snapshot.Activities == nil {
 				t.Fatal("defaults not normalized")
 			}
 			if len(snapshot.Items) > 0 && (snapshot.Items[0].PlayedOnPlatforms == nil || snapshot.Items[0].CatalogPlatforms == nil) {
@@ -81,7 +81,7 @@ func TestSQLiteImportSupportedLegacyVersions(t *testing.T) {
 }
 
 func TestSQLiteImportRejectsUnsafeSources(t *testing.T) {
-	for _, source := range []string{"", " ", "{", "null", `{"version":7}`, `{"version":0}`, `[] []`, `{"version":6,"unknown":"do not silently discard"}`, `[{"id":0}]`, `[{"id":1},{"id":1}]`, `{"version":6,"nextId":-1}`, `{"version":6,"nextJobId":9223372036854775807}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":0}]}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":2},{"id":1,"mediaId":3}]}`, `{"version":6,"activities":[{"id":1,"mediaId":-2}]}`, `{"version":6,"activities":[{"id":1},{"id":1}]}`} {
+	for _, source := range []string{"", " ", "{", "null", `{"version":8}`, `{"version":0}`, `[] []`, `{"version":6,"unknown":"do not silently discard"}`, `[{"id":0}]`, `[{"id":1},{"id":1}]`, `{"version":6,"nextId":-1}`, `{"version":6,"nextJobId":9223372036854775807}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":0}]}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":2},{"id":1,"mediaId":3}]}`, `{"version":6,"activities":[{"id":1,"mediaId":-2}]}`, `{"version":6,"activities":[{"id":1},{"id":1}]}`} {
 		t.Run(source, func(t *testing.T) {
 			if _, err := decodeSQLiteImport([]byte(source)); err == nil {
 				t.Fatal("unsafe source accepted")
@@ -106,7 +106,7 @@ func TestSQLiteImportDoesNotDropHistoricalActivities(t *testing.T) {
 	if got.NextID != maxStoredActivities+2 {
 		t.Fatal("deleted historical IDs can be reused")
 	}
-	for _, table := range []string{"media", "sync_jobs", "activities", "store_meta"} {
+	for _, table := range []string{"media", "sync_jobs", "activities", "favorites", "library_appearance", "store_meta"} {
 		if !strings.Contains(sqliteSchema, "CREATE TABLE "+table) {
 			t.Fatalf("schema missing %s", table)
 		}

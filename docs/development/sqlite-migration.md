@@ -14,8 +14,8 @@ The implementation uses **modernc.org/sqlite v1.60.1**, a pinned BSD-3-Clause pu
 
 At startup:
 
-1. if `honne.db` exists, the backend validates its schema, integrity, payloads, positions, counters, and opens it as the runtime store;
-2. if the database is absent and a non-empty legacy `media.json` exists, the backend validates JSON versions 1–6, creates the database exclusively, imports the complete snapshot transactionally, closes/reopens it, verifies logical equality, and leaves `media.json` unchanged;
+1. if `honne.db` exists, the backend transactionally upgrades schema version 1 to version 2 when needed, validates its integrity, payloads, positions, counters, and opens it as the runtime store;
+2. if the database is absent and a non-empty legacy `media.json` exists, the backend validates JSON versions 1–7, creates the database exclusively, imports the complete snapshot transactionally, closes/reopens it, verifies logical equality, and leaves `media.json` unchanged;
 3. if neither store exists, or the legacy source is empty, the backend creates an empty versioned database.
 
 A failed migration removes incomplete database and journal artifacts and does not change the JSON source. A pre-existing destination is never overwritten. Once SQLite receives new writes, the frozen legacy JSON is only a pre-migration recovery point and is no longer a current backup.
@@ -26,6 +26,7 @@ Migration and runtime persistence preserve:
 
 - media IDs and monotonic counters, including deleted IDs referenced by Activity or jobs;
 - collection metadata, notes, platforms, planned revisits, and empty-array contracts;
+- manually ordered favorites and the local custom Library banner;
 - Activity order and payloads;
 - AniList jobs, generation, account ownership, retry state, and tombstone references.
 
@@ -39,8 +40,8 @@ The HTTP server owns explicit read/header/write/idle timeouts. On `SIGINT` or `S
 
 ## Backup, restore, and rollback
 
-- **Portable backup:** `GET /api/backup` continues to export the current logical versioned JSON snapshot and excludes OAuth credentials.
-- **In-app restore:** Settings uploads the raw JSON to `POST /api/backup/preview`, shows validated counts, then sends the confirmed file to `POST /api/backup/restore`. Restore requires an explicit confirmation header and a disconnected AniList integration. The 32 MiB bounded input is decoded strictly, any in-flight AniList worker pass is joined, and Library, Activity, counters, and outbox are then replaced in one SQLite transaction, with in-memory rollback on persistence failure.
+- **Portable backup:** `GET /api/backup` exports the current logical versioned JSON snapshot, including ordered favorites and the local Library banner, and excludes OAuth credentials.
+- **In-app restore:** Settings uploads the raw JSON to `POST /api/backup/preview`, shows validated counts, then sends the confirmed file to `POST /api/backup/restore`. Restore requires an explicit confirmation header and a disconnected AniList integration. The 32 MiB bounded input is decoded strictly, any in-flight AniList worker pass is joined, and Library, Activity, counters, favorites, appearance, and outbox are then replaced in one SQLite transaction, with in-memory rollback on persistence failure.
 - **Operational backup:** stop the backend before copying `/data`; the directory contains `honne.db`, the frozen legacy source when upgraded, and the separate AniList authorization file.
 - **Volume restore:** stop the backend, preserve `/data`, remove or move the current `honne.db`, place the downloaded snapshot at `/data/media.json`, and start the current backend. It imports that snapshot into a new database.
 - **Rollback to a JSON-only binary:** while the SQLite version is still available, download a fresh portable backup. Stop the backend, preserve `/data`, place that latest export at `/data/media.json`, then start the older binary. Restoring only the frozen migration source loses every post-migration write.
