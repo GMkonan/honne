@@ -34,10 +34,16 @@ afterEach(() => {
 function bootstrap(
   router: FetchRouter,
   items: unknown[] = mediaItems,
-  profile = { name: "My Library", avatarUrl: "", catEnabled: false },
+  profile = {
+    name: "My Library",
+    avatarUrl: "",
+    catEnabled: false,
+    bannerUrl: "",
+  },
 ) {
   router
     .json("GET", "/api/profile", profile)
+    .json("GET", "/api/favorites", { mediaIds: [] })
     .json("GET", "/api/media", items)
     .json("GET", "/api/integrations/anilist", disconnectedAniList)
     .json("GET", "/api/activity?limit=100", []);
@@ -68,6 +74,7 @@ describe("Library characterization", () => {
 
     expect(await screen.findByRole("heading", { name: "My Library" }))
       .not.toBeNull();
+    expect(screen.queryByText("PERSONAL LIBRARY")).toBeNull();
     const hero = screen.getByRole("region", { name: "My Library" });
     expect(within(hero).getByText("Total titles")).not.toBeNull();
     expect(within(hero).getByText("3")).not.toBeNull();
@@ -122,7 +129,12 @@ describe("Library characterization", () => {
       status: "completed",
       rating: 9,
       createdAt: occurredAt,
-    }], { name: "Konan Library", avatarUrl: "", catEnabled: false });
+    }], {
+      name: "Konan Library",
+      avatarUrl: "",
+      catEnabled: false,
+      bannerUrl: "",
+    });
     router.json("GET", "/api/activity?limit=500", [{
       id: 20,
       mediaId: 1,
@@ -223,6 +235,7 @@ describe("Library characterization", () => {
       name: "Konan Library",
       avatarUrl: "https://images.example.com/avatar.png",
       catEnabled: true,
+      bannerUrl: "",
     });
     const { container } = render(<App />);
 
@@ -344,7 +357,7 @@ describe("Library characterization", () => {
 
     await user.click(screen.getByRole("button", { name: /^Books/ }));
     expect(visibleMediaTitles()).toEqual(["Dune"]);
-    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
 
     expect(visibleMediaTitles()).toEqual([
       "Cowboy Bebop",
@@ -445,6 +458,79 @@ describe("Library characterization", () => {
     ).toBe("4");
   });
 
+  it("uploads and applies a custom Library banner from Settings", async () => {
+    globalThis.history.replaceState(null, "", "/#settings");
+    const router = createFetchRouter();
+    let profileRequests = 0;
+    bootstrap(router);
+    router
+      .json("GET", "/api/profile", () => {
+        profileRequests++;
+        return Response.json({
+          name: "My Library",
+          avatarUrl: "",
+          catEnabled: false,
+          bannerUrl: profileRequests > 1 ? "/api/profile/banner?v=custom" : "",
+        });
+      })
+      .json("PUT", "/api/profile/banner", async (request: Request) => {
+        expect(request.headers.get("Content-Type")).toBe("image/png");
+        expect((await request.arrayBuffer()).byteLength).toBeGreaterThan(8);
+        return Response.json({ revision: "custom" });
+      });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:banner-preview"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const file = new File(
+      [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0])],
+      "library.png",
+      { type: "image/png" },
+    );
+    await user.upload(await screen.findByLabelText(/Choose image/u), file);
+    await user.click(screen.getByRole("button", { name: "Use banner" }));
+
+    expect(await screen.findByText("Custom Library banner saved.")).not
+      .toBeNull();
+    expect(screen.getByText("Custom")).not.toBeNull();
+  });
+
+  it("curates ordered favorites and shows the 3 by 3 collection", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router
+      .json("GET", "/api/favorites", { mediaIds: [2, 1] })
+      .json("PUT", "/api/favorites", async (request: Request) => {
+        const body = await request.json() as { mediaIds: number[] };
+        expect(body.mediaIds).toEqual([1, 2]);
+        return Response.json(body);
+      });
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Open favorite 1: Dune",
+      }),
+    ).not.toBeNull();
+    globalThis.history.replaceState(null, "", "/#settings");
+    globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
+    const moveEarlier = await screen.findByRole("button", {
+      name: "Move Cowboy Bebop earlier",
+    });
+    await user.click(moveEarlier);
+    await user.click(screen.getByRole("button", { name: "Save favorites" }));
+    expect(await screen.findByText("Favorites saved in this order.")).not
+      .toBeNull();
+  });
+
   it("downloads a restorable backup from Settings", async () => {
     globalThis.history.replaceState(null, "", "/#settings");
     const router = createFetchRouter();
@@ -527,7 +613,7 @@ describe("Library characterization", () => {
     );
     expect(button.hasAttribute("disabled")).toBe(false);
     await user.click(button);
-    expect(router.fetch).toHaveBeenCalledTimes(6);
+    expect(router.fetch).toHaveBeenCalledTimes(7);
   });
 
   it("previews and restores a JSON backup with explicit replacement confirmation", async () => {

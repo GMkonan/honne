@@ -9,6 +9,7 @@ import {
 import {
   BookOpen,
   Check,
+  ChevronDown,
   CirclePlus,
   Clapperboard,
   Clock3,
@@ -30,6 +31,9 @@ import {
   X,
 } from "lucide-react";
 import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
+import { FavoritesSettingsCard } from "./components/FavoritesSettingsCard.tsx";
+import { FavoritesShowcase } from "./components/FavoritesShowcase.tsx";
+import { LibraryAppearanceSettingsCard } from "./components/LibraryAppearanceSettingsCard.tsx";
 import {
   type CatalogContributor,
   catalogCoverStyle,
@@ -150,6 +154,10 @@ type DetailSelection =
 interface GlobalDiscoveryResponse {
   results: DiscoveryResult[];
   unavailableTypes: MediaType[];
+}
+
+interface FavoritesResponse {
+  mediaIds: number[];
 }
 
 interface AniListIntegrationStatus {
@@ -945,15 +953,23 @@ function App() {
     name: "My Library",
     avatarUrl: "",
     catEnabled: false,
+    bannerUrl: "",
   });
+  const [favoriteMediaIds, setFavoriteMediaIds] = useState<number[]>([]);
   const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    void request<PublicProfile>("/api/profile").then((publicProfile) => {
-      if (active) setProfile(publicProfile);
+    void Promise.all([
+      request<PublicProfile>("/api/profile"),
+      request<FavoritesResponse>("/api/favorites"),
+    ]).then(([publicProfile, favorites]) => {
+      if (active) {
+        setProfile(publicProfile);
+        setFavoriteMediaIds(favorites.mediaIds);
+      }
     }).catch((caught: unknown) => {
-      if (active) setError(`Profile: ${errorMessage(caught)}`);
+      if (active) setError(`Library customization: ${errorMessage(caught)}`);
     }).finally(() => {
       if (active) setProfileLoading(false);
     });
@@ -1331,15 +1347,48 @@ function App() {
     setActivities(recent);
   }
 
+  async function refreshProfile() {
+    const publicProfile = await request<PublicProfile>("/api/profile");
+    setProfile(publicProfile);
+  }
+
+  async function uploadLibraryBanner(file: File, signal: AbortSignal) {
+    await request<{ revision: string }>("/api/profile/banner", {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+      signal,
+    });
+    await refreshProfile();
+  }
+
+  async function resetLibraryBanner(signal: AbortSignal) {
+    await request<null>("/api/profile/banner", { method: "DELETE", signal });
+    await refreshProfile();
+  }
+
+  async function saveFavorites(mediaIds: number[]) {
+    const response = await request<FavoritesResponse>("/api/favorites", {
+      method: "PUT",
+      body: JSON.stringify({ mediaIds }),
+    });
+    setFavoriteMediaIds(response.mediaIds);
+  }
+
   async function refreshAfterBackupRestore() {
-    const [library, integration, recentActivity] = await Promise.all([
-      request<Media[]>("/api/media"),
-      request<AniListIntegrationStatus>("/api/integrations/anilist"),
-      request<ActivityEvent[]>("/api/activity?limit=100"),
-    ]);
+    const [library, integration, recentActivity, publicProfile, favorites] =
+      await Promise.all([
+        request<Media[]>("/api/media"),
+        request<AniListIntegrationStatus>("/api/integrations/anilist"),
+        request<ActivityEvent[]>("/api/activity?limit=100"),
+        request<PublicProfile>("/api/profile"),
+        request<FavoritesResponse>("/api/favorites"),
+      ]);
     setItems(library);
     setAniListStatus(integration);
     setActivities(recentActivity);
+    setProfile(publicProfile);
+    setFavoriteMediaIds(favorites.mediaIds);
     setMonthlyLogGeneration((current) => current + 1);
   }
 
@@ -1364,6 +1413,10 @@ function App() {
     return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
   });
 
+  const favoriteItems = favoriteMediaIds.flatMap((id) => {
+    const item = items.find((entry) => entry.id === id);
+    return item ? [item] : [];
+  });
   const inProgress =
     items.filter((item) => item.status === "in_progress").length;
   const statusScope = activeType === "all"
@@ -1550,6 +1603,7 @@ function App() {
     try {
       await request<null>(`/api/media/${item.id}`, { method: "DELETE" });
       setItems((current) => current.filter(({ id }) => id !== item.id));
+      setFavoriteMediaIds((current) => current.filter((id) => id !== item.id));
       void refreshAniListStatus().catch(() => {});
       void refreshActivity().catch(() => {});
       return true;
@@ -1678,6 +1732,10 @@ function App() {
         <>
           <main className="page-container content" id="filters">
             <LibrarySectionNav active="collection" />
+            <FavoritesShowcase
+              items={favoriteItems}
+              onOpen={openLocalDetail}
+            />
             <section className="filter-section" aria-label="Media type filters">
               <div className="filter-surface">
                 <div className="filter-group format-filter">
@@ -1753,16 +1811,19 @@ function App() {
                   <div className="collection-controls">
                     <label className="toolbar-sort">
                       <span>Sort</span>
-                      <select
-                        value={sortBy}
-                        onChange={(event) =>
-                          setSortBy(event.target.value as LibrarySort)}
-                      >
-                        <option value="recent">Recently updated</option>
-                        <option value="added">Recently added</option>
-                        <option value="title">Title A–Z</option>
-                        <option value="rating">Highest rated</option>
-                      </select>
+                      <span className="toolbar-select-control">
+                        <select
+                          value={sortBy}
+                          onChange={(event) =>
+                            setSortBy(event.target.value as LibrarySort)}
+                        >
+                          <option value="recent">Recently updated</option>
+                          <option value="added">Recently added</option>
+                          <option value="title">Title A–Z</option>
+                          <option value="rating">Highest rated</option>
+                        </select>
+                        <ChevronDown size={15} aria-hidden="true" />
+                      </span>
                     </label>
                     <button
                       type="button"
@@ -1774,9 +1835,9 @@ function App() {
                         setActiveStatus("all");
                         setSearch("");
                       }}
-                      title="Reset library filters"
+                      title="Clear media type, status, and search filters"
                     >
-                      <RotateCcw size={13} /> Reset
+                      <RotateCcw size={13} /> Clear filters
                     </button>
                   </div>
                 </div>
@@ -1918,8 +1979,14 @@ function App() {
       {view === "settings" && (
         <SettingsPage
           status={anilistStatus}
+          profile={profile}
+          items={items}
+          favoriteMediaIds={favoriteMediaIds}
           onManageAniList={() => setIntegrationOpen(true)}
           onImportAniList={() => setImportOpen(true)}
+          onUploadBanner={uploadLibraryBanner}
+          onResetBanner={resetLibraryBanner}
+          onSaveFavorites={saveFavorites}
           onBackupRestored={refreshAfterBackupRestore}
         />
       )}
@@ -2152,10 +2219,27 @@ function ActivityPage(
 }
 
 function SettingsPage(
-  { status, onManageAniList, onImportAniList, onBackupRestored }: {
+  {
+    status,
+    profile,
+    items,
+    favoriteMediaIds,
+    onManageAniList,
+    onImportAniList,
+    onUploadBanner,
+    onResetBanner,
+    onSaveFavorites,
+    onBackupRestored,
+  }: {
     status: AniListIntegrationStatus | null;
+    profile: PublicProfile;
+    items: Media[];
+    favoriteMediaIds: number[];
     onManageAniList: () => void;
     onImportAniList: () => void;
+    onUploadBanner: (file: File, signal: AbortSignal) => Promise<void>;
+    onResetBanner: (signal: AbortSignal) => Promise<void>;
+    onSaveFavorites: (mediaIds: number[]) => Promise<void>;
     onBackupRestored: () => Promise<void>;
   },
 ) {
@@ -2169,6 +2253,16 @@ function SettingsPage(
           your data.
         </p>
       </header>
+      <LibraryAppearanceSettingsCard
+        bannerUrl={profile.bannerUrl}
+        onUpload={onUploadBanner}
+        onReset={onResetBanner}
+      />
+      <FavoritesSettingsCard
+        items={items}
+        favoriteMediaIds={favoriteMediaIds}
+        onSave={onSaveFavorites}
+      />
       <section className="settings-card">
         <div className="settings-card-icon">
           <Link2 size={21} />

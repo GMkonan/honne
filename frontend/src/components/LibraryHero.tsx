@@ -4,6 +4,7 @@ export interface PublicProfile {
   name: string;
   avatarUrl: string;
   catEnabled: boolean;
+  bannerUrl: string;
 }
 
 interface LibraryHeroProps {
@@ -34,6 +35,9 @@ export function LibraryHero(
       className="library-hero"
       aria-labelledby="library-profile-name"
       aria-busy={profileLoading || collectionLoading}
+      style={profile.bannerUrl
+        ? { backgroundImage: `url("${profile.bannerUrl}")` }
+        : undefined}
     >
       <div className="hero-overlay" />
       <div className="page-container hero-content">
@@ -90,9 +94,6 @@ export function LibraryHero(
           )}
         </div>
         <div className="hero-copy">
-          <span className="hero-kicker">
-            {profileLoading ? "LOADING PROFILE" : "PERSONAL LIBRARY"}
-          </span>
           <h1 id="library-profile-name">{displayName}</h1>
           <dl className="hero-stats">
             <div>
