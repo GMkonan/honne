@@ -51,7 +51,7 @@ PROFILE_CAT_ENABLED=false
 
 The avatar must be an absolute HTTP or HTTPS URL without embedded credentials. Set `PROFILE_CAT_ENABLED=true` to place the decorative Honne cat above the profile image. Invalid profile values stop the backend during startup.
 
-The Library banner is managed from **Settings → Library banner** rather than the environment. Honne accepts a local JPEG, PNG, WebP, or GIF up to 8 MiB, stores it in SQLite, and includes it in portable JSON backups. **Restore default** removes only the custom banner and reveals the bundled artwork again.
+The Library banner is managed from **Settings → Library banner** rather than the environment. Honne accepts a local JPEG, PNG, WebP, or GIF up to 8 MiB, stores it in SQLite, and includes it in portable JSON backups. A 1920 × 520 px image with a centered focal point is recommended. **Restore default** removes only the custom banner and reveals the bundled artwork again. The profile picture can also be uploaded from Settings (recommended 512 × 512 px, up to 4 MiB); resetting it restores the configured `PROFILE_AVATAR_URL` or the built-in profile mark.
 
 ### Optional login
 
@@ -117,7 +117,7 @@ The normal restore path does not require container access:
 4. review the title, Activity, and AniList queue counts;
 5. confirm **Replace with this backup**.
 
-The backend accepts versioned Honne snapshots v1–v7 and the legacy array format, up to 32 MiB. It validates the entire file before enabling confirmation and replaces Library, Activity, ID counters, favorites, Library appearance, and the AniList outbox in one SQLite transaction. A validation or persistence failure leaves the current state unchanged. A successful restore intentionally replaces it, so keep the pre-restore download until the result is verified. OAuth authorization is never imported; reconnect only the matching AniList account afterward.
+The backend accepts versioned Honne snapshots v1–v8 and the legacy array format, up to 32 MiB. It validates the entire file before enabling confirmation and replaces Library, Activity, ID counters, favorites, Library banner, profile picture, and the AniList outbox in one SQLite transaction. A validation or persistence failure leaves the current state unchanged. A successful restore intentionally replaces it, so keep the pre-restore download until the result is verified. OAuth authorization is never imported; reconnect only the matching AniList account afterward.
 
 ### From the data volume
 
@@ -176,7 +176,7 @@ docker compose up -d
 
 Starting with v0.4.0, the first successful Library write upgrades the snapshot to persistence version 6 so planned rewatch, reread, and replay intent can be stored. A v0.3.x or older backend cannot read that snapshot. Before updating to v0.4.0, download a backup. To roll back afterward, stop the backend, preserve the current data directory, restore the pre-v0.4.0 backup as described in **Restore a downloaded backup**, and only then start the older containers. Starting the older backend without that restore fails safely with an unsupported-version error; it does not rewrite the newer snapshot.
 
-The next persistence update introduces JSON version 7 and SQLite schema version 2 for favorites and local Library appearance. Before installing a release that contains this update, download a portable backup and copy the stopped data volume. Older backends do not understand schema version 2 or JSON version 7. Rolling back requires the pre-update volume or pre-update JSON backup; it intentionally does not discard favorites or banner data to manufacture an older snapshot.
+The customization updates use JSON version 8 and SQLite schema version 3. Schema upgrades run transactionally: version 1 adds favorites and banner storage, then version 2 adds profile-picture storage. Before installing a release containing these changes, download a portable backup and copy the stopped data volume. Older backends do not understand the newer schema or JSON contract. Rolling back requires the pre-update volume or pre-update JSON backup; it intentionally does not discard favorites or images to manufacture an older snapshot.
 
 Do not use the simple image-only rollback sequence for v0.1.0 either. Its Compose asset predates embedded image tags, and its backend cannot read the persistence-v5 snapshot written by v0.2.0. Before validating or starting v0.1.0:
 

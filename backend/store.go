@@ -12,11 +12,13 @@ import (
 	"sync"
 )
 
-const persistedStoreVersion = 7
+const persistedStoreVersion = 8
 
 type libraryAppearance struct {
 	BannerContentType string `json:"bannerContentType,omitempty"`
 	BannerData        []byte `json:"bannerData,omitempty"`
+	AvatarContentType string `json:"avatarContentType,omitempty"`
+	AvatarData        []byte `json:"avatarData,omitempty"`
 }
 
 var errStoreClosed = errors.New("store is closed")
@@ -169,6 +171,7 @@ func (s *store) cloneSnapshotLocked() persistedStore {
 	snapshot.Activities = slices.Clone(snapshot.Activities)
 	snapshot.FavoriteMediaIDs = slices.Clone(snapshot.FavoriteMediaIDs)
 	snapshot.Appearance.BannerData = slices.Clone(snapshot.Appearance.BannerData)
+	snapshot.Appearance.AvatarData = slices.Clone(snapshot.Appearance.AvatarData)
 	return snapshot
 }
 

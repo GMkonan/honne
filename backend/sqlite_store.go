@@ -17,7 +17,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 2
+const sqliteSchemaVersion = 3
 
 // openRuntimeStore opens the operational SQLite store. On the first start it
 // migrates a non-empty legacy JSON snapshot without changing that source. A
@@ -159,27 +159,49 @@ func migrateSQLiteSchema(path string) error {
 	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return fmt.Errorf("read SQLite schema version: %w", err)
 	}
-	if version == sqliteSchemaVersion {
-		return nil
-	}
-	if version != 1 {
+	if version < 1 || version > sqliteSchemaVersion {
 		return fmt.Errorf("unsupported SQLite schema version %d", version)
 	}
+	if version == 1 {
+		if err := applySQLiteMigration(db, []string{
+			"ALTER TABLE store_meta RENAME TO store_meta_v1",
+			"CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 7), next_media_id INTEGER NOT NULL CHECK (next_media_id > 0), next_job_id INTEGER NOT NULL CHECK (next_job_id > 0), next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0))",
+			"INSERT INTO store_meta SELECT singleton, json_version, next_media_id, next_job_id, next_activity_id FROM store_meta_v1",
+			"DROP TABLE store_meta_v1",
+			"CREATE TABLE favorites (media_id INTEGER PRIMARY KEY CHECK (media_id > 0), position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 8), FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE RESTRICT)",
+			"CREATE TABLE library_appearance (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), banner_content_type TEXT NOT NULL DEFAULT '' CHECK (banner_content_type IN ('', 'image/jpeg', 'image/png', 'image/webp', 'image/gif')), banner_data BLOB NOT NULL DEFAULT X'' CHECK (length(banner_data) <= 8388608), CHECK ((banner_content_type = '') = (length(banner_data) = 0)))",
+			"INSERT INTO library_appearance (singleton, banner_content_type, banner_data) VALUES (1, '', X'')",
+			"PRAGMA user_version = 2",
+		}); err != nil {
+			return err
+		}
+		version = 2
+	}
+	if version == 2 {
+		if err := applySQLiteMigration(db, []string{
+			"ALTER TABLE store_meta RENAME TO store_meta_v2",
+			"CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 8), next_media_id INTEGER NOT NULL CHECK (next_media_id > 0), next_job_id INTEGER NOT NULL CHECK (next_job_id > 0), next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0))",
+			"INSERT INTO store_meta SELECT singleton, json_version, next_media_id, next_job_id, next_activity_id FROM store_meta_v2",
+			"DROP TABLE store_meta_v2",
+			"ALTER TABLE library_appearance ADD COLUMN avatar_content_type TEXT NOT NULL DEFAULT '' CHECK (avatar_content_type IN ('', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'))",
+			"ALTER TABLE library_appearance ADD COLUMN avatar_data BLOB NOT NULL DEFAULT X'' CHECK (length(avatar_data) <= 4194304)",
+			"PRAGMA user_version = 3",
+		}); err != nil {
+			return err
+		}
+	}
+	if err := verifySQLiteIntegrity(db); err != nil {
+		return err
+	}
+	return syncFileParent(path)
+}
+
+func applySQLiteMigration(db *sql.DB, statements []string) error {
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("begin SQLite schema migration: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	statements := []string{
-		"ALTER TABLE store_meta RENAME TO store_meta_v1",
-		"CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 7), next_media_id INTEGER NOT NULL CHECK (next_media_id > 0), next_job_id INTEGER NOT NULL CHECK (next_job_id > 0), next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0))",
-		"INSERT INTO store_meta SELECT singleton, json_version, next_media_id, next_job_id, next_activity_id FROM store_meta_v1",
-		"DROP TABLE store_meta_v1",
-		"CREATE TABLE favorites (media_id INTEGER PRIMARY KEY CHECK (media_id > 0), position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 8), FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE RESTRICT)",
-		"CREATE TABLE library_appearance (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), banner_content_type TEXT NOT NULL DEFAULT '' CHECK (banner_content_type IN ('', 'image/jpeg', 'image/png', 'image/webp', 'image/gif')), banner_data BLOB NOT NULL DEFAULT X'' CHECK (length(banner_data) <= 8388608), CHECK ((banner_content_type = '') = (length(banner_data) = 0)))",
-		"INSERT INTO library_appearance (singleton, banner_content_type, banner_data) VALUES (1, '', X'')",
-		"PRAGMA user_version = 2",
-	}
 	for _, statement := range statements {
 		if _, err := tx.Exec(statement); err != nil {
 			return fmt.Errorf("migrate SQLite schema: %w", err)
@@ -187,12 +209,6 @@ func migrateSQLiteSchema(path string) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit SQLite schema migration: %w", err)
-	}
-	if err := verifySQLiteIntegrity(db); err != nil {
-		return err
-	}
-	if err := syncFileParent(path); err != nil {
-		return err
 	}
 	return nil
 }
@@ -439,9 +455,13 @@ func insertSQLiteSnapshot(tx *sql.Tx, snapshot persistedStore) error {
 	if bannerData == nil {
 		bannerData = []byte{}
 	}
+	avatarData := snapshot.Appearance.AvatarData
+	if avatarData == nil {
+		avatarData = []byte{}
+	}
 	if _, err := tx.Exec(
-		"INSERT INTO library_appearance (singleton, banner_content_type, banner_data) VALUES (1, ?, ?)",
-		snapshot.Appearance.BannerContentType, bannerData,
+		"INSERT INTO library_appearance (singleton, banner_content_type, banner_data, avatar_content_type, avatar_data) VALUES (1, ?, ?, ?, ?)",
+		snapshot.Appearance.BannerContentType, bannerData, snapshot.Appearance.AvatarContentType, avatarData,
 	); err != nil {
 		return fmt.Errorf("write SQLite Library appearance: %w", err)
 	}
@@ -605,8 +625,8 @@ func readSQLiteFavorites(db *sql.DB) ([]int, error) {
 func readSQLiteAppearance(db *sql.DB) (libraryAppearance, error) {
 	var appearance libraryAppearance
 	if err := db.QueryRow(
-		"SELECT banner_content_type, banner_data FROM library_appearance WHERE singleton = 1",
-	).Scan(&appearance.BannerContentType, &appearance.BannerData); err != nil {
+		"SELECT banner_content_type, banner_data, avatar_content_type, avatar_data FROM library_appearance WHERE singleton = 1",
+	).Scan(&appearance.BannerContentType, &appearance.BannerData, &appearance.AvatarContentType, &appearance.AvatarData); err != nil {
 		return appearance, fmt.Errorf("read SQLite Library appearance: %w", err)
 	}
 	return appearance, nil

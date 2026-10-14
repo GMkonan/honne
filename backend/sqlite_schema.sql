@@ -5,7 +5,7 @@
 -- No cascading foreign keys: history and delete jobs can reference removed media.
 CREATE TABLE store_meta (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 7),
+  json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 8),
   next_media_id INTEGER NOT NULL CHECK (next_media_id > 0),
   next_job_id INTEGER NOT NULL CHECK (next_job_id > 0),
   next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0)
@@ -36,6 +36,9 @@ CREATE TABLE library_appearance (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   banner_content_type TEXT NOT NULL DEFAULT '' CHECK (banner_content_type IN ('', 'image/jpeg', 'image/png', 'image/webp', 'image/gif')),
   banner_data BLOB NOT NULL DEFAULT X'' CHECK (length(banner_data) <= 8388608),
-  CHECK ((banner_content_type = '') = (length(banner_data) = 0))
+  avatar_content_type TEXT NOT NULL DEFAULT '' CHECK (avatar_content_type IN ('', 'image/jpeg', 'image/png', 'image/webp', 'image/gif')),
+  avatar_data BLOB NOT NULL DEFAULT X'' CHECK (length(avatar_data) <= 4194304),
+  CHECK ((banner_content_type = '') = (length(banner_data) = 0)),
+  CHECK ((avatar_content_type = '') = (length(avatar_data) = 0))
 );
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;

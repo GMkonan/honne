@@ -63,6 +63,8 @@ erDiagram
         integer singleton PK
         text banner_content_type
         blob banner_data
+        text avatar_content_type
+        blob avatar_data
     }
 
     MEDIA ||--o| FAVORITES : "selected as"
@@ -79,7 +81,7 @@ erDiagram
 | `sync_jobs` | Durable AniList outbox, including jobs that may refer to a locally deleted item. |
 | `activities` | Retained local history. Historical rows may refer to deleted media, so they intentionally have no cascading foreign key. |
 | `favorites` | Manual order for at most nine existing Library entries. Position `0` is the first tile in the 3×3. |
-| `library_appearance` | Singleton local customization. The first version stores an optional JPEG, PNG, WebP, or GIF banner up to 8 MiB. |
+| `library_appearance` | Singleton local customization. Stores an optional banner up to 8 MiB and profile picture up to 4 MiB as validated JPEG, PNG, WebP, or GIF data. |
 
 `media`, `sync_jobs`, and `activities` keep validated JSON payloads in the first SQLite model. This preserves the established backup contract and avoids scattering provider-specific fields across many nullable columns before their query needs are proven.
 
@@ -115,8 +117,8 @@ A user-visible success is never returned before the SQLite commit. Library data,
 ```mermaid
 flowchart TD
     Input[Legacy or backup JSON] --> Limit[Enforce 32 MiB limit]
-    Limit --> Decode[Strict decode\nlegacy array or versions 1–7]
-    Decode --> Validate[Validate IDs, references, counters,\nfavorites, banner, and payloads]
+    Limit --> Decode[Strict decode\nlegacy array or versions 1–8]
+    Decode --> Validate[Validate IDs, references, counters,\nfavorites, banner, profile picture, and payloads]
     Validate --> Tx[Write new or replacement SQLite snapshot\nin one transaction]
     Tx --> Integrity[Integrity check and reopen]
     Integrity --> Ready[Use SQLite as operational source]
@@ -131,12 +133,12 @@ Startup migration creates `honne.db` only when it does not exist and never chang
 
 ```mermaid
 flowchart LR
-    SQLite[(SQLite snapshot)] --> Export[Version 7 JSON]
+    SQLite[(SQLite snapshot)] --> Export[Version 8 JSON]
     Export --> Media[Library]
     Export --> Activity[Activity]
     Export --> Outbox[AniList outbox]
     Export --> Counters[Monotonic counters]
     Export --> Favorites[Favorite order]
-    Export --> Appearance[Custom banner]
+    Export --> Appearance[Custom banner and profile picture]
     Secret[OAuth token] -. excluded .-> Export
 ```

@@ -487,11 +487,11 @@ func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(persisted), `"version": 7`) || !strings.Contains(string(persisted), `"playedOnPlatforms": []`) || !strings.Contains(string(persisted), `"catalogPlatforms": []`) {
+	if !strings.Contains(string(persisted), `"version": 8`) || !strings.Contains(string(persisted), `"playedOnPlatforms": []`) || !strings.Contains(string(persisted), `"catalogPlatforms": []`) {
 		t.Fatalf("v1 snapshot was not upgraded on write: %s", persisted)
 	}
 	if _, err := newStore(path); err != nil {
-		t.Fatalf("v6 snapshot did not reopen: %v", err)
+		t.Fatalf("current snapshot did not reopen: %v", err)
 	}
 
 	v2Path := filepath.Join(t.TempDir(), "media.json")
@@ -509,12 +509,12 @@ func TestLegacyMediaSnapshotLoadsWithoutExpandedMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	v2Persisted, err := os.ReadFile(v2Path)
-	if err != nil || !strings.Contains(string(v2Persisted), `"version": 7`) {
+	if err != nil || !strings.Contains(string(v2Persisted), `"version": 8`) {
 		t.Fatalf("v2 snapshot was not upgraded on write: data=%s err=%v", v2Persisted, err)
 	}
 }
 
-func TestVersionThreeSnapshotMigratesToVersionSix(t *testing.T) {
+func TestVersionThreeSnapshotMigratesToCurrentVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	if err := os.WriteFile(path, []byte(`{"version":3,"items":[{"id":1,"title":"Before games","type":"anime","status":"planned","progress":0,"total":0,"rating":0,"repeatCount":0,"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -527,12 +527,12 @@ func TestVersionThreeSnapshotMigratesToVersionSix(t *testing.T) {
 	err = store.persistLocked()
 	store.mu.Unlock()
 	data, readErr := os.ReadFile(path)
-	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 7`) || !strings.Contains(string(data), `"playedOnPlatforms": []`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
-		t.Fatalf("v3 snapshot was not rewritten as v6: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 8`) || !strings.Contains(string(data), `"playedOnPlatforms": []`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
+		t.Fatalf("v3 snapshot was not rewritten as the current version: data=%s persistErr=%v readErr=%v", data, err, readErr)
 	}
 }
 
-func TestVersionFourSnapshotMigratesToVersionSix(t *testing.T) {
+func TestVersionFourSnapshotMigratesToCurrentVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
 	if err := os.WriteFile(path, []byte(`{"version":4,"items":[{"id":1,"title":"Hades","type":"game","status":"in_progress","progress":0,"total":0,"rating":9,"repeatCount":1,"playtimeMinutes":90,"playedOnPlatforms":["PC"],"notes":"","coverUrl":"","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -545,8 +545,8 @@ func TestVersionFourSnapshotMigratesToVersionSix(t *testing.T) {
 	err = store.persistLocked()
 	store.mu.Unlock()
 	data, readErr := os.ReadFile(path)
-	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 7`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
-		t.Fatalf("v4 snapshot was not rewritten as v6: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 8`) || !strings.Contains(string(data), `"catalogPlatforms": []`) {
+		t.Fatalf("v4 snapshot was not rewritten as the current version: data=%s persistErr=%v readErr=%v", data, err, readErr)
 	}
 }
 
@@ -563,17 +563,17 @@ func TestVersionFiveSnapshotMigratesWithNoPlannedRepeat(t *testing.T) {
 	err = store.persistLocked()
 	store.mu.Unlock()
 	data, readErr := os.ReadFile(path)
-	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 7`) {
-		t.Fatalf("v5 snapshot was not rewritten as v6: data=%s persistErr=%v readErr=%v", data, err, readErr)
+	if err != nil || readErr != nil || !strings.Contains(string(data), `"version": 8`) {
+		t.Fatalf("v5 snapshot was not rewritten as the current version: data=%s persistErr=%v readErr=%v", data, err, readErr)
 	}
 }
 
 func TestNewStoreRejectsUnknownSnapshotVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "media.json")
-	if err := os.WriteFile(path, []byte(`{"version":8,"items":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"version":9,"items":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 8") {
+	if _, err := newStore(path); err == nil || !strings.Contains(err.Error(), "unsupported data file version 9") {
 		t.Fatalf("expected unsupported version error, got %v", err)
 	}
 }

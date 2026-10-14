@@ -16,9 +16,13 @@ func (a *app) getProfile(w http.ResponseWriter, _ *http.Request) {
 	if revision := a.store.bannerRevision(); revision != "" {
 		bannerURL = "/api/profile/banner?v=" + revision
 	}
+	avatarURL := a.config.ProfileAvatarURL
+	if revision := a.store.avatarRevision(); revision != "" {
+		avatarURL = "/api/profile/avatar?v=" + revision
+	}
 	writeJSON(w, http.StatusOK, publicProfile{
 		Name:       a.config.ProfileName,
-		AvatarURL:  a.config.ProfileAvatarURL,
+		AvatarURL:  avatarURL,
 		CatEnabled: a.config.ProfileCatEnabled,
 		BannerURL:  bannerURL,
 	})

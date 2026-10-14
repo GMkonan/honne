@@ -150,8 +150,19 @@ func decodeSQLiteImport(data []byte) (persistedStore, error) {
 		return snapshot, errors.New("migration banner content type and data must be provided together")
 	}
 	if len(snapshot.Appearance.BannerData) > 0 {
-		if !slices.Contains(allowedBannerTypes, snapshot.Appearance.BannerContentType) || http.DetectContentType(snapshot.Appearance.BannerData) != snapshot.Appearance.BannerContentType {
+		if !slices.Contains(allowedImageTypes, snapshot.Appearance.BannerContentType) || http.DetectContentType(snapshot.Appearance.BannerData) != snapshot.Appearance.BannerContentType {
 			return snapshot, errors.New("migration banner has an invalid image type")
+		}
+	}
+	if len(snapshot.Appearance.AvatarData) > maxAvatarBytes {
+		return snapshot, errors.New("migration profile picture exceeds 4 MiB")
+	}
+	if (snapshot.Appearance.AvatarContentType == "") != (len(snapshot.Appearance.AvatarData) == 0) {
+		return snapshot, errors.New("migration profile picture content type and data must be provided together")
+	}
+	if len(snapshot.Appearance.AvatarData) > 0 {
+		if !slices.Contains(allowedImageTypes, snapshot.Appearance.AvatarContentType) || http.DetectContentType(snapshot.Appearance.AvatarData) != snapshot.Appearance.AvatarContentType {
+			return snapshot, errors.New("migration profile picture has an invalid image type")
 		}
 	}
 	seenJobs := map[int64]bool{}

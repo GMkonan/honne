@@ -37,6 +37,8 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 		appearance: libraryAppearance{
 			BannerContentType: "image/png",
 			BannerData:        append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 24)...),
+			AvatarContentType: "image/png",
+			AvatarData:        append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 24)...),
 		},
 		nextID: 9, nextJobID: 10, nextActivityID: 12,
 	}
@@ -50,7 +52,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 	if response.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
 		response.Header().Get("Cache-Control") != "no-store" ||
 		response.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		response.Header().Get("X-Honne-Backup-Version") != "7" {
+		response.Header().Get("X-Honne-Backup-Version") != "8" {
 		t.Fatalf("unexpected backup headers: %v", response.Header())
 	}
 	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, `attachment; filename="honne-backup-`) || !strings.HasSuffix(disposition, `.json"`) {
@@ -74,6 +76,7 @@ func TestDownloadBackupProducesRestorableSnapshot(t *testing.T) {
 		len(restored.activities) != 1 || restored.activities[0].ID != 11 ||
 		len(restored.favoriteMediaIDs) != 2 || restored.favoriteMediaIDs[0] != 8 || restored.favoriteMediaIDs[1] != 7 ||
 		restored.appearance.BannerContentType != "image/png" || len(restored.appearance.BannerData) == 0 ||
+		restored.appearance.AvatarContentType != "image/png" || len(restored.appearance.AvatarData) == 0 ||
 		restored.nextID != 9 || restored.nextJobID != 10 || restored.nextActivityID != 12 {
 		t.Fatalf("restored backup lost durable state: %+v", restored)
 	}

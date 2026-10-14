@@ -51,6 +51,53 @@ func TestCustomBannerPersistsAndCanBeReset(t *testing.T) {
 	}
 }
 
+func TestCustomProfilePicturePersistsAndResetsWithoutChangingBanner(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	store := emptyStore(path)
+	banner := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 64)...)
+	store.appearance = libraryAppearance{BannerContentType: "image/png", BannerData: banner}
+	application := &app{store: store, config: config{ProfileAvatarURL: "https://images.example.com/fallback.png"}}
+	avatar := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{1}, 64)...)
+
+	request := httptest.NewRequest(http.MethodPut, "/api/profile/avatar", bytes.NewReader(avatar))
+	request.Header.Set("Content-Type", "image/png; charset=binary")
+	response := httptest.NewRecorder()
+	application.updateProfileAvatar(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("upload status = %d: %s", response.Code, response.Body.String())
+	}
+
+	profileResponse := httptest.NewRecorder()
+	application.getProfile(profileResponse, httptest.NewRequest(http.MethodGet, "/api/profile", nil))
+	if !strings.Contains(profileResponse.Body.String(), `"avatarUrl":"/api/profile/avatar?v=`) {
+		t.Fatalf("profile did not expose the custom picture: %s", profileResponse.Body.String())
+	}
+	avatarResponse := httptest.NewRecorder()
+	application.getProfileAvatar(avatarResponse, httptest.NewRequest(http.MethodGet, "/api/profile/avatar", nil))
+	if avatarResponse.Code != http.StatusOK || !bytes.Equal(avatarResponse.Body.Bytes(), avatar) {
+		t.Fatalf("unexpected profile picture response: %d", avatarResponse.Code)
+	}
+
+	reopened, err := newStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.appearance.AvatarContentType != "image/png" || !bytes.Equal(reopened.appearance.AvatarData, avatar) || !bytes.Equal(reopened.appearance.BannerData, banner) {
+		t.Fatal("profile picture was not durable or changed the banner")
+	}
+
+	resetResponse := httptest.NewRecorder()
+	application.resetProfileAvatar(resetResponse, httptest.NewRequest(http.MethodDelete, "/api/profile/avatar", nil))
+	if resetResponse.Code != http.StatusNoContent || len(store.appearance.AvatarData) != 0 || !bytes.Equal(store.appearance.BannerData, banner) {
+		t.Fatalf("profile picture reset failed: %d", resetResponse.Code)
+	}
+	fallbackResponse := httptest.NewRecorder()
+	application.getProfile(fallbackResponse, httptest.NewRequest(http.MethodGet, "/api/profile", nil))
+	if !strings.Contains(fallbackResponse.Body.String(), `"avatarUrl":"https://images.example.com/fallback.png"`) {
+		t.Fatalf("profile did not restore the configured fallback: %s", fallbackResponse.Body.String())
+	}
+}
+
 func TestCustomBannerRejectsMismatchedOrOversizedInput(t *testing.T) {
 	application := &app{store: emptyStore(filepath.Join(t.TempDir(), "media.json"))}
 
@@ -68,6 +115,14 @@ func TestCustomBannerRejectsMismatchedOrOversizedInput(t *testing.T) {
 	application.updateLibraryBanner(oversized, request)
 	if oversized.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized image status = %d", oversized.Code)
+	}
+
+	oversizedAvatar := httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPut, "/api/profile/avatar", bytes.NewReader(bytes.Repeat([]byte{0}, maxAvatarBytes+1)))
+	request.Header.Set("Content-Type", "image/png")
+	application.updateProfileAvatar(oversizedAvatar, request)
+	if oversizedAvatar.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized profile picture status = %d", oversizedAvatar.Code)
 	}
 }
 

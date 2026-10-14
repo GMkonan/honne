@@ -67,10 +67,13 @@ All application responses disable caching. When Basic Auth is configured, every 
 
 - `GET /api/health`: health check
 - `GET /api/auth/check`: reverse-proxy authentication check
-- `GET /api/profile`: public Library profile and current banner URL
+- `GET /api/profile`: public Library profile and current custom image URLs
 - `GET /api/profile/banner`: read the local custom banner
 - `PUT /api/profile/banner`: store a validated local image (JPEG, PNG, WebP, or GIF; maximum 8 MiB)
 - `DELETE /api/profile/banner`: restore the bundled default banner
+- `GET /api/profile/avatar`: read the local custom profile picture
+- `PUT /api/profile/avatar`: store a validated local image (JPEG, PNG, WebP, or GIF; maximum 4 MiB)
+- `DELETE /api/profile/avatar`: restore the configured or built-in profile picture
 - `GET /api/favorites`: read the ordered favorite media IDs
 - `PUT /api/favorites`: replace the ordered selection with up to nine Library IDs
 - `GET /api/media`: list the collection
