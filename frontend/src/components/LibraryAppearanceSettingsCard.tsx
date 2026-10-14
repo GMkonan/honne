@@ -116,7 +116,7 @@ export function LibraryAppearanceSettingsCard({
     }
   }
 
-  const displayedBanner = previewUrl || bannerUrl || "/banner-default.svg";
+  const displayedBanner = previewUrl || bannerUrl;
 
   return (
     <section className="settings-card appearance-settings-card">
@@ -133,19 +133,20 @@ export function LibraryAppearanceSettingsCard({
             {bannerUrl ? "Custom" : "Default"}
           </span>
         </div>
-        <div
-          className="banner-settings-preview"
-          style={{ backgroundImage: `url("${displayedBanner}")` }}
-          role="img"
-          aria-label={previewUrl
-            ? "Preview of the selected Library banner"
-            : bannerUrl
-            ? "Current custom Library banner"
-            : "Default Library banner"}
-        />
+        {displayedBanner && (
+          <div
+            className="banner-settings-preview"
+            style={{ backgroundImage: `url("${displayedBanner}")` }}
+            role="img"
+            aria-label={previewUrl
+              ? "Preview of the selected Library banner"
+              : "Current custom Library banner"}
+          />
+        )}
         <p className="settings-note">
-          JPEG, PNG, WebP, or GIF · up to 8 MiB. The image is stored locally,
-          included in JSON backups, and cropped responsively in the Library.
+          Recommended: 1920 × 520 px, with the focal point near the center.
+          JPEG, PNG, WebP, or GIF · up to 8 MiB. Stored locally, included in
+          JSON backups, and cropped responsively in the Library.
         </p>
         <div className="settings-actions banner-settings-actions">
           <label className="file-picker-button">

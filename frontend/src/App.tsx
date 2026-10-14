@@ -31,9 +31,10 @@ import {
   X,
 } from "lucide-react";
 import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
+import { FavoritesPage } from "./components/FavoritesPage.tsx";
 import { FavoritesSettingsCard } from "./components/FavoritesSettingsCard.tsx";
-import { FavoritesShowcase } from "./components/FavoritesShowcase.tsx";
 import { LibraryAppearanceSettingsCard } from "./components/LibraryAppearanceSettingsCard.tsx";
+import { ProfilePictureSettingsCard } from "./components/ProfilePictureSettingsCard.tsx";
 import {
   type CatalogContributor,
   catalogCoverStyle,
@@ -142,6 +143,7 @@ type LibrarySort = "recent" | "added" | "title" | "rating";
 type LibraryStatusFilter = MediaStatus | "planned_repeat";
 type AppView =
   | "library"
+  | "favorites"
   | "activity"
   | "monthly_log"
   | "settings"
@@ -546,6 +548,7 @@ function searchHash(query: string, scope: SearchScope): string {
 function routeFromHash(): AppView {
   const hash = globalThis.location.hash;
   if (hash === "#activity") return "activity";
+  if (hash === "#favorites") return "favorites";
   if (["#monthly-log", "#highlights", "#recap"].includes(hash)) {
     return "monthly_log";
   }
@@ -867,7 +870,7 @@ function App() {
       : storedExternalDetail();
   });
   const [detailOrigin, setDetailOrigin] = useState<
-    "library" | "activity" | "search"
+    "library" | "favorites" | "activity" | "search"
   >("library");
   const [globalQuery, setGlobalQuery] = useState(
     () => searchFromHash().query,
@@ -1230,8 +1233,9 @@ function App() {
   }
 
   function rememberDetailOrigin() {
-    if (view === "activity" || view === "search") setDetailOrigin(view);
-    else if (view !== "detail") setDetailOrigin("library");
+    if (view === "favorites" || view === "activity" || view === "search") {
+      setDetailOrigin(view);
+    } else if (view !== "detail") setDetailOrigin("library");
   }
 
   function openLocalDetail(mediaId: number) {
@@ -1367,6 +1371,21 @@ function App() {
     await refreshProfile();
   }
 
+  async function uploadProfilePicture(file: File, signal: AbortSignal) {
+    await request<{ revision: string }>("/api/profile/avatar", {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+      signal,
+    });
+    await refreshProfile();
+  }
+
+  async function resetProfilePicture(signal: AbortSignal) {
+    await request<null>("/api/profile/avatar", { method: "DELETE", signal });
+    await refreshProfile();
+  }
+
   async function saveFavorites(mediaIds: number[]) {
     const response = await request<FavoritesResponse>("/api/favorites", {
       method: "PUT",
@@ -1441,6 +1460,8 @@ function App() {
   const pageUsesRawg =
     catalogSuggestionResults.some((result) => result.provider === "rawg") ||
     (view === "library" && filtered.some((item) => item.provider === "rawg")) ||
+    (view === "favorites" &&
+      favoriteItems.some((item) => item.provider === "rawg")) ||
     (view === "search" &&
       catalogSearchResults.some((result) => result.provider === "rawg")) ||
     (view === "detail" && detailUsesRawg) ||
@@ -1627,11 +1648,13 @@ function App() {
             aria-label="Primary navigation"
           >
             <a
-              className={view === "library" || view === "monthly_log"
+              className={view === "library" || view === "favorites" ||
+                  view === "monthly_log"
                 ? "active"
                 : ""}
               href="#library"
-              aria-current={view === "library" || view === "monthly_log"
+              aria-current={view === "library" || view === "favorites" ||
+                  view === "monthly_log"
                 ? "page"
                 : undefined}
               onClick={() => setMenuOpen(false)}
@@ -1718,7 +1741,8 @@ function App() {
         </div>
       </header>
 
-      {(view === "library" || view === "monthly_log") && (
+      {(view === "library" || view === "favorites" ||
+        view === "monthly_log") && (
         <LibraryHero
           profile={profile}
           profileLoading={profileLoading}
@@ -1732,10 +1756,6 @@ function App() {
         <>
           <main className="page-container content" id="filters">
             <LibrarySectionNav active="collection" />
-            <FavoritesShowcase
-              items={favoriteItems}
-              onOpen={openLocalDetail}
-            />
             <section className="filter-section" aria-label="Media type filters">
               <div className="filter-surface">
                 <div className="filter-group format-filter">
@@ -1956,6 +1976,10 @@ function App() {
         </>
       )}
 
+      {view === "favorites" && (
+        <FavoritesPage items={favoriteItems} onOpen={openLocalDetail} />
+      )}
+
       {view === "activity" && (
         <ActivityPage
           activities={activities}
@@ -1986,6 +2010,8 @@ function App() {
           onImportAniList={() => setImportOpen(true)}
           onUploadBanner={uploadLibraryBanner}
           onResetBanner={resetLibraryBanner}
+          onUploadProfilePicture={uploadProfilePicture}
+          onResetProfilePicture={resetProfilePicture}
           onSaveFavorites={saveFavorites}
           onBackupRestored={refreshAfterBackupRestore}
         />
@@ -2228,6 +2254,8 @@ function SettingsPage(
     onImportAniList,
     onUploadBanner,
     onResetBanner,
+    onUploadProfilePicture,
+    onResetProfilePicture,
     onSaveFavorites,
     onBackupRestored,
   }: {
@@ -2239,6 +2267,8 @@ function SettingsPage(
     onImportAniList: () => void;
     onUploadBanner: (file: File, signal: AbortSignal) => Promise<void>;
     onResetBanner: (signal: AbortSignal) => Promise<void>;
+    onUploadProfilePicture: (file: File, signal: AbortSignal) => Promise<void>;
+    onResetProfilePicture: (signal: AbortSignal) => Promise<void>;
     onSaveFavorites: (mediaIds: number[]) => Promise<void>;
     onBackupRestored: () => Promise<void>;
   },
@@ -2253,6 +2283,12 @@ function SettingsPage(
           your data.
         </p>
       </header>
+      <ProfilePictureSettingsCard
+        avatarUrl={profile.avatarUrl}
+        profileName={profile.name}
+        onUpload={onUploadProfilePicture}
+        onReset={onResetProfilePicture}
+      />
       <LibraryAppearanceSettingsCard
         bannerUrl={profile.bannerUrl}
         onUpload={onUploadBanner}

@@ -581,8 +581,41 @@ button {
 .library-section-nav a.active::after {
   transform: scaleX(1);
 }
+.favorites-page {
+  padding-top: 34px;
+}
 .favorites-showcase {
   margin-bottom: 38px;
+}
+.favorites-empty {
+  min-height: 300px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  padding: 32px;
+  border: 1px solid var(--surface);
+  color: var(--overlay);
+  background: var(--mantle);
+  text-align: center;
+}
+.favorites-empty > svg {
+  color: var(--red);
+}
+.favorites-empty h2 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 21px;
+}
+.favorites-empty p {
+  max-width: 460px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.favorites-empty .primary-button {
+  margin-top: 4px;
+  text-decoration: none;
 }
 .favorites-showcase > header {
   display: flex;
@@ -2024,6 +2057,36 @@ button {
 }
 .settings-feedback.error {
   color: var(--red) !important;
+}
+.profile-picture-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 17px;
+}
+.profile-picture-settings-row .settings-note {
+  max-width: 520px;
+  margin-top: 0 !important;
+}
+.profile-picture-settings-preview {
+  width: 88px;
+  height: 88px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 3px solid rgba(205,214,244,.35);
+  border-radius: 50%;
+  color: var(--crust);
+  background: var(--blue);
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+}
+.profile-picture-settings-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .banner-settings-preview {
   min-height: 190px;
@@ -4508,10 +4571,15 @@ button {
     flex-direction: column;
     gap: 10px;
   }
+  .profile-picture-settings-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
   .banner-settings-preview {
     min-height: 140px;
   }
   .banner-settings-actions,
+  .profile-picture-settings-actions,
   .favorite-picker {
     align-items: stretch;
     grid-template-columns: 1fr;

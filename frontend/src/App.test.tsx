@@ -494,12 +494,76 @@ describe("Library characterization", () => {
       "library.png",
       { type: "image/png" },
     );
-    await user.upload(await screen.findByLabelText(/Choose image/u), file);
-    await user.click(screen.getByRole("button", { name: "Use banner" }));
+    const bannerCard = (await screen.findByRole("heading", {
+      name: "Library banner",
+    })).closest("section");
+    if (!bannerCard) throw new Error("Library banner settings card not found");
+    expect(within(bannerCard).queryByRole("img")).toBeNull();
+    expect(within(bannerCard).getByText(/1920 × 520 px/u)).not.toBeNull();
+    await user.upload(within(bannerCard).getByLabelText(/Choose image/u), file);
+    await user.click(
+      within(bannerCard).getByRole("button", { name: "Use banner" }),
+    );
 
     expect(await screen.findByText("Custom Library banner saved.")).not
       .toBeNull();
     expect(screen.getByText("Custom")).not.toBeNull();
+  });
+
+  it("uploads and applies a custom profile picture from Settings", async () => {
+    globalThis.history.replaceState(null, "", "/#settings");
+    const router = createFetchRouter();
+    let profileRequests = 0;
+    bootstrap(router);
+    router
+      .json("GET", "/api/profile", () => {
+        profileRequests++;
+        return Response.json({
+          name: "My Library",
+          avatarUrl: profileRequests > 1 ? "/api/profile/avatar?v=custom" : "",
+          catEnabled: false,
+          bannerUrl: "",
+        });
+      })
+      .json("PUT", "/api/profile/avatar", async (request: Request) => {
+        expect(request.headers.get("Content-Type")).toBe("image/png");
+        expect((await request.arrayBuffer()).byteLength).toBeGreaterThan(8);
+        return Response.json({ revision: "custom" });
+      });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:avatar-preview"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const file = new File(
+      [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0])],
+      "profile.png",
+      { type: "image/png" },
+    );
+    const profileCard = (await screen.findByRole("heading", {
+      name: "Profile picture",
+    })).closest("section");
+    if (!profileCard) {
+      throw new Error("Profile picture settings card not found");
+    }
+    await user.upload(
+      within(profileCard).getByLabelText(/Choose image/u),
+      file,
+    );
+    await user.click(
+      within(profileCard).getByRole("button", { name: "Use picture" }),
+    );
+
+    expect(await screen.findByText("Profile picture saved.")).not.toBeNull();
+    expect(
+      within(profileCard).getByText("Custom", { selector: "span" }),
+    ).not.toBeNull();
   });
 
   it("curates ordered favorites and shows the 3 by 3 collection", async () => {
@@ -515,11 +579,13 @@ describe("Library characterization", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    await user.click(await screen.findByRole("link", { name: "Favorites" }));
     expect(
       await screen.findByRole("button", {
         name: "Open favorite 1: Dune",
       }),
     ).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Monthly Log" })).not.toBeNull();
     globalThis.history.replaceState(null, "", "/#settings");
     globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
     const moveEarlier = await screen.findByRole("button", {
