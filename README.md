@@ -24,6 +24,7 @@ Honne brings anime, series, movies, books, manga, light novels, and games into o
 - Plan a rewatch, reread, replay, or revisit without changing a completed title's status.
 - Search and filter the whole collection or focus on one media type.
 - Review a local Activity history of additions, progress, ratings, completions, and revisits.
+- Curate an ordered, private 3×3 of favorites and download it as a PNG generated in your browser.
 
 ## Rich context, optional catalogs
 
@@ -52,7 +53,7 @@ Monthly Log turns the previous month's completed and revisited titles into a pri
 - Stores Library state and the AniList outbox transactionally in embedded SQLite.
 - Keeps the Library usable when optional catalog providers are unavailable.
 - Provides portable JSON backups for the collection, Activity, counters, and synchronization queue.
-- Sends no analytics, telemetry, collection data, or generated Monthly Log images to third parties by default.
+- Sends no analytics, telemetry, collection data, or generated Monthly Log and favorites images to third parties by default.
 - Supports optional Basic Auth for deployments outside a trusted private network.
 
 ## Quick start

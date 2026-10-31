@@ -587,6 +587,38 @@ button {
 .favorites-showcase {
   margin-bottom: 38px;
 }
+.favorites-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin-bottom: 24px;
+}
+.favorites-export button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.favorites-export button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+.favorites-export p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.favorites-export [role="status"],
+.favorites-export [role="alert"] {
+  flex-basis: 100%;
+}
+.favorites-export [role="alert"] {
+  color: var(--red);
+}
 .favorites-empty {
   min-height: 300px;
   display: grid;

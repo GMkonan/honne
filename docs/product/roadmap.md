@@ -22,12 +22,13 @@ The initial local implementation supports:
 - manual selection of up to nine Library titles;
 - manual ordering across mixed media types;
 - a private 3×3 composition on a stable `#favorites` Library tab beside Monthly Log;
+- a locally generated PNG preserving favorite order, with title fallbacks for unavailable covers and empty positions for partial grids;
 - transactional persistence, JSON backup/restore, deletion cleanup, and rollback.
 
 Next refinements:
 
 - visually tune cover cropping, empty slots, spacing, and mobile presentation with real artwork;
-- add an optional locally generated share image without requiring public publishing;
+- visually validate the generated PNG with full/partial grids, mixed artwork, long titles, and unavailable covers;
 - keep favorites separate from Monthly Log history and any future public profile.
 
 ## 3. Validate Library personalization

@@ -3,6 +3,7 @@ import {
   type MonthlyLogMediaType,
   type MonthlyLogSummary,
 } from "../monthlyLogModel.ts";
+import { loadExportCover as loadCover } from "./exportCover.ts";
 
 interface MonthlyLogImageOptions {
   summary: MonthlyLogSummary;
@@ -11,7 +12,6 @@ interface MonthlyLogImageOptions {
 
 const width = 1080;
 const height = 1350;
-const maxCoverBytes = 5 * 1024 * 1024;
 const palette = {
   crust: "#11111b",
   mantle: "#181825",
@@ -41,48 +41,6 @@ export function monthlyLogFilename(
   const month = String(startsAt.getMonth() + 1).padStart(2, "0");
   const scope = mediaType === "all" ? "" : `-${mediaType.replace("_", "-")}`;
   return `honne-monthly-log-${year}-${month}${scope}.png`;
-}
-
-async function loadCover(url: string): Promise<HTMLImageElement | null> {
-  if (!url) return null;
-  const sources: Array<{ url: string; credentials: RequestCredentials }> = [
-    {
-      url: `/api/images/cover?url=${encodeURIComponent(url)}`,
-      credentials: "same-origin",
-    },
-    { url, credentials: "omit" },
-  ];
-  for (const source of sources) {
-    try {
-      const response = await fetch(source.url, {
-        credentials: source.credentials,
-        mode: "cors",
-      });
-      const declaredSize = Number(response.headers.get("Content-Length") || 0);
-      if (!response.ok || declaredSize > maxCoverBytes) continue;
-      const blob = await response.blob();
-      if (!blob.type.startsWith("image/") || blob.size > maxCoverBytes) {
-        continue;
-      }
-      const objectURL = URL.createObjectURL(blob);
-      try {
-        const image = new Image();
-        image.decoding = "async";
-        image.src = objectURL;
-        await image.decode();
-        if (
-          image.naturalWidth < 1 || image.naturalHeight < 1 ||
-          image.naturalWidth > 10_000 || image.naturalHeight > 10_000
-        ) continue;
-        return image;
-      } finally {
-        URL.revokeObjectURL(objectURL);
-      }
-    } catch {
-      // Try the original URL when a configured provider proxy cannot serve it.
-    }
-  }
-  return null;
 }
 
 function drawCover(
