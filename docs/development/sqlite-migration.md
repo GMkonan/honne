@@ -44,12 +44,16 @@ The HTTP server owns explicit read/header/write/idle timeouts. On `SIGINT` or `S
 - **In-app restore:** Settings uploads the raw JSON to `POST /api/backup/preview`, shows validated counts, then sends the confirmed file to `POST /api/backup/restore`. Restore requires an explicit confirmation header and a disconnected AniList integration. The 32 MiB bounded input is decoded strictly, any in-flight AniList worker pass is joined, and Library, Activity, counters, favorites, appearance, and outbox are then replaced in one SQLite transaction, with in-memory rollback on persistence failure.
 - **Operational backup:** stop the backend before copying `/data`; the directory contains `honne.db`, the frozen legacy source when upgraded, and the separate AniList authorization file.
 - **Volume restore:** stop the backend, preserve `/data`, remove or move the current `honne.db`, place the downloaded snapshot at `/data/media.json`, and start the current backend. It imports that snapshot into a new database.
-- **Rollback to a JSON-only binary:** while the SQLite version is still available, download a fresh portable backup. Stop the backend, preserve `/data`, place that latest export at `/data/media.json`, then start the older binary. Restoring only the frozen migration source loses every post-migration write.
+- **Rollback to a JSON-only binary:** while the SQLite version is still available, download a fresh portable backup to preserve the latest state. The export uses JSON version 8 and is readable only by a binary supporting that contract; the retained JSON writer in the current source is not proof that a published older binary supports it. For an incompatible older binary, restore its matching pre-update backup or stopped-volume copy. Stop the backend and preserve `/data` before changing storage or images. Returning to a pre-update backup does not preserve subsequent writes in the running collection; keep the fresh export as their recovery artifact. Do not drop favorites or images to manufacture an older format.
 
 Pending remote jobs remain account-bound. Never run two backend instances against the same volume, and never rehearse migration with real provider calls enabled.
 
 ## Automated evidence
 
 Synthetic tests cover import and logical JSON round-trip, immutable sources, fresh databases, runtime write/restart, current-state backup, in-app preview and restore, confirmation and disconnected-account gates, destination exclusivity, invalid counters and corruption, failed transaction atomicity, close behavior, worker persistence rollback, and graceful cancellation. The complete release gate remains Go format/vet/race tests, frontend format/lint/typecheck/tests/build, Compose validation, a CGO-disabled backend build, and Docker image construction.
+
+See [the 2026-10-31 validation report](sqlite-validation-2026-10-31.md) for the
+executed checks, isolated container rehearsal, recovery-documentation correction,
+and outstanding visual validation gate.
 
 No owner data is migrated by these source changes alone. A push, release, deployment, or restart of the real installation remains a separate authorized action.

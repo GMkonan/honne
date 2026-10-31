@@ -92,6 +92,7 @@ Use **Settings → Download backup** for a coherent JSON snapshot containing:
 - the collection and catalog metadata;
 - activity history;
 - pending AniList synchronization jobs;
+- ordered favorites, the custom Library banner, and the profile picture;
 - persisted ID counters.
 
 The download intentionally excludes the AniList OAuth token. Reconnect AniList after restoring into a fresh installation.
@@ -159,9 +160,11 @@ After the containers are healthy, reload every open Honne tab so it uses the fro
 
 ### Roll back from a SQLite release
 
-Before switching to a JSON-only backend, use **Settings → Download backup** to export the latest SQLite state. The unchanged `/data/media.json` from the original migration does not contain post-migration writes. Stop the backend, preserve the complete data directory, move `honne.db` aside, restore the latest download as `/data/media.json`, and only then start the older image. Pending AniList jobs in the export remain account-bound.
+Before switching to a JSON-only backend, use **Settings → Download backup** to preserve the latest SQLite state. The unchanged `/data/media.json` from the original migration does not contain post-migration writes. The current export uses JSON version 8: it can only be restored by a binary that explicitly supports that version. A `.json` extension does not make it compatible with an older release.
 
-For a rollback to v0.2.0 or newer, download the Compose asset from the exact previous tag:
+For an older binary that cannot read JSON version 8, use its matching pre-update backup or stopped-volume copy instead. This returns the collection to that recovery point; post-update changes remain only in the current backup and are not automatically converted. Stop the backend, preserve the complete data directory, move `honne.db` aside, restore the compatible snapshot as `/data/media.json`, and only then start the older image. Pending AniList jobs remain account-bound.
+
+After restoring data compatible with the target version, download the Compose asset from that exact tag. The following commands only switch images; they do not restore or convert data:
 
 ```bash
 ROLLBACK_VERSION=v0.2.0
