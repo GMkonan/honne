@@ -215,7 +215,7 @@ func TestSQLiteMigrationRejectsUnsafeDestinationsAndCleansFailures(t *testing.T)
 	}
 
 	invalidDestination := filepath.Join(dir, "invalid.db")
-	if err := os.WriteFile(source, []byte(`{"version":9}`), 0o600); err != nil {
+	if err := os.WriteFile(source, []byte(`{"version":10}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := migrateJSONToSQLite(source, invalidDestination); err == nil {

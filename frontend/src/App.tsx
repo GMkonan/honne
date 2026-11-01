@@ -31,8 +31,7 @@ import {
   X,
 } from "lucide-react";
 import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
-import { FavoritesPage } from "./components/FavoritesPage.tsx";
-import { FavoritesSettingsCard } from "./components/FavoritesSettingsCard.tsx";
+import { FavoritesPanel } from "./components/FavoritesPanel.tsx";
 import { LibraryAppearanceSettingsCard } from "./components/LibraryAppearanceSettingsCard.tsx";
 import { ProfilePictureSettingsCard } from "./components/ProfilePictureSettingsCard.tsx";
 import {
@@ -959,17 +958,16 @@ function App() {
     bannerUrl: "",
   });
   const [favoriteMediaIds, setFavoriteMediaIds] = useState<number[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
+  const [favoritesError, setFavoritesError] = useState("");
+  const [favoritesGeneration, setFavoritesGeneration] = useState(0);
   const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      request<PublicProfile>("/api/profile"),
-      request<FavoritesResponse>("/api/favorites"),
-    ]).then(([publicProfile, favorites]) => {
+    void request<PublicProfile>("/api/profile").then((publicProfile) => {
       if (active) {
         setProfile(publicProfile);
-        setFavoriteMediaIds(favorites.mediaIds);
       }
     }).catch((caught: unknown) => {
       if (active) setError(`Library customization: ${errorMessage(caught)}`);
@@ -1005,6 +1003,21 @@ function App() {
       clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setFavoritesLoading(true);
+    setFavoritesError("");
+    request<FavoritesResponse>("/api/favorites", { signal: controller.signal })
+      .then((favorites) => {
+        if (!controller.signal.aborted) setFavoriteMediaIds(favorites.mediaIds);
+      }).catch((caught: unknown) => {
+        if (!controller.signal.aborted) setFavoritesError(errorMessage(caught));
+      }).finally(() => {
+        if (!controller.signal.aborted) setFavoritesLoading(false);
+      });
+    return () => controller.abort();
+  }, [favoritesGeneration, view]);
 
   useEffect(() => {
     if (view !== "monthly_log") return;
@@ -1386,12 +1399,13 @@ function App() {
     await refreshProfile();
   }
 
-  async function saveFavorites(mediaIds: number[]) {
+  async function saveFavorites(mediaIds: number[], signal: AbortSignal) {
     const response = await request<FavoritesResponse>("/api/favorites", {
       method: "PUT",
       body: JSON.stringify({ mediaIds }),
+      signal,
     });
-    setFavoriteMediaIds(response.mediaIds);
+    if (!signal.aborted) setFavoriteMediaIds(response.mediaIds);
   }
 
   async function refreshAfterBackupRestore() {
@@ -1459,9 +1473,10 @@ function App() {
     : false;
   const pageUsesRawg =
     catalogSuggestionResults.some((result) => result.provider === "rawg") ||
-    (view === "library" && filtered.some((item) => item.provider === "rawg")) ||
-    (view === "favorites" &&
-      favoriteItems.some((item) => item.provider === "rawg")) ||
+    ((view === "library" || view === "favorites") &&
+      [...filtered, ...favoriteItems].some((item) =>
+        item.provider === "rawg"
+      )) ||
     (view === "search" &&
       catalogSearchResults.some((result) => result.provider === "rawg")) ||
     (view === "detail" && detailUsesRawg) ||
@@ -1752,7 +1767,7 @@ function App() {
         />
       )}
 
-      {view === "library" && (
+      {(view === "library" || view === "favorites") && (
         <>
           <main className="page-container content" id="filters">
             <LibrarySectionNav active="collection" />
@@ -1921,63 +1936,74 @@ function App() {
                   )}
               </section>
 
-              <aside className="library-panel" aria-label="Status filters">
-                <div className="panel-title">
-                  <span>Status</span>
-                  <strong>{statusScope.length}</strong>
-                </div>
-                <div className="status-list">
-                  <button
-                    type="button"
-                    aria-pressed={activeStatus === "all"}
-                    className={`all ${activeStatus === "all" ? "active" : ""}`}
-                    onClick={() => setActiveStatus("all")}
-                  >
-                    <span>All titles</span>
+              <div className="library-sidebar">
+                <aside className="library-panel" aria-label="Status filters">
+                  <div className="panel-title">
+                    <span>Status</span>
                     <strong>{statusScope.length}</strong>
-                  </button>
-                  {statusOptions.map((status) => (
+                  </div>
+                  <div className="status-list">
                     <button
                       type="button"
-                      aria-pressed={activeStatus === status.value}
-                      className={`${status.value} ${
-                        activeStatus === status.value ? "active" : ""
+                      aria-pressed={activeStatus === "all"}
+                      className={`all ${
+                        activeStatus === "all" ? "active" : ""
                       }`}
-                      onClick={() => setActiveStatus(status.value)}
-                      key={status.value}
+                      onClick={() => setActiveStatus("all")}
                     >
-                      <span>
-                        {mediaStatusLabel(status.value, activeType)}
-                      </span>
+                      <span>All titles</span>
+                      <strong>{statusScope.length}</strong>
+                    </button>
+                    {statusOptions.map((status) => (
+                      <button
+                        type="button"
+                        aria-pressed={activeStatus === status.value}
+                        className={`${status.value} ${
+                          activeStatus === status.value ? "active" : ""
+                        }`}
+                        onClick={() => setActiveStatus(status.value)}
+                        key={status.value}
+                      >
+                        <span>
+                          {mediaStatusLabel(status.value, activeType)}
+                        </span>
+                        <strong>
+                          {statusScope.filter((item) =>
+                            item.status === status.value
+                          ).length}
+                        </strong>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      aria-pressed={activeStatus === "planned_repeat"}
+                      className={`planned-repeat ${
+                        activeStatus === "planned_repeat" ? "active" : ""
+                      }`}
+                      onClick={() => setActiveStatus("planned_repeat")}
+                    >
+                      <span>{plannedRepeatLabel(activeType)}</span>
                       <strong>
-                        {statusScope.filter((item) =>
-                          item.status === status.value
-                        ).length}
+                        {statusScope.filter((item) => item.plannedRepeat)
+                          .length}
                       </strong>
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    aria-pressed={activeStatus === "planned_repeat"}
-                    className={`planned-repeat ${
-                      activeStatus === "planned_repeat" ? "active" : ""
-                    }`}
-                    onClick={() => setActiveStatus("planned_repeat")}
-                  >
-                    <span>{plannedRepeatLabel(activeType)}</span>
-                    <strong>
-                      {statusScope.filter((item) => item.plannedRepeat).length}
-                    </strong>
-                  </button>
-                </div>
-              </aside>
+                  </div>
+                </aside>
+                <FavoritesPanel
+                  items={items}
+                  favoriteMediaIds={favoriteMediaIds}
+                  loading={loading || favoritesLoading}
+                  error={favoritesError}
+                  onRetry={() =>
+                    setFavoritesGeneration((current) => current + 1)}
+                  onSave={saveFavorites}
+                  onOpen={openLocalDetail}
+                />
+              </div>
             </div>
           </main>
         </>
-      )}
-
-      {view === "favorites" && (
-        <FavoritesPage items={favoriteItems} onOpen={openLocalDetail} />
       )}
 
       {view === "activity" && (
@@ -2004,15 +2030,12 @@ function App() {
         <SettingsPage
           status={anilistStatus}
           profile={profile}
-          items={items}
-          favoriteMediaIds={favoriteMediaIds}
           onManageAniList={() => setIntegrationOpen(true)}
           onImportAniList={() => setImportOpen(true)}
           onUploadBanner={uploadLibraryBanner}
           onResetBanner={resetLibraryBanner}
           onUploadProfilePicture={uploadProfilePicture}
           onResetProfilePicture={resetProfilePicture}
-          onSaveFavorites={saveFavorites}
           onBackupRestored={refreshAfterBackupRestore}
         />
       )}
@@ -2248,28 +2271,22 @@ function SettingsPage(
   {
     status,
     profile,
-    items,
-    favoriteMediaIds,
     onManageAniList,
     onImportAniList,
     onUploadBanner,
     onResetBanner,
     onUploadProfilePicture,
     onResetProfilePicture,
-    onSaveFavorites,
     onBackupRestored,
   }: {
     status: AniListIntegrationStatus | null;
     profile: PublicProfile;
-    items: Media[];
-    favoriteMediaIds: number[];
     onManageAniList: () => void;
     onImportAniList: () => void;
     onUploadBanner: (file: File, signal: AbortSignal) => Promise<void>;
     onResetBanner: (signal: AbortSignal) => Promise<void>;
     onUploadProfilePicture: (file: File, signal: AbortSignal) => Promise<void>;
     onResetProfilePicture: (signal: AbortSignal) => Promise<void>;
-    onSaveFavorites: (mediaIds: number[]) => Promise<void>;
     onBackupRestored: () => Promise<void>;
   },
 ) {
@@ -2293,11 +2310,6 @@ function SettingsPage(
         bannerUrl={profile.bannerUrl}
         onUpload={onUploadBanner}
         onReset={onResetBanner}
-      />
-      <FavoritesSettingsCard
-        items={items}
-        favoriteMediaIds={favoriteMediaIds}
-        onSave={onSaveFavorites}
       />
       <section className="settings-card">
         <div className="settings-card-icon">

@@ -1,11 +1,14 @@
 import { loadExportCover } from "./exportCover.ts";
+import type { TrackingMediaType } from "../mediaTracking.ts";
 
 interface FavoriteImageItem {
   title: string;
   coverUrl: string;
 }
 
-export const favoritesImageFilename = "honne-favorites-3x3.png";
+export function favoritesImageFilename(mediaType: TrackingMediaType): string {
+  return `honne-favorites-${mediaType}-3x3.png`;
+}
 
 function drawTitle(
   context: CanvasRenderingContext2D,
@@ -37,6 +40,7 @@ function drawTitle(
 export async function createFavoritesImage(
   items: readonly FavoriteImageItem[],
   signal: AbortSignal,
+  category?: string,
 ): Promise<{ blob: Blob; missingCovers: number }> {
   signal.throwIfAborted();
   if (items.length < 1 || items.length > 9) {
@@ -63,7 +67,7 @@ export async function createFavoritesImage(
   context.fillText("HANDPICKED", 54, 36);
   context.fillStyle = "#cdd6f4";
   context.font = "700 44px 'Zen Kaku Gothic New', sans-serif";
-  context.fillText("Favorites", 54, 65);
+  context.fillText(category ? `${category} favorites` : "Favorites", 54, 65);
 
   for (let index = 0; index < 9; index++) {
     const x = 54 + (index % 3) * 328;

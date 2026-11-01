@@ -17,7 +17,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 3
+const sqliteSchemaVersion = 4
 
 // openRuntimeStore opens the operational SQLite store. On the first start it
 // migrates a non-empty legacy JSON snapshot without changing that source. A
@@ -186,6 +186,22 @@ func migrateSQLiteSchema(path string) error {
 			"ALTER TABLE library_appearance ADD COLUMN avatar_content_type TEXT NOT NULL DEFAULT '' CHECK (avatar_content_type IN ('', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'))",
 			"ALTER TABLE library_appearance ADD COLUMN avatar_data BLOB NOT NULL DEFAULT X'' CHECK (length(avatar_data) <= 4194304)",
 			"PRAGMA user_version = 3",
+		}); err != nil {
+			return err
+		}
+		version = 3
+	}
+	if version == 3 {
+		if err := applySQLiteMigration(db, []string{
+			"ALTER TABLE store_meta RENAME TO store_meta_v3",
+			"CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 9), next_media_id INTEGER NOT NULL CHECK (next_media_id > 0), next_job_id INTEGER NOT NULL CHECK (next_job_id > 0), next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0))",
+			"INSERT INTO store_meta SELECT singleton, json_version, next_media_id, next_job_id, next_activity_id FROM store_meta_v3",
+			"DROP TABLE store_meta_v3",
+			"ALTER TABLE favorites RENAME TO favorites_v3",
+			"CREATE TABLE favorites (media_id INTEGER PRIMARY KEY CHECK (media_id > 0), position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 62), FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE RESTRICT)",
+			"INSERT INTO favorites SELECT media_id, position FROM favorites_v3",
+			"DROP TABLE favorites_v3",
+			"PRAGMA user_version = 4",
 		}); err != nil {
 			return err
 		}

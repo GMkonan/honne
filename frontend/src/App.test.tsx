@@ -566,28 +566,41 @@ describe("Library characterization", () => {
     ).not.toBeNull();
   });
 
-  it("curates ordered favorites and shows the 3 by 3 collection", async () => {
+  it("curates favorites beside the collection, with independent category order", async () => {
     const router = createFetchRouter();
-    bootstrap(router);
+    bootstrap(router, [...mediaItems, {
+      ...mediaItems[0],
+      id: 4,
+      title: "Akira",
+    }]);
     router
-      .json("GET", "/api/favorites", { mediaIds: [2, 1] })
+      .json("GET", "/api/favorites", { mediaIds: [2, 4, 1] })
       .json("PUT", "/api/favorites", async (request: Request) => {
         const body = await request.json() as { mediaIds: number[] };
-        expect(body.mediaIds).toEqual([1, 2]);
+        expect(body.mediaIds).toEqual([2, 1, 4]);
         return Response.json(body);
       });
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("link", { name: "Favorites" }));
+    const favorites = await screen.findByRole("complementary", {
+      name: "Favorites",
+    });
+    expect(screen.getByRole("heading", { name: "Your collection" })).not
+      .toBeNull();
     expect(
-      await screen.findByRole("button", {
+      await within(favorites).findByRole("button", {
         name: "Open favorite 1: Dune",
       }),
     ).not.toBeNull();
     expect(screen.getByRole("link", { name: "Monthly Log" })).not.toBeNull();
-    globalThis.history.replaceState(null, "", "/#settings");
-    globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(screen.queryByRole("link", { name: "Favorites" })).toBeNull();
+    await user.click(
+      within(favorites).getByRole("button", { name: "Edit favorites" }),
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole("combobox", { name: "Favorite media type" }),
+    );
     const moveEarlier = await screen.findByRole("button", {
       name: "Move Cowboy Bebop earlier",
     });
@@ -595,6 +608,100 @@ describe("Library characterization", () => {
     await user.click(screen.getByRole("button", { name: "Save favorites" }));
     expect(await screen.findByText("Favorites saved in this order.")).not
       .toBeNull();
+    const anime = within(favorites).getByRole("region", {
+      name: "Anime favorites",
+    });
+    expect(
+      within(anime).getAllByRole("button", { name: /^Open favorite/u }).map((
+        button,
+      ) => button.getAttribute("aria-label")),
+    ).toEqual(["Open favorite 1: Cowboy Bebop", "Open favorite 2: Akira"]);
+    globalThis.history.replaceState(null, "", "/#settings");
+    globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(screen.queryByRole("button", { name: "Save favorites" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Favorite media type" }))
+      .toBeNull();
+  });
+
+  it("keeps old favorites deep links usable as the integrated Library", async () => {
+    globalThis.history.replaceState(null, "", "/#favorites");
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/favorites", { mediaIds: [1] });
+    render(<App />);
+    expect(
+      await screen.findByRole("button", {
+        name: "Open favorite 1: Cowboy Bebop",
+      }),
+    ).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Your collection" })).not
+      .toBeNull();
+  });
+
+  it("keeps the Library and profile usable when favorites fail and retries safely", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json(
+      "GET",
+      "/api/favorites",
+      { error: "Favorites unavailable" },
+      503,
+    );
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "My Library" })).not
+      .toBeNull();
+    const favorites = screen.getByRole("complementary", { name: "Favorites" });
+    expect((await within(favorites).findByRole("alert")).textContent).toBe(
+      "Favorites unavailable",
+    );
+    expect(visibleMediaTitles()).toHaveLength(3);
+    expect(
+      within(favorites).getByRole("button", { name: "Choose favorites" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    router.json("GET", "/api/favorites", { mediaIds: [2] });
+    await user.click(
+      within(favorites).getByRole("button", { name: "Retry favorites" }),
+    );
+    expect(
+      await within(favorites).findByRole("button", {
+        name: "Open favorite 1: Dune",
+      }),
+    ).not.toBeNull();
+    expect(within(favorites).queryByRole("alert")).toBeNull();
+  });
+
+  it("cancels obsolete favorites loads and ignores late responses", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    let finish: (response: Response) => void = () => {};
+    let obsoleteSignal: AbortSignal | undefined;
+    router.json("GET", "/api/favorites", (request: Request) => {
+      obsoleteSignal = request.signal;
+      return new Promise<Response>((resolve) => finish = resolve);
+    });
+    render(<App />);
+    await screen.findByRole("heading", { name: "My Library" });
+    expect(
+      screen.getByRole("button", { name: "Choose favorites" }).hasAttribute(
+        "disabled",
+      ),
+    ).toBe(true);
+    router.json("GET", "/api/favorites", { mediaIds: [2] });
+    globalThis.history.replaceState(null, "", "/#favorites");
+    globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
+    await screen.findByRole("button", { name: "Open favorite 1: Dune" });
+    expect(obsoleteSignal?.aborted).toBe(true);
+    finish(Response.json({ mediaIds: [1] }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open favorite 1: Dune" })).not
+        .toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Open favorite 1: Cowboy Bebop" }),
+      ).toBeNull();
+    });
   });
 
   it("downloads a restorable backup from Settings", async () => {

@@ -75,7 +75,7 @@ All application responses disable caching. When Basic Auth is configured, every 
 - `PUT /api/profile/avatar`: store a validated local image (JPEG, PNG, WebP, or GIF; maximum 4 MiB)
 - `DELETE /api/profile/avatar`: restore the configured or built-in profile picture
 - `GET /api/favorites`: read the ordered favorite media IDs
-- `PUT /api/favorites`: replace the ordered selection with up to nine Library IDs
+- `PUT /api/favorites`: replace the ordered selection with up to nine Library IDs per media type (63 total)
 - `GET /api/media`: list the collection
 - `POST /api/media`: add media
 - `PATCH /api/media/{id}`: update media

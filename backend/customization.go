@@ -14,7 +14,6 @@ import (
 const (
 	maxBannerBytes = 8 << 20
 	maxAvatarBytes = 4 << 20
-	maxFavorites   = 9
 )
 
 var allowedImageTypes = []string{"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -213,30 +212,12 @@ func (a *app) replaceFavorites(w http.ResponseWriter, r *http.Request) {
 	if input.MediaIDs == nil {
 		input.MediaIDs = []int{}
 	}
-	if len(input.MediaIDs) > maxFavorites {
-		writeError(w, http.StatusUnprocessableEntity, "favorites cannot contain more than 9 titles")
-		return
-	}
-
-	a.store.mu.Lock()
-	seen := make(map[int]bool, len(input.MediaIDs))
-	for _, id := range input.MediaIDs {
-		if id < 1 || seen[id] || slices.IndexFunc(a.store.items, func(item Media) bool { return item.ID == id }) == -1 {
-			a.store.mu.Unlock()
-			writeError(w, http.StatusUnprocessableEntity, "favorites must contain unique titles from the current Library")
-			return
+	if err := a.store.replaceFavorites(input.MediaIDs); err != nil {
+		if errors.Is(err, errInvalidFavorites) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+		} else {
+			writeError(w, http.StatusInternalServerError, "could not save favorites")
 		}
-		seen[id] = true
-	}
-	previous := a.store.cloneSnapshotLocked()
-	a.store.favoriteMediaIDs = slices.Clone(input.MediaIDs)
-	err := a.store.persistLocked()
-	if err != nil {
-		a.store.restoreSnapshotLocked(previous)
-	}
-	a.store.mu.Unlock()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "could not save favorites")
 		return
 	}
 	writeJSON(w, http.StatusOK, favoritesResponse{MediaIDs: input.MediaIDs})

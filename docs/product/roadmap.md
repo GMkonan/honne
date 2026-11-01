@@ -7,7 +7,7 @@ This document records the owner's current priority order. It is a planning guide
 The local `main` now contains the operational SQLite store, non-destructive JSON migration, graceful shutdown, portable backup restore, custom Library images, and the first favorites slice. Before remote delivery:
 
 - visually validate the current source build at desktop, mobile, and 200% zoom;
-- rehearse SQLite schema upgrades through version 3 using synthetic data;
+- rehearse SQLite schema upgrades through version 4 using synthetic data;
 - verify a JSON backup before and after banner/profile-picture/favorites changes;
 - review release and rollback notes as one coherent upgrade path;
 - split or retain the local commits so migration, restore, customization, and documentation remain reviewable;
@@ -15,19 +15,20 @@ The local `main` now contains the operational SQLite store, non-destructive JSON
 
 The running release installation and real owner data must remain unchanged during this validation.
 
-## 2. Finish the 3×3 favorites experience
+## 2. Refine Library favorites
 
 The initial local implementation supports:
 
-- manual selection of up to nine Library titles;
-- manual ordering across mixed media types;
-- a private 3×3 composition on a stable `#favorites` Library tab beside Monthly Log;
-- a locally generated PNG preserving favorite order, with title fallbacks for unavailable covers and empty positions for partial grids;
+- manual selection of up to nine Library titles per media type;
+- manual ordering within each category, managed directly in the Library rather than Settings;
+- a favorites column beside the collection, with grouped portrait covers and stacked blocks on smaller screens;
+- compatibility for existing `#favorites` links, which now open the integrated Library;
+- a locally generated 3×3 PNG per category preserving favorite order, with title fallbacks for unavailable covers and empty positions for partial grids;
 - transactional persistence, JSON backup/restore, deletion cleanup, and rollback.
 
 Next refinements:
 
-- visually tune cover cropping, empty slots, spacing, and mobile presentation with real artwork;
+- visually tune portrait covers, category spacing, the inline editor, and mobile presentation with real artwork;
 - visually validate the generated PNG with full/partial grids, mixed artwork, long titles, and unavailable covers;
 - keep favorites separate from Monthly Log history and any future public profile.
 
@@ -64,7 +65,7 @@ Review issue #9 and the unintegrated `issue-10` work before resuming it. Priorit
 
 ## 7. Define an optional public profile
 
-A public projection must remain opt-in, expose only explicitly selected data, avoid publishing private management capabilities, and keep Honne private by default. Favorites may feed it later, but the private 3×3 must not imply publication.
+A public projection must remain opt-in, expose only explicitly selected data, avoid publishing private management capabilities, and keep Honne private by default. Favorites may feed it later, but Library favorites and their PNG exports must not imply publication.
 
 ## 8. Internationalize with Weblate
 

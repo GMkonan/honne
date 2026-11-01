@@ -133,15 +133,11 @@ func decodeSQLiteImport(data []byte) (persistedStore, error) {
 			item.CatalogPlatforms = []string{}
 		}
 	}
-	if len(snapshot.FavoriteMediaIDs) > maxFavorites {
+	if snapshot.Version < 9 && len(snapshot.FavoriteMediaIDs) > 9 {
 		return snapshot, errors.New("migration favorites cannot contain more than 9 titles")
 	}
-	seenFavorites := map[int]bool{}
-	for _, mediaID := range snapshot.FavoriteMediaIDs {
-		if !seenMedia[mediaID] || seenFavorites[mediaID] {
-			return snapshot, errors.New("migration favorites contain an invalid or duplicate media reference")
-		}
-		seenFavorites[mediaID] = true
+	if err := validateFavorites(snapshot.FavoriteMediaIDs, snapshot.Items); err != nil {
+		return snapshot, fmt.Errorf("migration favorites: %w", err)
 	}
 	if len(snapshot.Appearance.BannerData) > maxBannerBytes {
 		return snapshot, errors.New("migration banner exceeds 8 MiB")

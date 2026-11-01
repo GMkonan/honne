@@ -56,7 +56,12 @@ afterEach(() => {
 
 describe("favorites PNG", () => {
   it("uses a stable filename and rejects empty or overfull grids", async () => {
-    expect(favoritesImageFilename).toBe("honne-favorites-3x3.png");
+    expect(favoritesImageFilename("anime")).toBe(
+      "honne-favorites-anime-3x3.png",
+    );
+    expect(favoritesImageFilename("light_novel")).toBe(
+      "honne-favorites-light_novel-3x3.png",
+    );
     for (const count of [0, 10]) {
       await expect(
         createFavoritesImage(
@@ -97,6 +102,7 @@ describe("favorites PNG", () => {
     const result = await createFavoritesImage(
       items,
       new AbortController().signal,
+      "Anime",
     );
     expect(result).toEqual({ blob, missingCovers: 1 });
     expect(canvas()?.width).toBe(1080);
@@ -112,7 +118,7 @@ describe("favorites PNG", () => {
     );
     expect(context.fillText.mock.calls.map(([text]) => text)).toEqual([
       "HANDPICKED",
-      "Favorites",
+      "Anime favorites",
       "First favorite",
       "01",
       "Second favorite",

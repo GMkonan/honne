@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-const persistedStoreVersion = 8
+const persistedStoreVersion = 9
 
 type libraryAppearance struct {
 	BannerContentType string `json:"bannerContentType,omitempty"`

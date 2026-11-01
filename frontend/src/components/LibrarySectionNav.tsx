@@ -1,10 +1,9 @@
 interface LibrarySectionNavProps {
-  active: "collection" | "favorites" | "monthly_log";
+  active: "collection" | "monthly_log";
 }
 
 const sections = [
   { id: "collection", label: "Collection", href: "#library" },
-  { id: "favorites", label: "Favorites", href: "#favorites" },
   { id: "monthly_log", label: "Monthly Log", href: "#monthly-log" },
 ] as const;
 

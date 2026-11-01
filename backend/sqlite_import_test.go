@@ -81,7 +81,7 @@ func TestSQLiteImportSupportedLegacyVersions(t *testing.T) {
 }
 
 func TestSQLiteImportRejectsUnsafeSources(t *testing.T) {
-	for _, source := range []string{"", " ", "{", "null", `{"version":9}`, `{"version":0}`, `[] []`, `{"version":6,"unknown":"do not silently discard"}`, `[{"id":0}]`, `[{"id":1},{"id":1}]`, `{"version":6,"nextId":-1}`, `{"version":6,"nextJobId":9223372036854775807}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":0}]}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":2},{"id":1,"mediaId":3}]}`, `{"version":6,"activities":[{"id":1,"mediaId":-2}]}`, `{"version":6,"activities":[{"id":1},{"id":1}]}`} {
+	for _, source := range []string{"", " ", "{", "null", `{"version":10}`, `{"version":0}`, `[] []`, `{"version":6,"unknown":"do not silently discard"}`, `[{"id":0}]`, `[{"id":1},{"id":1}]`, `{"version":6,"nextId":-1}`, `{"version":6,"nextJobId":9223372036854775807}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":0}]}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":2},{"id":1,"mediaId":3}]}`, `{"version":6,"activities":[{"id":1,"mediaId":-2}]}`, `{"version":6,"activities":[{"id":1},{"id":1}]}`} {
 		t.Run(source, func(t *testing.T) {
 			if _, err := decodeSQLiteImport([]byte(source)); err == nil {
 				t.Fatal("unsafe source accepted")
