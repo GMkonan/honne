@@ -20,7 +20,8 @@ The running release installation and real owner data must remain unchanged durin
 The initial local implementation supports:
 
 - manual selection of up to nine Library titles per media type;
-- manual ordering within each category, managed directly in the Library rather than Settings;
+- visual cover selection with local title search and media-type filters, opened from the Library rather than Settings;
+- manual ordering within each category, with a separate selection list in the picker;
 - a favorites column beside the collection, with grouped portrait covers and stacked blocks on smaller screens;
 - compatibility for existing `#favorites` links, which now open the integrated Library;
 - a locally generated 3×3 PNG per category preserving favorite order, with title fallbacks for unavailable covers and empty positions for partial grids;
@@ -28,7 +29,7 @@ The initial local implementation supports:
 
 Next refinements:
 
-- visually tune portrait covers, category spacing, the inline editor, and mobile presentation with real artwork;
+- visually tune portrait covers, category spacing, the visual picker, and mobile presentation with real artwork;
 - visually validate the generated PNG with full/partial grids, mixed artwork, long titles, and unavailable covers;
 - keep favorites separate from Monthly Log history and any future public profile.
 

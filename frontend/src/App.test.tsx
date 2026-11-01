@@ -599,7 +599,7 @@ describe("Library characterization", () => {
       within(favorites).getByRole("button", { name: "Edit favorites" }),
     );
     expect(document.activeElement).toBe(
-      screen.getByRole("combobox", { name: "Favorite media type" }),
+      screen.getByRole("searchbox", { name: "Search Library titles" }),
     );
     const moveEarlier = await screen.findByRole("button", {
       name: "Move Cowboy Bebop earlier",
@@ -620,7 +620,7 @@ describe("Library characterization", () => {
     globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
     await screen.findByRole("heading", { name: "Settings" });
     expect(screen.queryByRole("button", { name: "Save favorites" })).toBeNull();
-    expect(screen.queryByRole("combobox", { name: "Favorite media type" }))
+    expect(screen.queryByRole("searchbox", { name: "Search Library titles" }))
       .toBeNull();
   });
 

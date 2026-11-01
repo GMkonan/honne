@@ -56,21 +56,15 @@ describe("Library favorites", () => {
     const trigger = screen.getByRole("button", { name: "Choose favorites" });
     trigger.focus();
     await user.keyboard("{Enter}");
-    const category = screen.getByRole("combobox", {
-      name: "Favorite media type",
-    });
-    expect(document.activeElement).toBe(category);
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Title to add to favorites" }),
-      "1",
+    expect(document.activeElement).toBe(
+      screen.getByRole("searchbox", { name: "Search Library titles" }),
     );
-    await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.selectOptions(category, "book");
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Title to add to favorites" }),
-      "2",
+    const category = screen.getByRole("button", { name: "Books" });
+    await user.click(
+      screen.getByRole("button", { name: "Favorite Cowboy Bebop" }),
     );
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(category);
+    await user.click(screen.getByRole("button", { name: "Favorite Dune" }));
     await user.click(screen.getByRole("button", { name: "Save favorites" }));
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Please retry",
@@ -82,7 +76,7 @@ describe("Library favorites", () => {
     ).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Books favorites" }))
       .toBeNull();
-    await user.selectOptions(category, "anime");
+    await user.click(screen.getByRole("button", { name: "Anime" }));
     expect(
       within(screen.getByRole("list", { name: "Favorite order" })).getByText(
         "Cowboy Bebop",
@@ -126,18 +120,13 @@ describe("Library favorites", () => {
       <Harness candidates={[...anime, items[1]]} initial={ids} onSave={save} />,
     );
     await user.click(screen.getByRole("button", { name: "Edit favorites" }));
-    const picker = screen.getByRole("combobox", {
-      name: "Title to add to favorites",
-    });
+    const picker = screen.getByRole("button", { name: "Favorite Anime 10" });
     expect(picker.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("9 / 9 in this category")).not.toBeNull();
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Favorite media type" }),
-      "book",
-    );
-    expect(picker.hasAttribute("disabled")).toBe(false);
-    await user.selectOptions(picker, "2");
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText(/9 \/ 9 in this category/u)).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Books" }));
+    const book = screen.getByRole("button", { name: "Favorite Dune" });
+    expect(book.hasAttribute("disabled")).toBe(false);
+    await user.click(book);
     await user.click(screen.getByRole("button", { name: "Save favorites" }));
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith([...ids, 2], expect.any(AbortSignal))
@@ -248,12 +237,14 @@ describe("Library favorites", () => {
     const first = screen.getByRole("button", {
       name: "Open favorite 1: Cowboy Bebop",
     });
-    const image = within(first).getByRole("presentation");
+    const image = within(first).getByRole("presentation", { hidden: true });
     expect(image.getAttribute("loading")).toBe("lazy");
     fireEvent.error(image);
-    expect(within(first).queryByRole("presentation")).toBeNull();
+    expect(within(first).queryByRole("presentation", { hidden: true }))
+      .toBeNull();
     expect(within(first).getByText("Cowboy Bebop")).not.toBeNull();
-    expect(screen.queryAllByRole("presentation")).toHaveLength(0);
+    expect(screen.queryAllByRole("presentation", { hidden: true }))
+      .toHaveLength(0);
   });
 
   it("removes deleted Library titles from an open draft without losing other edits", async () => {
@@ -270,15 +261,8 @@ describe("Library favorites", () => {
     const user = userEvent.setup();
     const { rerender } = render(<FavoritesPanel {...props} />);
     await user.click(screen.getByRole("button", { name: "Edit favorites" }));
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Favorite media type" }),
-      "book",
-    );
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Title to add to favorites" }),
-      "2",
-    );
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Books" }));
+    await user.click(screen.getByRole("button", { name: "Favorite Dune" }));
     rerender(
       <FavoritesPanel
         {...props}
@@ -290,5 +274,155 @@ describe("Library favorites", () => {
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith([3, 2], expect.any(AbortSignal))
     );
+  });
+
+  it("searches locally without losing selected titles and clears unmatched searches", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const save = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(<Harness initial={[1]} onSave={save} />);
+    await user.click(screen.getByRole("button", { name: "Edit favorites" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Choose your favorites",
+    });
+    expect(within(dialog).queryByRole("combobox")).toBeNull();
+    const search = within(dialog).getByRole("searchbox", {
+      name: "Search Library titles",
+    });
+    await user.type(search, "  AKIRA ");
+    expect(within(dialog).getByRole("button", { name: "Favorite Akira" })).not
+      .toBeNull();
+    expect(
+      within(dialog).queryByRole("button", { name: "Favorite Cowboy Bebop" }),
+    ).toBeNull();
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Remove Cowboy Bebop from favorites",
+      }),
+    ).not.toBeNull();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Favorite Akira" }),
+    );
+    await user.clear(search);
+    await user.type(search, "not in my library");
+    expect(within(dialog).getByRole("heading", { name: "No matching titles" }))
+      .not.toBeNull();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Clear search" }),
+    );
+    expect(document.activeElement).toBe(search);
+    expect(
+      within(dialog).getByRole("button", { name: "Favorite Cowboy Bebop" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(dialog).getByRole("button", { name: "Favorite Akira" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("can unselect a cover at the category limit and replace it", async () => {
+    const candidates = Array.from(
+      { length: 10 },
+      (_, index) => ({
+        ...items[0],
+        id: index + 10,
+        title: `Anime ${index + 1}`,
+      }),
+    );
+    const ids = candidates.slice(0, 9).map((item) => item.id);
+    const save = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(<Harness candidates={candidates} initial={ids} onSave={save} />);
+    await user.click(screen.getByRole("button", { name: "Edit favorites" }));
+    const replacement = screen.getByRole("button", {
+      name: "Favorite Anime 10",
+    });
+    expect(replacement.hasAttribute("disabled")).toBe(true);
+    const selected = screen.getByRole("button", { name: "Favorite Anime 1" });
+    expect(selected.hasAttribute("disabled")).toBe(false);
+    selected.focus();
+    await user.keyboard("{Enter}");
+    expect(selected.getAttribute("aria-pressed")).toBe("false");
+    expect(replacement.hasAttribute("disabled")).toBe(false);
+    await user.click(replacement);
+    await user.click(screen.getByRole("button", { name: "Save favorites" }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        [...ids.slice(1), candidates[9].id],
+        expect.any(AbortSignal),
+      )
+    );
+  });
+
+  it("contains keyboard focus, closes on Escape, and restores focus and scrolling", async () => {
+    const user = userEvent.setup();
+    const overflow = document.body.style.overflow;
+    render(<Harness initial={[1]} />);
+    const trigger = screen.getByRole("button", { name: "Edit favorites" });
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", {
+      name: "Choose your favorites",
+    });
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    expect(document.body.style.overflow).toBe("hidden");
+    const first = within(dialog).getByRole("button", {
+      name: "Close favorites picker",
+    });
+    const last = within(dialog).getByRole("button", { name: "Done editing" });
+    first.focus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+    await user.tab();
+    expect(document.activeElement).toBe(first);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(document.body.style.overflow).toBe(overflow);
+  });
+
+  it("keeps the picker open and keyboard-contained while a save is pending", async () => {
+    let finish = () => {};
+    const save = vi.fn(() => new Promise<void>((resolve) => finish = resolve));
+    const user = userEvent.setup();
+    render(<Harness onSave={save} />);
+    await user.click(screen.getByRole("button", { name: "Choose favorites" }));
+    await user.click(screen.getByRole("button", { name: "Favorite Akira" }));
+    await user.click(screen.getByRole("button", { name: "Save favorites" }));
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByRole("button", { name: "Close favorites picker" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    await user.keyboard("{Escape}{Tab}");
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(document.activeElement).toBe(dialog);
+    finish();
+    expect(await screen.findByText("Favorites saved in this order.")).not
+      .toBeNull();
+  });
+
+  it("distinguishes an empty Library from an empty media category", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Harness candidates={[]} />);
+    await user.click(screen.getByRole("button", { name: "Choose favorites" }));
+    expect(screen.getByRole("heading", { name: "Your Library is empty" })).not
+      .toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Save favorites" }).hasAttribute(
+        "disabled",
+      ),
+    ).toBe(true);
+    unmount();
+    render(<Harness candidates={[items[1]]} />);
+    await user.click(screen.getByRole("button", { name: "Choose favorites" }));
+    expect(screen.getByRole("button", { name: "Favorite Dune" })).not
+      .toBeNull();
+    await user.click(screen.getByRole("button", { name: "Anime" }));
+    expect(screen.getByRole("heading", { name: "No titles in this category" }))
+      .not.toBeNull();
   });
 });

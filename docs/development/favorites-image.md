@@ -5,12 +5,25 @@ by media type. On smaller screens, Status stays above the collection and favorit
 stack below it. Existing `#favorites` links open the same integrated Library;
 Favorites is no longer a separate navigation tab or a Settings card.
 
-**Choose favorites** / **Edit favorites** opens an inline editor. Each category
-accepts up to nine Library titles, independently of the others (63 total across
-the seven supported types). Switching categories preserves the draft. Add,
-remove, reorder, and cancel do not write until **Save favorites** succeeds. A
+**Choose favorites** / **Edit favorites** opens a visual picker dialog in the
+Library. Search local titles by name, use the visible media-type filters, and
+click cover cards to select or unselect them. Selected cards show a check, their
+position, and a text label rather than relying on color. A separate selection
+list keeps selected titles and ordering controls visible while searching.
+
+Each category accepts up to nine Library titles, independently of the others
+(63 total across the seven supported types). Full categories still allow
+unselecting covers; only additional selections are blocked. Switching categories
+or searching preserves the draft. Empty Library, empty category, and unmatched
+search states are distinct. Filtering is local and never queries a catalog.
+Add, remove, reorder, and cancel do not write until **Save favorites** succeeds. A
 failed save preserves the draft and allows retry. The showcase and image exports
 always use confirmed saved favorites, not the draft.
+
+The dialog focuses search on open, contains Tab navigation, closes on Escape or
+cancel, and restores focus and page scrolling on close. During a save, controls
+and dismissal are blocked while feedback is announced. Navigation away aborts
+obsolete work without claiming that a cancelled request rolled back a server write.
 
 Each nonempty category offers **Download PNG**. The browser creates
 `honne-favorites-<media-type>-3x3.png` at 1080 × 1200 px, with a category heading,
@@ -44,7 +57,8 @@ image. Errors leave the grid available and allow retry.
 ## Validation
 
 Automated coverage exercises per-type limits, cross-category draft preservation,
-inline editing, save confirmation, cancel/focus restoration, loading failures
+visual search/filter/selection, modal keyboard containment, save confirmation,
+cancel/focus restoration, loading failures
 and retry independent of the Library/profile, legacy deep links, nine-position
 layout and order, partial grids, fallbacks, long titles, PNG encoding failure,
 unavailable canvas, keyboard
@@ -55,7 +69,8 @@ in unit tests; they do not substitute for inspecting an actual downloaded PNG.
 With synthetic data, manually validate:
 
 1. Choose 1, 5, and 9 favorites per category, including more than nine across
-   categories. Verify independent limits, ordering, save/cancel/error states,
+   categories. Verify cover selection, title search, category filters, independent
+   limits, ordering, save/cancel/error states,
    and the portrait cover groups beside the collection. Settings must not offer
    favorite selection. Export each category and verify unused positions,
    category heading, filename, dimensions, and readable title clipping.
@@ -64,8 +79,9 @@ With synthetic data, manually validate:
    failed covers keep their titles and that the status explains the fallback.
 3. Activate Download PNG by keyboard, confirm the busy state, exercise retry,
    and navigate away while covers load. No stale download should occur.
-4. Check the page at 320 px, tablet, desktop, and 200% zoom without horizontal
-   page overflow; inspect the PNG's actual crop, text, and contrast.
+4. Check the page and picker at 320 px, tablet, desktop, and 200% zoom without
+   horizontal page overflow. Verify scrolling in short viewports, focus containment,
+   Escape/cancel and focus restoration; inspect the PNG's actual crop, text, and contrast.
 5. Smoke-test Monthly Log download after the shared-loader extraction.
 
 Real-browser/image visual validation is still outstanding in this environment:

@@ -1,7 +1,7 @@
 import { Heart, Pencil } from "lucide-react";
 import { useState } from "react";
 import { type FavoriteCandidate, favoriteTypes } from "../favoritesModel.ts";
-import { FavoritesEditor } from "./FavoritesEditor.tsx";
+import { FavoritesPickerModal } from "./FavoritesPickerModal.tsx";
 import { FavoritesShowcase } from "./FavoritesShowcase.tsx";
 
 interface FavoritesPanelProps {
@@ -40,7 +40,7 @@ export function FavoritesPanel(
           type="button"
           disabled={loading || !!error || editing}
           onClick={() => setEditing(true)}
-          aria-expanded={editing}
+          aria-haspopup="dialog"
         >
           <Pencil size={14} aria-hidden="true" />{" "}
           {favorites.length ? "Edit favorites" : "Choose favorites"}
@@ -59,7 +59,7 @@ export function FavoritesPanel(
         </div>
       )}
       {editing && !loading && !error && (
-        <FavoritesEditor
+        <FavoritesPickerModal
           items={items}
           favoriteMediaIds={favoriteMediaIds}
           onSave={onSave}

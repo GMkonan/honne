@@ -1,6 +1,6 @@
 import type { FavoriteCandidate } from "../favoritesModel.ts";
 import type { TrackingMediaType } from "../mediaTracking.ts";
-import { useState } from "react";
+import { FavoriteCover } from "./FavoriteCover.tsx";
 import { FavoritesExport } from "./FavoritesExport.tsx";
 
 interface FavoritesShowcaseProps {
@@ -15,37 +15,14 @@ function FavoriteTile({ item, index, onOpen }: {
   index: number;
   onOpen: (id: number) => void;
 }) {
-  const [failedCover, setFailedCover] = useState("");
-  let cover = "";
-  try {
-    const url = new URL(item.coverUrl);
-    if (
-      (url.protocol === "http:" || url.protocol === "https:") &&
-      !url.username && !url.password
-    ) cover = url.href;
-  } catch {
-    // Missing or invalid cover URLs keep the title fallback.
-  }
-  const showCover = cover && cover !== failedCover;
   return (
     <button
       type="button"
-      className={showCover ? undefined : "favorite-fallback"}
       onClick={() => onOpen(item.id)}
       aria-label={`Open favorite ${index + 1}: ${item.title}`}
       title={item.title}
     >
-      {showCover && (
-        <img
-          src={cover}
-          alt=""
-          width={150}
-          height={200}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setFailedCover(cover)}
-        />
-      )}
+      <FavoriteCover title={item.title} coverUrl={item.coverUrl} />
       <span className="favorite-title">{item.title}</span>
     </button>
   );
