@@ -589,6 +589,10 @@ button {
 .library-favorites {
   min-width: 0;
   scroll-margin-top: 88px;
+  padding: 18px;
+  border: 1px solid var(--surface);
+  border-radius: 5px;
+  background: var(--mantle);
 }
 .favorites-panel-heading {
   display: flex;
@@ -607,7 +611,6 @@ button {
 .favorites-panel-heading h2 svg {
   color: var(--red);
 }
-.favorites-panel-note,
 .favorites-empty,
 .favorites-picker-modal p,
 .favorites-load-error p {
@@ -626,7 +629,9 @@ button {
 .favorites-panel-heading button,
 .favorites-export button,
 .favorites-picker-actions button,
-.favorites-load-error button {
+.favorites-load-error button,
+.favorites-panel-actions button,
+.favorites-show-more {
   min-height: 34px;
   display: inline-flex;
   align-items: center;
@@ -669,33 +674,12 @@ button {
   color: var(--red);
 }
 .favorites-showcase {
-  margin-top: 24px;
-}
-.favorites-showcase > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.favorites-showcase h3 {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-}
-.favorites-showcase > header > span {
-  color: var(--overlay);
-  font-size: 12px;
+  margin-top: 12px;
 }
 .favorites-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--surface);
-  border-radius: 4px;
-  background: var(--mantle);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 .favorites-grid button {
   min-width: 0;
@@ -718,6 +702,7 @@ button {
   position: absolute;
   inset: 42% 0 0;
   background: linear-gradient(transparent, rgba(17,17,27,.94));
+  opacity: 0;
 }
 .favorite-cover img {
   position: absolute;
@@ -967,6 +952,232 @@ button {
   text-shadow: 0 1px 3px rgba(0,0,0,.9);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  opacity: 0;
+}
+.favorites-grid button:hover::after,
+.favorites-grid button:focus-visible::after,
+.favorites-grid button:hover .favorite-title,
+.favorites-grid button:focus-visible .favorite-title {
+  opacity: 1;
+}
+.favorites-category-tabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 3px;
+  margin-top: 18px;
+  border-block: 1px solid var(--surface);
+  scrollbar-width: thin;
+}
+.favorites-category-tabs button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+.favorites-category-tabs button[aria-selected="true"] {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+  background: var(--base);
+}
+.favorites-category-count {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.favorites-show-more {
+  width: 100%;
+  margin-top: 12px;
+}
+.favorites-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.favorites-panel-actions button {
+  flex: 1 1 auto;
+}
+.overview-heading,
+.overview-activity > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.overview-heading h2,
+.overview-summary h3,
+.overview-activity h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.overview-heading a,
+.overview-activity > header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--blue);
+  font-size: 12px;
+}
+.overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  grid-template-areas: "summary favorites" "activity favorites";
+  align-items: start;
+  gap: 28px;
+}
+.overview-main {
+  display: contents;
+}
+.overview-summary {
+  grid-area: summary;
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--surface);
+  border-radius: 5px;
+  background: var(--mantle);
+}
+.overview-summary p,
+.overview-activity > p,
+.overview-activity-empty p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 22px 0;
+}
+.overview-metrics dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.overview-metrics dd {
+  margin: 6px 0 0;
+  color: var(--blue);
+  font-size: 26px;
+  font-weight: 600;
+}
+.overview-media-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--surface);
+  list-style: none;
+}
+.overview-media-summary li {
+  display: flex;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 3px;
+  color: var(--muted);
+  background: var(--base);
+  font-size: 12px;
+}
+.overview-media-summary strong {
+  color: var(--text);
+}
+.overview-sidebar {
+  grid-area: favorites;
+  min-width: 0;
+}
+.overview-activity {
+  grid-area: activity;
+  min-width: 0;
+}
+.overview-activity-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.overview-activity-list button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--surface);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--mantle);
+  text-align: left;
+  cursor: pointer;
+}
+.overview-activity-list button:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+.overview-activity-list button:disabled {
+  cursor: default;
+}
+.overview-activity-cover {
+  width: 52px;
+  flex: 0 0 auto;
+}
+.overview-activity-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.overview-activity-copy strong {
+  font-size: 14px;
+}
+.overview-activity-copy > span,
+.overview-activity-copy time {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.overview-activity-empty {
+  padding: 30px 20px;
+  border: 1px dashed var(--surface-2);
+  border-radius: 4px;
+  color: var(--muted);
+  text-align: center;
+}
+.overview-activity-empty h4 {
+  margin: 12px 0;
+  color: var(--text);
+  font-size: 14px;
+}
+@media (max-width: 900px) {
+  .overview-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "summary" "favorites" "activity";
+  }
+  .overview-sidebar .favorites-grid {
+    max-width: 560px;
+  }
+}
+@media (max-width: 480px) {
+  .overview-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .overview-summary,
+  .library-favorites {
+    padding: 14px;
+  }
+}
+@media (hover: none) {
+  .favorites-grid button::after,
+  .favorites-grid .favorite-title {
+    opacity: 1;
+  }
 }
 .filter-section {
   margin-bottom: 38px;

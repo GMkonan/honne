@@ -197,22 +197,11 @@ func (a *app) listFavorites(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (a *app) replaceFavorites(w http.ResponseWriter, r *http.Request) {
-	var input favoritesInput
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	ids, ok := decodeSelectionInput(w, r, 1<<20)
+	if !ok {
 		return
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if input.MediaIDs == nil {
-		input.MediaIDs = []int{}
-	}
-	if err := a.store.replaceFavorites(input.MediaIDs); err != nil {
+	if err := a.store.replaceFavorites(ids); err != nil {
 		if errors.Is(err, errInvalidFavorites) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 		} else {
@@ -220,5 +209,24 @@ func (a *app) replaceFavorites(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeJSON(w, http.StatusOK, favoritesResponse{MediaIDs: input.MediaIDs})
+	writeJSON(w, http.StatusOK, favoritesResponse{MediaIDs: ids})
+}
+
+func decodeSelectionInput(w http.ResponseWriter, r *http.Request, limit int64) ([]int, bool) {
+	var input favoritesInput
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return nil, false
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return nil, false
+	}
+	if input.MediaIDs == nil {
+		input.MediaIDs = []int{}
+	}
+	return input.MediaIDs, true
 }

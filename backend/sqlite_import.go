@@ -139,6 +139,21 @@ func decodeSQLiteImport(data []byte) (persistedStore, error) {
 	if err := validateFavorites(snapshot.FavoriteMediaIDs, snapshot.Items); err != nil {
 		return snapshot, fmt.Errorf("migration favorites: %w", err)
 	}
+	if snapshot.Version < 10 {
+		if snapshot.TopNineMediaIDs != nil {
+			return snapshot, errors.New("3×3 selections require backup version 10")
+		}
+		if err := validateTopNine(snapshot.FavoriteMediaIDs, snapshot.FavoriteMediaIDs, snapshot.Items); err != nil {
+			return snapshot, fmt.Errorf("migration legacy favorites: %w", err)
+		}
+		snapshot.TopNineMediaIDs = slices.Clone(snapshot.FavoriteMediaIDs)
+	}
+	if snapshot.TopNineMediaIDs == nil {
+		snapshot.TopNineMediaIDs = []int{}
+	}
+	if err := validateTopNine(snapshot.TopNineMediaIDs, snapshot.FavoriteMediaIDs, snapshot.Items); err != nil {
+		return snapshot, fmt.Errorf("migration 3×3: %w", err)
+	}
 	if len(snapshot.Appearance.BannerData) > maxBannerBytes {
 		return snapshot, errors.New("migration banner exceeds 8 MiB")
 	}

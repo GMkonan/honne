@@ -59,6 +59,11 @@ erDiagram
         integer position UK
     }
 
+    TOP_NINE {
+        integer media_id PK,FK
+        integer position UK
+    }
+
     LIBRARY_APPEARANCE {
         integer singleton PK
         text banner_content_type
@@ -68,6 +73,7 @@ erDiagram
     }
 
     MEDIA ||--o| FAVORITES : "selected as"
+    FAVORITES ||--o| TOP_NINE : "independently selected for 3x3"
     MEDIA ||--o{ SYNC_JOBS : "current item or tombstone reference"
     MEDIA ||--o{ ACTIVITIES : "current item or retained history reference"
 ```
@@ -80,7 +86,8 @@ erDiagram
 | `media` | Ordered Library entries. `payload` preserves the complete validated media contract while the relational key keeps identity explicit. |
 | `sync_jobs` | Durable AniList outbox, including jobs that may refer to a locally deleted item. |
 | `activities` | Retained local history. Historical rows may refer to deleted media, so they intentionally have no cascading foreign key. |
-| `favorites` | Manual order for at most nine existing Library entries. Position `0` is the first tile in the 3×3. |
+| `favorites` | Manual order for unique existing Library entries, without a nine-title product limit. |
+| `top_nine` | Independently ordered favorite subset, with at most nine per media type. Removing a favorite or Library entry cleans this subset in the same transaction. |
 | `library_appearance` | Singleton local customization. Stores an optional banner up to 8 MiB and profile picture up to 4 MiB as validated JPEG, PNG, WebP, or GIF data. |
 
 `media`, `sync_jobs`, and `activities` keep validated JSON payloads in the first SQLite model. This preserves the established backup contract and avoids scattering provider-specific fields across many nullable columns before their query needs are proven.
@@ -110,15 +117,15 @@ sequenceDiagram
     end
 ```
 
-A user-visible success is never returned before the SQLite commit. Library data, Activity, counters, favorites, appearance, and AniList jobs share the same transaction and rollback boundary.
+A user-visible success is never returned before the SQLite commit. Library data, Activity, counters, favorites, independent 3×3 selections, appearance, and AniList jobs share the same transaction and rollback boundary.
 
 ## JSON migration and restore
 
 ```mermaid
 flowchart TD
     Input[Legacy or backup JSON] --> Limit[Enforce 32 MiB limit]
-    Limit --> Decode[Strict decode\nlegacy array or versions 1–8]
-    Decode --> Validate[Validate IDs, references, counters,\nfavorites, banner, profile picture, and payloads]
+    Limit --> Decode[Strict decode\nlegacy array or versions 1–10]
+    Decode --> Validate[Validate IDs, references, counters,\nfavorites, top nine, appearance, and payloads]
     Validate --> Tx[Write new or replacement SQLite snapshot\nin one transaction]
     Tx --> Integrity[Integrity check and reopen]
     Integrity --> Ready[Use SQLite as operational source]
@@ -133,12 +140,13 @@ Startup migration creates `honne.db` only when it does not exist and never chang
 
 ```mermaid
 flowchart LR
-    SQLite[(SQLite snapshot)] --> Export[Version 8 JSON]
+    SQLite[(SQLite snapshot)] --> Export[Version 10 JSON]
     Export --> Media[Library]
     Export --> Activity[Activity]
     Export --> Outbox[AniList outbox]
     Export --> Counters[Monotonic counters]
     Export --> Favorites[Favorite order]
+    Export --> TopNine[Independent 3×3 order]
     Export --> Appearance[Custom banner and profile picture]
     Secret[OAuth token] -. excluded .-> Export
 ```

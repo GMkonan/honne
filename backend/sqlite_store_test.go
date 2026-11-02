@@ -188,7 +188,7 @@ func TestSQLiteMigrationRoundTripPreservesSnapshotAndJSONSource(t *testing.T) {
 	}
 	legacySnapshot := persistedStore{
 		Version: persistedStoreVersion, Items: legacy.items, SyncJobs: legacy.syncJobs,
-		Activities: legacy.activities, FavoriteMediaIDs: legacy.favoriteMediaIDs, Appearance: legacy.appearance,
+		Activities: legacy.activities, FavoriteMediaIDs: legacy.favoriteMediaIDs, TopNineMediaIDs: legacy.topNineMediaIDs, Appearance: legacy.appearance,
 		NextID: legacy.nextID, NextJobID: legacy.nextJobID, NextActivityID: legacy.nextActivityID,
 	}
 	if !reflect.DeepEqual(legacySnapshot, plan.Snapshot) {
@@ -215,7 +215,7 @@ func TestSQLiteMigrationRejectsUnsafeDestinationsAndCleansFailures(t *testing.T)
 	}
 
 	invalidDestination := filepath.Join(dir, "invalid.db")
-	if err := os.WriteFile(source, []byte(`{"version":10}`), 0o600); err != nil {
+	if err := os.WriteFile(source, []byte(`{"version":11}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := migrateJSONToSQLite(source, invalidDestination); err == nil {

@@ -1,12 +1,9 @@
 import type { FavoriteCandidate } from "../favoritesModel.ts";
-import type { TrackingMediaType } from "../mediaTracking.ts";
 import { FavoriteCover } from "./FavoriteCover.tsx";
-import { FavoritesExport } from "./FavoritesExport.tsx";
 
 interface FavoritesShowcaseProps {
   items: FavoriteCandidate[];
   onOpen: (id: number) => void;
-  mediaType: TrackingMediaType;
   label: string;
 }
 
@@ -29,16 +26,12 @@ function FavoriteTile({ item, index, onOpen }: {
 }
 
 export function FavoritesShowcase(
-  { items, onOpen, mediaType, label }: FavoritesShowcaseProps,
+  { items, onOpen, label }: FavoritesShowcaseProps,
 ) {
   if (items.length === 0) return null;
 
   return (
     <section className="favorites-showcase" aria-label={`${label} favorites`}>
-      <header>
-        <h3>{label}</h3>
-        <span>{items.length} of 9</span>
-      </header>
       <div className="favorites-grid">
         {items.map((item, index) => (
           <FavoriteTile
@@ -49,7 +42,6 @@ export function FavoritesShowcase(
           />
         ))}
       </div>
-      <FavoritesExport items={items} mediaType={mediaType} label={label} />
     </section>
   );
 }

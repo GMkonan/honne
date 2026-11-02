@@ -17,7 +17,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 4
+const sqliteSchemaVersion = 5
 
 // openRuntimeStore opens the operational SQLite store. On the first start it
 // migrates a non-empty legacy JSON snapshot without changing that source. A
@@ -202,6 +202,24 @@ func migrateSQLiteSchema(path string) error {
 			"INSERT INTO favorites SELECT media_id, position FROM favorites_v3",
 			"DROP TABLE favorites_v3",
 			"PRAGMA user_version = 4",
+		}); err != nil {
+			return err
+		}
+		version = 4
+	}
+	if version == 4 {
+		if err := applySQLiteMigration(db, []string{
+			"ALTER TABLE store_meta RENAME TO store_meta_v4",
+			"CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 10), next_media_id INTEGER NOT NULL CHECK (next_media_id > 0), next_job_id INTEGER NOT NULL CHECK (next_job_id > 0), next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0))",
+			"INSERT INTO store_meta SELECT singleton, 10, next_media_id, next_job_id, next_activity_id FROM store_meta_v4",
+			"DROP TABLE store_meta_v4",
+			"ALTER TABLE favorites RENAME TO favorites_v4",
+			"CREATE TABLE favorites (media_id INTEGER PRIMARY KEY CHECK (media_id > 0), position INTEGER NOT NULL UNIQUE CHECK (position >= 0), FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE RESTRICT)",
+			"INSERT INTO favorites SELECT media_id, position FROM favorites_v4",
+			"DROP TABLE favorites_v4",
+			"CREATE TABLE top_nine (media_id INTEGER PRIMARY KEY CHECK (media_id > 0), position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 62), FOREIGN KEY (media_id) REFERENCES favorites(media_id) ON DELETE RESTRICT)",
+			"INSERT INTO top_nine SELECT media_id, position FROM favorites",
+			"PRAGMA user_version = 5",
 		}); err != nil {
 			return err
 		}
@@ -408,6 +426,7 @@ func replaceSQLiteSnapshot(db *sql.DB, snapshot persistedStore) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, statement := range []string{
+		"DELETE FROM top_nine",
 		"DELETE FROM favorites",
 		"DELETE FROM library_appearance",
 		"DELETE FROM activities",
@@ -465,6 +484,11 @@ func insertSQLiteSnapshot(tx *sql.Tx, snapshot persistedStore) error {
 	for position, mediaID := range snapshot.FavoriteMediaIDs {
 		if _, err := tx.Exec("INSERT INTO favorites (media_id, position) VALUES (?, ?)", mediaID, position); err != nil {
 			return fmt.Errorf("write SQLite favorite: %w", err)
+		}
+	}
+	for position, mediaID := range snapshot.TopNineMediaIDs {
+		if _, err := tx.Exec("INSERT INTO top_nine (media_id, position) VALUES (?, ?)", mediaID, position); err != nil {
+			return fmt.Errorf("write SQLite 3×3 selection: %w", err)
 		}
 	}
 	bannerData := snapshot.Appearance.BannerData
@@ -526,7 +550,10 @@ func loadSQLiteSnapshot(path string) (persistedStore, error) {
 	if snapshot.Activities, err = readSQLiteActivities(db); err != nil {
 		return snapshot, err
 	}
-	if snapshot.FavoriteMediaIDs, err = readSQLiteFavorites(db); err != nil {
+	if snapshot.FavoriteMediaIDs, err = readSQLiteSelection(db, "favorites"); err != nil {
+		return snapshot, err
+	}
+	if snapshot.TopNineMediaIDs, err = readSQLiteSelection(db, "top_nine"); err != nil {
 		return snapshot, err
 	}
 	if snapshot.Appearance, err = readSQLiteAppearance(db); err != nil {
@@ -543,6 +570,9 @@ func loadSQLiteSnapshot(path string) (persistedStore, error) {
 	snapshot.Version = persistedStoreVersion
 	if snapshot.FavoriteMediaIDs == nil {
 		snapshot.FavoriteMediaIDs = []int{}
+	}
+	if snapshot.TopNineMediaIDs == nil {
+		snapshot.TopNineMediaIDs = []int{}
 	}
 	if !reflect.DeepEqual(normalized, snapshot) {
 		return snapshot, errors.New("SQLite snapshot contains inconsistent counters or defaults")
@@ -618,10 +648,14 @@ func readSQLiteActivities(db *sql.DB) ([]Activity, error) {
 	return activities, rows.Err()
 }
 
-func readSQLiteFavorites(db *sql.DB) ([]int, error) {
-	rows, err := db.Query("SELECT media_id, position FROM favorites ORDER BY position")
+func readSQLiteSelection(db *sql.DB, table string) ([]int, error) {
+	// Table names are internal constants, never request input.
+	if table != "favorites" && table != "top_nine" {
+		return nil, errors.New("unknown SQLite selection")
+	}
+	rows, err := db.Query("SELECT media_id, position FROM " + table + " ORDER BY position")
 	if err != nil {
-		return nil, fmt.Errorf("read SQLite favorites: %w", err)
+		return nil, fmt.Errorf("read SQLite %s: %w", table, err)
 	}
 	defer rows.Close()
 	favorites := []int{}
@@ -630,8 +664,8 @@ func readSQLiteFavorites(db *sql.DB) ([]int, error) {
 		if err := rows.Scan(&mediaID, &position); err != nil {
 			return nil, err
 		}
-		if position != len(favorites) || len(favorites) >= maxFavorites {
-			return nil, errors.New("invalid SQLite favorite position")
+		if position != len(favorites) {
+			return nil, fmt.Errorf("invalid SQLite %s position", table)
 		}
 		favorites = append(favorites, mediaID)
 	}

@@ -98,12 +98,14 @@ describe("Library favorites", () => {
     expect(
       screen.getByRole("button", { name: "Open favorite 1: Cowboy Bebop" }),
     ).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Done editing" }));
+    await user.click(screen.getByRole("tab", { name: "Books" }));
     expect(screen.getByRole("button", { name: "Open favorite 1: Dune" })).not
       .toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("limits each type to nine without blocking another category", async () => {
+  it("allows more than nine favorites per type and keeps other categories", async () => {
     const anime = Array.from(
       { length: 10 },
       (_, index) => ({
@@ -121,16 +123,24 @@ describe("Library favorites", () => {
     );
     await user.click(screen.getByRole("button", { name: "Edit favorites" }));
     const picker = screen.getByRole("button", { name: "Favorite Anime 10" });
-    expect(picker.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText(/9 \/ 9 in this category/u)).not.toBeNull();
+    expect(picker.hasAttribute("disabled")).toBe(false);
+    await user.click(picker);
+    expect(screen.queryByText(/category is full/u)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Books" }));
     const book = screen.getByRole("button", { name: "Favorite Dune" });
     expect(book.hasAttribute("disabled")).toBe(false);
     await user.click(book);
     await user.click(screen.getByRole("button", { name: "Save favorites" }));
     await waitFor(() =>
-      expect(save).toHaveBeenCalledWith([...ids, 2], expect.any(AbortSignal))
+      expect(save).toHaveBeenCalledWith(
+        [...ids, anime[9].id, 2],
+        expect.any(AbortSignal),
+      )
     );
+    await user.click(screen.getByRole("button", { name: "Done editing" }));
+    expect(screen.getAllByRole("button", { name: /^Open favorite/u }))
+      .toHaveLength(8);
+    await user.click(screen.getByRole("button", { name: "Show more (2)" }));
     expect(screen.getAllByRole("button", { name: /^Open favorite/u }))
       .toHaveLength(10);
   });
@@ -177,7 +187,7 @@ describe("Library favorites", () => {
     ).not.toBeNull();
   });
 
-  it("opens a saved favorite by keyboard and labels category downloads", async () => {
+  it("opens a saved favorite by keyboard without mixing in 3×3 downloads", async () => {
     const open = vi.fn();
     const user = userEvent.setup();
     render(
@@ -191,14 +201,13 @@ describe("Library favorites", () => {
         onOpen={open}
       />,
     );
+    await user.click(screen.getByRole("tab", { name: "Books" }));
     const book = screen.getByRole("button", { name: "Open favorite 1: Dune" });
     book.focus();
     await user.keyboard("{Enter}");
     expect(open).toHaveBeenCalledWith(2);
-    expect(screen.getByRole("button", { name: "Download Anime favorites PNG" }))
-      .not.toBeNull();
-    expect(screen.getByRole("button", { name: "Download Books favorites PNG" }))
-      .not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Download.*PNG/u })).toBeNull();
+    expect(screen.getByRole("button", { name: "Build 3×3" })).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Games favorites" }))
       .toBeNull();
   });
@@ -324,7 +333,7 @@ describe("Library favorites", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("can unselect a cover at the category limit and replace it", async () => {
+  it("can remove and replace a selected cover without a category limit", async () => {
     const candidates = Array.from(
       { length: 10 },
       (_, index) => ({
@@ -341,7 +350,7 @@ describe("Library favorites", () => {
     const replacement = screen.getByRole("button", {
       name: "Favorite Anime 10",
     });
-    expect(replacement.hasAttribute("disabled")).toBe(true);
+    expect(replacement.hasAttribute("disabled")).toBe(false);
     const selected = screen.getByRole("button", { name: "Favorite Anime 1" });
     expect(selected.hasAttribute("disabled")).toBe(false);
     selected.focus();

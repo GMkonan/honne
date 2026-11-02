@@ -1,10 +1,12 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Search, X } from "lucide-react";
 import { FavoriteCover } from "./FavoriteCover.tsx";
+import { FavoritesExport } from "./FavoritesExport.tsx";
+import type { TrackingMediaType } from "../mediaTracking.ts";
 import {
   type FavoriteCandidate,
-  favoritesPerType,
   favoriteTypes,
+  topNinePerType,
 } from "../favoritesModel.ts";
 
 interface FavoritesPickerModalProps {
@@ -12,6 +14,8 @@ interface FavoritesPickerModalProps {
   favoriteMediaIds: number[];
   onSave: (mediaIds: number[], signal: AbortSignal) => Promise<void>;
   onClose: () => void;
+  mode?: "favorites" | "top_nine";
+  initialType?: TrackingMediaType;
 }
 
 export function FavoritesPickerModal({
@@ -19,11 +23,17 @@ export function FavoritesPickerModal({
   favoriteMediaIds,
   onSave,
   onClose,
+  mode = "favorites",
+  initialType,
 }: FavoritesPickerModalProps) {
+  const topNine = mode === "top_nine";
   const [draft, setDraft] = useState(favoriteMediaIds);
   const [mediaType, setMediaType] = useState(() =>
-    favoriteTypes.find((type) => items.some((item) => item.type === type.value))
-      ?.value || "anime"
+    initialType || favoriteTypes.find((type) =>
+      items.some((item) => item.type === type.value)
+    )
+      ?.value ||
+    "anime"
   );
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
@@ -62,6 +72,11 @@ export function FavoritesPickerModal({
     if (saving) dialogRef.current?.focus();
   }, [saving]);
 
+  useEffect(() => {
+    const available = new Set(items.map((item) => item.id));
+    setDraft((current) => current.filter((id) => available.has(id)));
+  }, [items]);
+
   const byId = new Map(items.map((item) => [item.id, item]));
   const selected = draft.filter((id) => byId.get(id)?.type === mediaType);
   const categoryItems = items.filter((item) => item.type === mediaType);
@@ -70,7 +85,7 @@ export function FavoritesPickerModal({
   ).sort((left, right) => left.title.localeCompare(right.title));
   const categoryLabel =
     favoriteTypes.find((type) => type.value === mediaType)?.label || "Anime";
-  const full = selected.length >= favoritesPerType;
+  const full = topNine && selected.length >= topNinePerType;
   const changed = draft.length !== favoriteMediaIds.length ||
     draft.some((id, index) => id !== favoriteMediaIds[index]);
 
@@ -138,13 +153,19 @@ export function FavoritesPickerModal({
     try {
       await onSave(draft, controller.signal);
       if (!controller.signal.aborted) {
-        setFeedback("Favorites saved in this order.");
+        setFeedback(
+          topNine
+            ? "3×3 selection saved in this order."
+            : "Favorites saved in this order.",
+        );
       }
     } catch (caught: unknown) {
       if (!controller.signal.aborted) {
         setError(
           caught instanceof Error
             ? caught.message
+            : topNine
+            ? "Could not save 3×3 selection."
             : "Could not save favorites.",
         );
       }
@@ -176,17 +197,22 @@ export function FavoritesPickerModal({
       >
         <header className="modal-header favorites-picker-header">
           <div>
-            <h2 id="favorites-picker-title">Choose your favorites</h2>
+            <h2 id="favorites-picker-title">
+              {topNine ? "Build your 3×3" : "Choose your favorites"}
+            </h2>
             <p id="favorites-picker-description">
-              Pick the covers you love. Choose up to nine titles per media type,
-              then save your selection.
+              {topNine
+                ? "Choose up to nine favorites per media type and set their order. This selection is separate from your favorites."
+                : "Pick the titles you love, then save your selection. Favorites removed here also leave your 3×3."}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            aria-label="Close favorites picker"
+            aria-label={topNine
+              ? "Close 3×3 builder"
+              : "Close favorites picker"}
           >
             <X size={20} />
           </button>
@@ -194,10 +220,14 @@ export function FavoritesPickerModal({
         <div className="favorites-picker-body">
           <section
             className="favorites-picker-browse"
-            aria-label="Library titles to choose"
+            aria-label={topNine
+              ? "Favorites to choose for 3×3"
+              : "Library titles to choose"}
           >
             <label className="favorites-picker-search">
-              <span className="sr-only">Search Library titles</span>
+              <span className="sr-only">
+                {topNine ? "Search favorite titles" : "Search Library titles"}
+              </span>
               <span>
                 <Search size={18} aria-hidden="true" />
                 <input
@@ -206,7 +236,9 @@ export function FavoritesPickerModal({
                   value={query}
                   disabled={saving}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search your Library…"
+                  placeholder={topNine
+                    ? "Search your favorites…"
+                    : "Search your Library…"}
                 />
               </span>
             </label>
@@ -227,7 +259,8 @@ export function FavoritesPickerModal({
                   {label}
                   <small aria-hidden="true">
                     {draft.filter((id) => byId.get(id)?.type === value)
-                      .length}/9
+                      .length}
+                    {topNine ? "/9" : ""}
                   </small>
                 </button>
               ))}
@@ -251,7 +284,9 @@ export function FavoritesPickerModal({
                         type="button"
                         key={item.id}
                         className="favorite-choice"
-                        aria-label={`Favorite ${item.title}`}
+                        aria-label={topNine
+                          ? `Select ${item.title} for 3×3`
+                          : `Favorite ${item.title}`}
                         aria-pressed={picked}
                         disabled={saving || (!picked && full)}
                         aria-describedby={full
@@ -274,7 +309,11 @@ export function FavoritesPickerModal({
                         </span>
                         <strong>{item.title}</strong>
                         <span className="favorite-choice-state">
-                          {picked ? "Selected" : "Add to favorites"}
+                          {picked
+                            ? "Selected"
+                            : topNine
+                            ? "Add to 3×3"
+                            : "Add to favorites"}
                         </span>
                       </button>
                     );
@@ -285,14 +324,16 @@ export function FavoritesPickerModal({
                 <div className="favorites-picker-empty">
                   <h3>
                     {items.length === 0
-                      ? "Your Library is empty"
+                      ? topNine ? "No favorites yet" : "Your Library is empty"
                       : categoryItems.length === 0
                       ? "No titles in this category"
                       : "No matching titles"}
                   </h3>
                   <p>
                     {items.length === 0
-                      ? "Add titles to your Library before choosing favorites."
+                      ? topNine
+                        ? "Choose favorites before building your 3×3."
+                        : "Add titles to your Library before choosing favorites."
                       : categoryItems.length === 0
                       ? "Choose another media type to browse your Library."
                       : "Try another title or media type. Your selection is still here."}
@@ -318,8 +359,8 @@ export function FavoritesPickerModal({
           >
             <h3 id="favorites-selection-title">Your selection</h3>
             <p>
-              {categoryLabel} · {selected.length} / {favoritesPerType}{" "}
-              in this category
+              {categoryLabel} · {selected.length}
+              {topNine ? ` / ${topNinePerType}` : ""} in this category
             </p>
             <p id="favorites-picker-limit" role="status">
               {full
@@ -327,7 +368,13 @@ export function FavoritesPickerModal({
                 : "Click a cover to select or unselect it. Use the arrows to change its order."}
             </p>
             {selected.length === 0
-              ? <p>No favorites in this category yet.</p>
+              ? (
+                <p>
+                  {topNine
+                    ? "No titles in this 3×3 yet."
+                    : "No favorites in this category yet."}
+                </p>
+              )
               : (
                 <ol className="favorite-order-list" aria-label="Favorite order">
                   {selected.map((id, index) => {
@@ -369,7 +416,9 @@ export function FavoritesPickerModal({
                               handleToggle(id);
                               searchRef.current?.focus();
                             }}
-                            aria-label={`Remove ${item.title} from favorites`}
+                            aria-label={`Remove ${item.title} from ${
+                              topNine ? "3×3" : "favorites"
+                            }`}
                           >
                             <X size={14} />
                           </button>
@@ -379,11 +428,29 @@ export function FavoritesPickerModal({
                   })}
                 </ol>
               )}
+            {topNine && selected.length > 0 && (
+              <FavoritesExport
+                items={selected.flatMap((id) => {
+                  const item = byId.get(id);
+                  return item ? [item] : [];
+                })}
+                mediaType={mediaType}
+                label={categoryLabel}
+                disabled={changed || saving}
+              />
+            )}
+            {topNine && changed && (
+              <p>Save your selection before downloading the image.</p>
+            )}
           </section>
         </div>
         <footer className="favorites-picker-footer">
           {(saving || feedback) && (
-            <p role="status">{saving ? "Saving favorites…" : feedback}</p>
+            <p role="status">
+              {saving
+                ? topNine ? "Saving 3×3…" : "Saving favorites…"
+                : feedback}
+            </p>
           )}
           {error && <p role="alert">{error}</p>}
           <div className="favorites-picker-actions">
@@ -397,7 +464,7 @@ export function FavoritesPickerModal({
               onClick={() => void handleSave()}
               disabled={!changed || saving}
             >
-              {saving ? "Saving…" : "Save favorites"}
+              {saving ? "Saving…" : topNine ? "Save 3×3" : "Save favorites"}
             </button>
           </div>
         </footer>

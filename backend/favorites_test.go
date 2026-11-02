@@ -65,30 +65,6 @@ func TestFavoritesNinePerTypeSurviveRestartAndBackupRestore(t *testing.T) {
 	}
 }
 
-func TestFavoritesRejectTenthOfOneTypeWithoutChangingSnapshot(t *testing.T) {
-	s := validationSQLiteStore(t)
-	a := &app{store: s}
-	snapshot := favoriteTestSnapshot()
-	snapshot.Items = append(snapshot.Items, Media{ID: 64, Title: "Tenth anime", Type: "anime"})
-	seed, _ := json.Marshal(snapshot)
-	validationSQLiteRequest(t, a, http.MethodPost, "/api/backup/restore", "application/json", seed, http.StatusOK)
-	before := validationSQLiteRequest(t, a, http.MethodGet, "/api/backup", "", nil, http.StatusOK)
-	ids := append(append([]int{}, snapshot.FavoriteMediaIDs[:9]...), 64)
-	input, _ := json.Marshal(favoritesInput{MediaIDs: ids})
-	response := validationSQLiteRequest(t, a, http.MethodPut, "/api/favorites", "application/json", input, http.StatusUnprocessableEntity)
-	if !strings.Contains(string(response), "9 titles per media type") {
-		t.Fatalf("missing actionable limit: %s", response)
-	}
-	snapshot.FavoriteMediaIDs = ids
-	invalidBackup, _ := json.Marshal(snapshot)
-	validationSQLiteRequest(t, a, http.MethodPost, "/api/backup/preview", "application/json", invalidBackup, http.StatusUnprocessableEntity)
-	validationSQLiteRequest(t, a, http.MethodPost, "/api/backup/restore", "application/json", invalidBackup, http.StatusUnprocessableEntity)
-	after := validationSQLiteRequest(t, a, http.MethodGet, "/api/backup", "", nil, http.StatusOK)
-	if !bytes.Equal(before, after) {
-		t.Fatal("invalid selection changed persisted favorites")
-	}
-}
-
 func createSchemaThreeFavorites(t *testing.T, conflict bool) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "schema-three.db")
@@ -97,7 +73,7 @@ func createSchemaThreeFavorites(t *testing.T, conflict bool) string {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	oldSchema := strings.NewReplacer("BETWEEN 1 AND 9", "BETWEEN 1 AND 8", "BETWEEN 0 AND 62", "BETWEEN 0 AND 8", "user_version = 4", "user_version = 3").Replace(sqliteSchema)
+	oldSchema := legacyFavoritesSchema(3)
 	if _, err := db.Exec(oldSchema); err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +87,16 @@ func createSchemaThreeFavorites(t *testing.T, conflict bool) string {
 		}
 	}
 	return path
+}
+
+func legacyFavoritesSchema(version int) string {
+	start := strings.Index(sqliteSchema, "CREATE TABLE top_nine")
+	end := strings.Index(sqliteSchema, "CREATE TABLE library_appearance")
+	schema := sqliteSchema[:start] + sqliteSchema[end:]
+	if version == 3 {
+		return strings.NewReplacer("BETWEEN 1 AND 10", "BETWEEN 1 AND 8", "CHECK (position >= 0),\n  FOREIGN KEY", "CHECK (position BETWEEN 0 AND 8),\n  FOREIGN KEY", "user_version = 5", "user_version = 3").Replace(schema)
+	}
+	return strings.NewReplacer("BETWEEN 1 AND 10", "BETWEEN 1 AND 9", "CHECK (position >= 0),\n  FOREIGN KEY", "CHECK (position BETWEEN 0 AND 62),\n  FOREIGN KEY", "user_version = 5", "user_version = 4").Replace(schema)
 }
 
 func TestFavoritesSchemaThreeMigrationPreservesSelection(t *testing.T) {
@@ -133,7 +119,7 @@ func TestFavoritesSchemaThreeMigrationPreservesSelection(t *testing.T) {
 	if err := s.db.QueryRow("SELECT json_version FROM store_meta").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if schema != 4 || version != 9 {
+	if schema != sqliteSchemaVersion || version != persistedStoreVersion {
 		t.Fatalf("versions = schema %d, JSON %d", schema, version)
 	}
 }

@@ -1,40 +1,50 @@
-# Library favorites and image export
+# Overview favorites and independent 3×3 export
 
-Favorites live beside the collection in `#library`, with portrait covers grouped
-by media type. On smaller screens, Status stays above the collection and favorites
-stack below it. Existing `#favorites` links open the same integrated Library;
-Favorites is no longer a separate navigation tab or a Settings card.
+Library opens on Overview (`#library`, with `#overview` and legacy `#favorites`
+links also supported). The sibling Library tab (`#library/list`) contains the
+media lists; Monthly Log remains a separate chronological experience. Overview
+shows collection metrics, the eight newest local Activity events, and a favorites
+widget. Independent loading failures retain valid Library and favorites data.
 
-**Choose favorites** / **Edit favorites** opens a visual picker dialog in the
-Library. Search local titles by name, use the visible media-type filters, and
-click cover cards to select or unselect them. Selected cards show a check, their
-position, and a text label rather than relying on color. A separate selection
-list keeps selected titles and ordering controls visible while searching.
+The widget uses media-type tabs, four portrait-cover columns, eight covers at
+first, and **Show more** / **Show less** for larger categories. Tabs support
+Left/Right, Home/End, and keyboard focus. Missing covers retain title fallbacks.
+Favorites are not edited from Settings.
 
-Each category accepts up to nine Library titles, independently of the others
-(63 total across the seven supported types). Full categories still allow
-unselecting covers; only additional selections are blocked. Switching categories
-or searching preserves the draft. Empty Library, empty category, and unmatched
-search states are distinct. Filtering is local and never queries a catalog.
-Add, remove, reorder, and cancel do not write until **Save favorites** succeeds. A
-failed save preserves the draft and allows retry. The showcase and image exports
-always use confirmed saved favorites, not the draft.
+## Favorites
 
-The dialog focuses search on open, contains Tab navigation, closes on Escape or
-cancel, and restores focus and page scrolling on close. During a save, controls
-and dismissal are blocked while feedback is announced. Navigation away aborts
-obsolete work without claiming that a cancelled request rolled back a server write.
+**Choose favorites** / **Edit favorites** opens the visual Library picker. Search
+local titles, switch types, and select as many unique Library titles as desired:
+there is no nine-title product limit. A separate list exposes the selected titles
+and order while searching. Search and category changes preserve the draft.
 
-Each nonempty category offers **Download PNG**. The browser creates
-`honne-favorites-<media-type>-3x3.png` at 1080 × 1200 px, with a category heading,
-square 3×3 grid, centered cover crops, positions, and titles in that category's
-saved order. Unfilled positions remain empty. A missing or unavailable cover
-keeps its title placeholder instead of failing the other tiles.
+Nothing is persisted until **Save favorites** succeeds. Failed saves preserve the
+draft and support retry; cancel discards edits. Removing a favorite also removes
+it from the separate 3×3 selection in the same transaction, without filling the
+vacant position with another title. Reordering favorites does not reorder 3×3.
 
-Only favorite covers and titles are included, with Honne branding and position
-labels. Personal notes, ratings, account information, and the Library profile
-name are not rendered. Generating the image does not publish a profile, upload
-the PNG, or change Library data, favorites, Activity, or synchronization jobs.
+## Independent 3×3
+
+**Build 3×3** opens a second visual picker containing only saved favorites. Select
+and order up to nine per media type independently of the favorites list. **Save
+3×3** persists this selection; it never adds, removes, or reorders favorites.
+
+Each nonempty saved 3×3 category offers **Download PNG**. Export is disabled while
+there are unsaved changes or a save is pending. The browser creates
+`honne-top-nine-<media-type>-3x3.png` at 1080 × 1200 px, with a category heading,
+square 3×3 grid, centered cover crops, numbered positions, and titles in the
+3×3's saved order. Empty slots remain empty. Missing covers use title placeholders
+independently rather than failing the other tiles.
+
+Both pickers focus search, contain Tab, support Escape/cancel, and restore focus
+and scrolling. During a save controls and dismissal are blocked; navigation away
+aborts obsolete work without claiming to roll back an already received write.
+
+Only selected covers, titles, position labels, and Honne branding are rendered.
+Notes, ratings, account details, and the profile name are excluded. Generating an
+image does not publish a profile or upload the PNG. See
+[the Overview persistence plan](overview-favorites.md) for schema-5/JSON-10
+compatibility and rollback requirements.
 
 ## Cover requests and resource limits
 
@@ -56,34 +66,33 @@ image. Errors leave the grid available and allow retry.
 
 ## Validation
 
-Automated coverage exercises per-type limits, cross-category draft preservation,
-visual search/filter/selection, modal keyboard containment, save confirmation,
-cancel/focus restoration, loading failures
-and retry independent of the Library/profile, legacy deep links, nine-position
-layout and order, partial grids, fallbacks, long titles, PNG encoding failure,
-unavailable canvas, keyboard
-activation, retry, overlapping exports, cancellation, streamed size limits,
-timeouts, URL validation, and cleanup. Canvas operations and encoding are mocked
-in unit tests; they do not substitute for inspecting an actual downloaded PNG.
+Automated coverage includes favorites beyond nine in one category, independent
+3×3 limits/order/membership, legacy selection migration, restart and backup/
+restore, deletion and failed-write rollback, visual selection/search, category
+preview/expansion, keyboard tabs and modal focus, save/cancel/retry, independent
+loading failures, Overview routes/back navigation, and stale-work cancellation.
+The renderer tests cover full/partial grids, crop positions, fallbacks, long
+titles, encoding failure, and cleanup. Mocked canvas tests do not replace visual
+inspection of a downloaded image.
 
 With synthetic data, manually validate:
 
-1. Choose 1, 5, and 9 favorites per category, including more than nine across
-   categories. Verify cover selection, title search, category filters, independent
-   limits, ordering, save/cancel/error states,
-   and the portrait cover groups beside the collection. Settings must not offer
-   favorite selection. Export each category and verify unused positions,
-   category heading, filename, dimensions, and readable title clipping.
-2. Include portrait and landscape artwork, long/unbroken/non-Latin titles,
-   absent covers, unavailable URLs, and covers requiring the proxy. Confirm that
-   failed covers keep their titles and that the status explains the fallback.
-3. Activate Download PNG by keyboard, confirm the busy state, exercise retry,
-   and navigate away while covers load. No stale download should occur.
-4. Check the page and picker at 320 px, tablet, desktop, and 200% zoom without
-   horizontal page overflow. Verify scrolling in short viewports, focus containment,
-   Escape/cancel and focus restoration; inspect the PNG's actual crop, text, and contrast.
-5. Smoke-test Monthly Log download after the shared-loader extraction.
+1. Add more than nine favorites in one type and favorites in several types.
+   Check four-column layout, eight-cover preview, Show more/less, keyboard tabs,
+   visual editing, and save/cancel/error states. Settings must not select favorites.
+2. Build 1-, 5-, and 9-title 3×3 selections, with independent orders in two types.
+   Check limits, saved-state export gating, filenames, dimensions, headings, and
+   readable title clipping. Changing 3×3 must not alter favorites.
+3. Remove a favorite used in 3×3 and delete a selected Library title. Confirm
+   cleanup, persistence after reload, and portable backup/restore.
+4. Include portrait/landscape artwork, long/non-Latin titles, missing or failed
+   covers, and proxy-only covers. Verify fallbacks and generation feedback.
+5. Check Overview, lists, and both pickers at 320 px, tablet, desktop, 200% zoom,
+   and short viewports; inspect cropping, contrast, scrolling, focus containment,
+   Escape/cancel, focus restoration, history navigation, and reduced motion.
+6. Smoke-test Monthly Log and the existing Activity page after shared Activity
+   formatting and image export changes.
 
-Real-browser/image visual validation is still outstanding in this environment:
-the browser tool reports that Chromium/Google Chrome is not installed. No new
-browser or image-rendering dependency was added.
+Real-browser/image visual validation remains outstanding: the browser tool
+reports that Chromium/Google Chrome is not installed. No browser or rendering
+dependency was added.

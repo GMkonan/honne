@@ -7,7 +7,7 @@ This document records the owner's current priority order. It is a planning guide
 The local `main` now contains the operational SQLite store, non-destructive JSON migration, graceful shutdown, portable backup restore, custom Library images, and the first favorites slice. Before remote delivery:
 
 - visually validate the current source build at desktop, mobile, and 200% zoom;
-- rehearse SQLite schema upgrades through version 4 using synthetic data;
+- rehearse SQLite schema upgrades through version 5 using synthetic data;
 - verify a JSON backup before and after banner/profile-picture/favorites changes;
 - review release and rollback notes as one coherent upgrade path;
 - split or retain the local commits so migration, restore, customization, and documentation remain reviewable;
@@ -15,23 +15,24 @@ The local `main` now contains the operational SQLite store, non-destructive JSON
 
 The running release installation and real owner data must remain unchanged during this validation.
 
-## 2. Refine Library favorites
+## 2. Validate the Library Overview and independent 3×3
 
-The initial local implementation supports:
+The local source implementation now supports:
 
-- manual selection of up to nine Library titles per media type;
-- visual cover selection with local title search and media-type filters, opened from the Library rather than Settings;
-- manual ordering within each category, with a separate selection list in the picker;
-- a favorites column beside the collection, with grouped portrait covers and stacked blocks on smaller screens;
-- compatibility for existing `#favorites` links, which now open the integrated Library;
-- a locally generated 3×3 PNG per category preserving favorite order, with title fallbacks for unavailable covers and empty positions for partial grids;
-- transactional persistence, JSON backup/restore, deletion cleanup, and rollback.
+- Overview as the initial Library page, with sibling tabs named Library and Monthly Log;
+- collection metrics and the eight newest local Activity events, preserving independent successful loads;
+- favorites without a nine-title product limit, using category tabs, a four-column cover preview, and Show more/less;
+- visual selection and manual ordering from Overview, not Settings;
+- a separately persisted 3×3 selection, chosen only from favorites, with up to nine per media type;
+- local PNG export from the confirmed 3×3 order rather than the full favorites list;
+- schema-5/JSON-10 migration preserving previous choices, portable backup/restore, deletion cleanup, and rollback.
 
 Next refinements:
 
-- visually tune portrait covers, category spacing, the visual picker, and mobile presentation with real artwork;
-- visually validate the generated PNG with full/partial grids, mixed artwork, long titles, and unavailable covers;
-- keep favorites separate from Monthly Log history and any future public profile.
+- visually validate Overview, category tabs, pickers, and mobile/200% zoom presentation with real artwork;
+- visually validate full/partial PNG grids, long titles, missing covers, and crop/contrast;
+- keep favorites separate from Monthly Log history, social features, and any future public profile;
+- update a running installation only after explicit authorization and matching pre-update backups.
 
 ## 3. Validate Library personalization
 

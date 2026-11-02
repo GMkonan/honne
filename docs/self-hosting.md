@@ -92,7 +92,7 @@ Use **Settings → Download backup** for a coherent JSON snapshot containing:
 - the collection and catalog metadata;
 - activity history;
 - pending AniList synchronization jobs;
-- ordered favorites, the custom Library banner, and the profile picture;
+- ordered favorites, independent 3×3 selections, the custom Library banner, and the profile picture;
 - persisted ID counters.
 
 The download intentionally excludes the AniList OAuth token. Reconnect AniList after restoring into a fresh installation.
@@ -118,7 +118,7 @@ The normal restore path does not require container access:
 4. review the title, Activity, and AniList queue counts;
 5. confirm **Replace with this backup**.
 
-The backend accepts versioned Honne snapshots v1–v8 and the legacy array format, up to 32 MiB. It validates the entire file before enabling confirmation and replaces Library, Activity, ID counters, favorites, Library banner, profile picture, and the AniList outbox in one SQLite transaction. A validation or persistence failure leaves the current state unchanged. A successful restore intentionally replaces it, so keep the pre-restore download until the result is verified. OAuth authorization is never imported; reconnect only the matching AniList account afterward.
+The backend accepts versioned Honne snapshots v1–v10 and the legacy array format, up to 32 MiB. It validates the entire file before enabling confirmation and replaces Library, Activity, ID counters, favorites, 3×3 selections, Library banner, profile picture, and the AniList outbox in one SQLite transaction. A validation or persistence failure leaves the current state unchanged. A successful restore intentionally replaces it, so keep the pre-restore download until the result is verified. OAuth authorization is never imported; reconnect only the matching AniList account afterward.
 
 ### From the data volume
 
@@ -180,6 +180,8 @@ docker compose up -d
 Starting with v0.4.0, the first successful Library write upgrades the snapshot to persistence version 6 so planned rewatch, reread, and replay intent can be stored. A v0.3.x or older backend cannot read that snapshot. Before updating to v0.4.0, download a backup. To roll back afterward, stop the backend, preserve the current data directory, restore the pre-v0.4.0 backup as described in **Restore a downloaded backup**, and only then start the older containers. Starting the older backend without that restore fails safely with an unsupported-version error; it does not rewrite the newer snapshot.
 
 The customization updates use JSON version 8 and SQLite schema version 3. Schema upgrades run transactionally: version 1 adds favorites and banner storage, then version 2 adds profile-picture storage. Before installing a release containing these changes, download a portable backup and copy the stopped data volume. Older backends do not understand the newer schema or JSON contract. Rolling back requires the pre-update volume or pre-update JSON backup; it intentionally does not discard favorites or images to manufacture an older snapshot.
+
+The Overview/favorites update uses SQLite schema 5 and JSON 10. Favorites no longer have a nine-title limit; a separate ordered 3×3 selection is chosen from favorites, with up to nine per type. Existing favorites initialize both selections on upgrade. Preserve a portable pre-update backup, a stopped-volume copy, and matching images before applying it: older images cannot open the new schema or portable format. See [the source upgrade plan](development/overview-favorites.md).
 
 Do not use the simple image-only rollback sequence for v0.1.0 either. Its Compose asset predates embedded image tags, and its backend cannot read the persistence-v5 snapshot written by v0.2.0. Before validating or starting v0.1.0:
 

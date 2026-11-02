@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-const persistedStoreVersion = 9
+const persistedStoreVersion = 10
 
 type libraryAppearance struct {
 	BannerContentType string `json:"bannerContentType,omitempty"`
@@ -29,6 +29,7 @@ type persistedStore struct {
 	SyncJobs         []syncJob         `json:"syncJobs,omitempty"`
 	Activities       []Activity        `json:"activities,omitempty"`
 	FavoriteMediaIDs []int             `json:"favoriteMediaIds,omitempty"`
+	TopNineMediaIDs  []int             `json:"topNineMediaIds,omitempty"`
 	Appearance       libraryAppearance `json:"appearance,omitempty"`
 	NextID           int               `json:"nextId,omitempty"`
 	NextJobID        int64             `json:"nextJobId,omitempty"`
@@ -45,6 +46,7 @@ type store struct {
 	syncJobs         []syncJob
 	activities       []Activity
 	favoriteMediaIDs []int
+	topNineMediaIDs  []int
 	appearance       libraryAppearance
 	nextID           int
 	nextJobID        int64
@@ -84,7 +86,7 @@ func newStore(path string) (*store, error) {
 
 func emptyStore(path string) *store {
 	return &store{
-		path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{}, favoriteMediaIDs: []int{},
+		path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{}, favoriteMediaIDs: []int{}, topNineMediaIDs: []int{},
 		nextID: 1, nextJobID: 1, nextActivityID: 1,
 	}
 }
@@ -97,6 +99,11 @@ func (s *store) loadSnapshot(snapshot persistedStore) {
 	}
 	if snapshot.FavoriteMediaIDs != nil {
 		s.favoriteMediaIDs = snapshot.FavoriteMediaIDs
+	}
+	if snapshot.Version < 10 {
+		s.topNineMediaIDs = slices.Clone(s.favoriteMediaIDs)
+	} else if snapshot.TopNineMediaIDs != nil {
+		s.topNineMediaIDs = snapshot.TopNineMediaIDs
 	}
 	s.appearance = snapshot.Appearance
 	if snapshot.NextID > s.nextID {
@@ -122,6 +129,9 @@ func (s *store) normalizeLoadedState() {
 	}
 	if s.favoriteMediaIDs == nil {
 		s.favoriteMediaIDs = []int{}
+	}
+	if s.topNineMediaIDs == nil {
+		s.topNineMediaIDs = []int{}
 	}
 	for index := range s.items {
 		if s.items[index].PlayedOnPlatforms == nil {
@@ -159,7 +169,7 @@ func (s *store) normalizeLoadedState() {
 func (s *store) snapshotLocked() persistedStore {
 	return persistedStore{
 		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
-		FavoriteMediaIDs: s.favoriteMediaIDs, Appearance: s.appearance,
+		FavoriteMediaIDs: s.favoriteMediaIDs, TopNineMediaIDs: s.topNineMediaIDs, Appearance: s.appearance,
 		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
 	}
 }
@@ -170,6 +180,7 @@ func (s *store) cloneSnapshotLocked() persistedStore {
 	snapshot.SyncJobs = slices.Clone(snapshot.SyncJobs)
 	snapshot.Activities = slices.Clone(snapshot.Activities)
 	snapshot.FavoriteMediaIDs = slices.Clone(snapshot.FavoriteMediaIDs)
+	snapshot.TopNineMediaIDs = slices.Clone(snapshot.TopNineMediaIDs)
 	snapshot.Appearance.BannerData = slices.Clone(snapshot.Appearance.BannerData)
 	snapshot.Appearance.AvatarData = slices.Clone(snapshot.Appearance.AvatarData)
 	return snapshot
@@ -180,6 +191,7 @@ func (s *store) restoreSnapshotLocked(snapshot persistedStore) {
 	s.syncJobs = snapshot.SyncJobs
 	s.activities = snapshot.Activities
 	s.favoriteMediaIDs = snapshot.FavoriteMediaIDs
+	s.topNineMediaIDs = snapshot.TopNineMediaIDs
 	s.appearance = snapshot.Appearance
 	s.nextID = snapshot.NextID
 	s.nextJobID = snapshot.NextJobID

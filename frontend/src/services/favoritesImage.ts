@@ -7,7 +7,7 @@ interface FavoriteImageItem {
 }
 
 export function favoritesImageFilename(mediaType: TrackingMediaType): string {
-  return `honne-favorites-${mediaType}-3x3.png`;
+  return `honne-top-nine-${mediaType}-3x3.png`;
 }
 
 function drawTitle(
@@ -67,7 +67,7 @@ export async function createFavoritesImage(
   context.fillText("HANDPICKED", 54, 36);
   context.fillStyle = "#cdd6f4";
   context.font = "700 44px 'Zen Kaku Gothic New', sans-serif";
-  context.fillText(category ? `${category} favorites` : "Favorites", 54, 65);
+  context.fillText(category ? `${category} top 9` : "Top 9", 54, 65);
 
   for (let index = 0; index < 9; index++) {
     const x = 54 + (index % 3) * 328;

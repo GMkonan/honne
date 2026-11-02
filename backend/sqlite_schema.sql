@@ -5,7 +5,7 @@
 -- No cascading foreign keys: history and delete jobs can reference removed media.
 CREATE TABLE store_meta (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 9),
+  json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 10),
   next_media_id INTEGER NOT NULL CHECK (next_media_id > 0),
   next_job_id INTEGER NOT NULL CHECK (next_job_id > 0),
   next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0)
@@ -29,8 +29,13 @@ CREATE TABLE activities (
 );
 CREATE TABLE favorites (
   media_id INTEGER PRIMARY KEY CHECK (media_id > 0),
-  position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 62),
+  position INTEGER NOT NULL UNIQUE CHECK (position >= 0),
   FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE RESTRICT
+);
+CREATE TABLE top_nine (
+  media_id INTEGER PRIMARY KEY CHECK (media_id > 0),
+  position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 62),
+  FOREIGN KEY (media_id) REFERENCES favorites(media_id) ON DELETE RESTRICT
 );
 CREATE TABLE library_appearance (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -41,4 +46,4 @@ CREATE TABLE library_appearance (
   CHECK ((banner_content_type = '') = (length(banner_data) = 0)),
   CHECK ((avatar_content_type = '') = (length(avatar_data) = 0))
 );
-PRAGMA user_version = 4;
+PRAGMA user_version = 5;

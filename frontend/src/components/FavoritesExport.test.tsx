@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FavoritesExport } from "./FavoritesExport.tsx";
-import { FavoritesPanel } from "./FavoritesPanel.tsx";
+import { FavoritesPickerModal } from "./FavoritesPickerModal.tsx";
 import * as favoritesImage from "../services/favoritesImage.ts";
 
 const items = [
@@ -40,21 +40,20 @@ describe("favorites export actions", () => {
     );
     const user = userEvent.setup();
     render(
-      <FavoritesPanel
+      <FavoritesPickerModal
+        mode="top_nine"
         items={[...items, book]}
         favoriteMediaIds={[1, 3, 2]}
-        loading={false}
-        error=""
-        onRetry={vi.fn()}
         onSave={vi.fn()}
-        onOpen={vi.fn()}
+        onClose={vi.fn()}
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: "Download Anime favorites PNG" }),
+      screen.getByRole("button", { name: "Download Anime 3×3 PNG" }),
     );
+    await user.click(screen.getByRole("button", { name: "Books" }));
     await user.click(
-      screen.getByRole("button", { name: "Download Books favorites PNG" }),
+      screen.getByRole("button", { name: "Download Books 3×3 PNG" }),
     );
     expect(create).toHaveBeenNthCalledWith(
       1,
@@ -69,15 +68,15 @@ describe("favorites export actions", () => {
       "Books",
     );
     expect(filenames).toEqual([
-      "honne-favorites-anime-3x3.png",
-      "honne-favorites-book-3x3.png",
+      "honne-top-nine-anime-3x3.png",
+      "honne-top-nine-book-3x3.png",
     ]);
   });
 
   it("keeps the empty state and does not offer an empty download", () => {
     render(<FavoritesExport items={[]} mediaType="anime" label="Anime" />);
     expect(
-      screen.queryByRole("button", { name: "Download Anime favorites PNG" }),
+      screen.queryByRole("button", { name: "Download Anime 3×3 PNG" }),
     ).toBeNull();
   });
 
@@ -93,7 +92,7 @@ describe("favorites export actions", () => {
     const user = userEvent.setup();
     render(<FavoritesExport items={items} mediaType="anime" label="Anime" />);
     const button = screen.getByRole("button", {
-      name: "Download Anime favorites PNG",
+      name: "Download Anime 3×3 PNG",
     });
     button.focus();
     await user.keyboard("{Enter}");
@@ -102,9 +101,9 @@ describe("favorites export actions", () => {
       expect.any(AbortSignal),
       "Anime",
     );
-    expect(filename).toBe("honne-favorites-anime-3x3.png");
+    expect(filename).toBe("honne-top-nine-anime-3x3.png");
     expect(screen.getByRole("status").textContent).toBe(
-      "Favorites downloaded.",
+      "3×3 downloaded.",
     );
     await waitFor(() =>
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:favorites")
@@ -118,10 +117,10 @@ describe("favorites export actions", () => {
     const user = userEvent.setup();
     render(<FavoritesExport items={items} mediaType="anime" label="Anime" />);
     await user.click(
-      screen.getByRole("button", { name: "Download Anime favorites PNG" }),
+      screen.getByRole("button", { name: "Download Anime 3×3 PNG" }),
     );
     const working = screen.getByRole("button", {
-      name: "Download Anime favorites PNG",
+      name: "Download Anime 3×3 PNG",
     });
     expect(working.hasAttribute("disabled")).toBe(true);
     fireEvent.click(working);
@@ -140,15 +139,15 @@ describe("favorites export actions", () => {
     const user = userEvent.setup();
     render(<FavoritesExport items={items} mediaType="anime" label="Anime" />);
     await user.click(
-      screen.getByRole("button", { name: "Download Anime favorites PNG" }),
+      screen.getByRole("button", { name: "Download Anime 3×3 PNG" }),
     );
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Please try again",
     );
-    expect(screen.getByRole("button", { name: "Download Anime favorites PNG" }))
+    expect(screen.getByRole("button", { name: "Download Anime 3×3 PNG" }))
       .not.toBeNull();
     await user.click(
-      screen.getByRole("button", { name: "Download Anime favorites PNG" }),
+      screen.getByRole("button", { name: "Download Anime 3×3 PNG" }),
     );
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("alert")).toBeNull();
@@ -168,7 +167,7 @@ describe("favorites export actions", () => {
       <FavoritesExport items={items} mediaType="anime" label="Anime" />,
     );
     await user.click(
-      screen.getByRole("button", { name: "Download Anime favorites PNG" }),
+      screen.getByRole("button", { name: "Download Anime 3×3 PNG" }),
     );
     rerender(
       <FavoritesExport
@@ -180,7 +179,7 @@ describe("favorites export actions", () => {
     expect(signals[0].aborted).toBe(true);
     finishes[0](result);
     await user.click(
-      screen.getByRole("button", { name: "Download Anime favorites PNG" }),
+      screen.getByRole("button", { name: "Download Anime 3×3 PNG" }),
     );
     unmount();
     expect(signals[1].aborted).toBe(true);

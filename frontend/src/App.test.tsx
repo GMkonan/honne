@@ -15,6 +15,10 @@ import { createFetchRouter, type FetchRouter } from "./test/fetch-router.ts";
 const originalCreateObjectURL = URL.createObjectURL;
 const originalRevokeObjectURL = URL.revokeObjectURL;
 
+beforeEach(() => {
+  globalThis.history.replaceState(null, "", "/#library/list");
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   if (originalCreateObjectURL) {
@@ -62,7 +66,7 @@ function visibleMediaTitles(): string[] {
 
 describe("Library characterization", () => {
   beforeEach(() => {
-    globalThis.history.replaceState(null, "", "/#library");
+    globalThis.history.replaceState(null, "", "/#library/list");
     globalThis.sessionStorage.clear();
   });
 
@@ -105,7 +109,7 @@ describe("Library characterization", () => {
       name: "Library sections",
     });
     expect(
-      within(librarySections).getByRole("link", { name: "Collection" })
+      within(librarySections).getByRole("link", { name: "Library" })
         .getAttribute("aria-current"),
     ).toBe("page");
     expect(within(librarySections).getByRole("link", { name: "Monthly Log" }))
@@ -178,8 +182,8 @@ describe("Library characterization", () => {
       within(librarySections).getByRole("link", { name: "Monthly Log" })
         .getAttribute("aria-current"),
     ).toBe("page");
-    expect(within(librarySections).getByRole("link", { name: "Collection" }))
-      .toHaveProperty("hash", "#library");
+    expect(within(librarySections).getByRole("link", { name: "Library" }))
+      .toHaveProperty("hash", "#library/list");
     expect(
       within(
         screen.getByRole("navigation", { name: "Primary navigation" }),
@@ -440,6 +444,10 @@ describe("Library characterization", () => {
     });
     await user.click(screen.getByRole("link", { name: "Library" }));
     await user.click(
+      within(screen.getByRole("navigation", { name: "Library sections" }))
+        .getByRole("link", { name: "Library" }),
+    );
+    await user.click(
       await screen.findByRole("button", {
         name: /^View details for Cowboy Bebop/,
       }),
@@ -566,7 +574,8 @@ describe("Library characterization", () => {
     ).not.toBeNull();
   });
 
-  it("curates favorites beside the collection, with independent category order", async () => {
+  it("curates favorites in the Overview, with independent category order", async () => {
+    globalThis.history.replaceState(null, "", "/#library");
     const router = createFetchRouter();
     bootstrap(router, [...mediaItems, {
       ...mediaItems[0],
@@ -586,13 +595,10 @@ describe("Library characterization", () => {
     const favorites = await screen.findByRole("complementary", {
       name: "Favorites",
     });
-    expect(screen.getByRole("heading", { name: "Your collection" })).not
+    expect(screen.getByRole("heading", { name: "Overview" })).not
       .toBeNull();
-    expect(
-      await within(favorites).findByRole("button", {
-        name: "Open favorite 1: Dune",
-      }),
-    ).not.toBeNull();
+    expect(await within(favorites).findByRole("tab", { name: "Anime" })).not
+      .toBeNull();
     expect(screen.getByRole("link", { name: "Monthly Log" })).not.toBeNull();
     expect(screen.queryByRole("link", { name: "Favorites" })).toBeNull();
     await user.click(
@@ -635,11 +641,12 @@ describe("Library characterization", () => {
         name: "Open favorite 1: Cowboy Bebop",
       }),
     ).not.toBeNull();
-    expect(screen.getByRole("heading", { name: "Your collection" })).not
+    expect(screen.getByRole("heading", { name: "Overview" })).not
       .toBeNull();
   });
 
   it("keeps the Library and profile usable when favorites fail and retries safely", async () => {
+    globalThis.history.replaceState(null, "", "/#library");
     const router = createFetchRouter();
     bootstrap(router);
     router.json(
@@ -656,11 +663,11 @@ describe("Library characterization", () => {
     expect((await within(favorites).findByRole("alert")).textContent).toBe(
       "Favorites unavailable",
     );
-    expect(visibleMediaTitles()).toHaveLength(3);
+    expect(screen.getByRole("region", { name: "At a glance" }).textContent)
+      .toContain("3");
     expect(
-      within(favorites).getByRole("button", { name: "Choose favorites" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+      within(favorites).queryByRole("button", { name: "Choose favorites" }),
+    ).toBeNull();
     router.json("GET", "/api/favorites", { mediaIds: [2] });
     await user.click(
       within(favorites).getByRole("button", { name: "Retry favorites" }),
@@ -674,6 +681,7 @@ describe("Library characterization", () => {
   });
 
   it("cancels obsolete favorites loads and ignores late responses", async () => {
+    globalThis.history.replaceState(null, "", "/#library");
     const router = createFetchRouter();
     bootstrap(router);
     let finish: (response: Response) => void = () => {};
@@ -684,11 +692,7 @@ describe("Library characterization", () => {
     });
     render(<App />);
     await screen.findByRole("heading", { name: "My Library" });
-    expect(
-      screen.getByRole("button", { name: "Choose favorites" }).hasAttribute(
-        "disabled",
-      ),
-    ).toBe(true);
+    expect(screen.getByText("Loading favorites…")).not.toBeNull();
     router.json("GET", "/api/favorites", { mediaIds: [2] });
     globalThis.history.replaceState(null, "", "/#favorites");
     globalThis.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -2524,6 +2528,10 @@ describe("Library characterization", () => {
       }),
     );
     await user.click(screen.getByRole("link", { name: "Library" }));
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Library sections" }))
+        .getByRole("link", { name: "Library" }),
+    );
     expect(
       await screen.findByRole("button", {
         name: /^View details for Cowboy Bebop/u,
@@ -3070,6 +3078,10 @@ describe("Library characterization", () => {
     );
     await waitFor(() => expect(detailSignal).toBeDefined());
     await user.click(screen.getByRole("link", { name: "Library" }));
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Library sections" }))
+        .getByRole("link", { name: "Library" }),
+    );
     await waitFor(() => expect(detailSignal?.aborted).toBe(true));
   });
 
@@ -3766,5 +3778,91 @@ describe("Library characterization", () => {
       catalogTotal: 12,
       communityRating: 7.5,
     });
+  });
+});
+
+describe("Overview navigation", () => {
+  it("opens the default Library on Overview and keeps Library lists on their own deep link", async () => {
+    globalThis.history.replaceState(null, "", "/");
+    const router = createFetchRouter();
+    bootstrap(router);
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Overview" })).not
+      .toBeNull();
+    const sections = screen.getByRole("navigation", {
+      name: "Library sections",
+    });
+    expect(
+      within(sections).getByRole("link", { name: "Overview" }).getAttribute(
+        "aria-current",
+      ),
+    ).toBe("page");
+    expect(screen.queryByRole("heading", { name: "Your collection" }))
+      .toBeNull();
+    await user.click(within(sections).getByRole("link", { name: "Library" }));
+    expect(await screen.findByRole("heading", { name: "Your collection" })).not
+      .toBeNull();
+    expect(globalThis.location.hash).toBe("#library/list");
+    expect(visibleMediaTitles()).toHaveLength(3);
+    expect(screen.queryByRole("complementary", { name: "Favorites" }))
+      .toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("main"));
+    globalThis.history.back();
+    expect(await screen.findByRole("heading", { name: "Overview" })).not
+      .toBeNull();
+    expect(screen.getByRole("complementary", { name: "Favorites" })).not
+      .toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("main", { name: "Overview" }),
+    );
+  });
+
+  it("returns to Overview after opening one of its favorites", async () => {
+    globalThis.history.replaceState(null, "", "/#library");
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/favorites", { mediaIds: [1] });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open favorite 1: Cowboy Bebop",
+      }),
+    );
+    expect(await screen.findByRole("heading", { name: "Cowboy Bebop" })).not
+      .toBeNull();
+    globalThis.history.back();
+    expect(await screen.findByRole("heading", { name: "Overview" })).not
+      .toBeNull();
+    expect(globalThis.location.hash).toBe("#library");
+  });
+});
+
+describe("Overview partial failures", () => {
+  it("preserves Library metrics and favorites when Activity is unavailable", async () => {
+    globalThis.history.replaceState(null, "", "/#library");
+    const router = createFetchRouter();
+    bootstrap(router);
+    router.json("GET", "/api/favorites", { mediaIds: [1] });
+    router.json("GET", "/api/activity?limit=100", {
+      error: "Activity unavailable",
+    }, 503);
+    render(<App />);
+    expect(
+      await screen.findByRole("button", {
+        name: "Open favorite 1: Cowboy Bebop",
+      }),
+    ).not.toBeNull();
+    const summary = screen.getByRole("region", { name: "At a glance" });
+    expect(
+      within(summary).getByText("Total titles").parentElement?.querySelector(
+        "dd",
+      )?.textContent,
+    ).toBe("3");
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Activity unavailable",
+    );
+    expect(screen.queryByText("No activity yet")).toBeNull();
   });
 });

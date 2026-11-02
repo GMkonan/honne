@@ -57,10 +57,10 @@ afterEach(() => {
 describe("favorites PNG", () => {
   it("uses a stable filename and rejects empty or overfull grids", async () => {
     expect(favoritesImageFilename("anime")).toBe(
-      "honne-favorites-anime-3x3.png",
+      "honne-top-nine-anime-3x3.png",
     );
     expect(favoritesImageFilename("light_novel")).toBe(
-      "honne-favorites-light_novel-3x3.png",
+      "honne-top-nine-light_novel-3x3.png",
     );
     for (const count of [0, 10]) {
       await expect(
@@ -118,7 +118,7 @@ describe("favorites PNG", () => {
     );
     expect(context.fillText.mock.calls.map(([text]) => text)).toEqual([
       "HANDPICKED",
-      "Anime favorites",
+      "Anime top 9",
       "First favorite",
       "01",
       "Second favorite",

@@ -17,4 +17,4 @@ export const favoriteTypes: { value: TrackingMediaType; label: string }[] = [
   { value: "game", label: "Games" },
 ];
 
-export const favoritesPerType = 9;
+export const topNinePerType = 9;

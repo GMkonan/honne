@@ -155,6 +155,8 @@ func applicationHandler(application *app, cfg config) http.Handler {
 	mux.HandleFunc("DELETE /api/profile/avatar", application.resetProfileAvatar)
 	mux.HandleFunc("GET /api/favorites", application.listFavorites)
 	mux.HandleFunc("PUT /api/favorites", application.replaceFavorites)
+	mux.HandleFunc("GET /api/top-nine", application.listTopNine)
+	mux.HandleFunc("PUT /api/top-nine", application.replaceTopNine)
 	mux.HandleFunc("GET /api/media", application.listMedia)
 	mux.HandleFunc("GET /api/activity", application.listActivity)
 	mux.HandleFunc("GET /api/backup", application.downloadBackup)
@@ -414,6 +416,7 @@ func (a *app) deleteMedia(w http.ResponseWriter, r *http.Request) {
 	originalJobs := slices.Clone(a.store.syncJobs)
 	originalActivities := slices.Clone(a.store.activities)
 	originalFavorites := slices.Clone(a.store.favoriteMediaIDs)
+	originalTopNine := slices.Clone(a.store.topNineMediaIDs)
 	originalNextJobID := a.store.nextJobID
 	originalNextActivityID := a.store.nextActivityID
 	deleted := a.store.items[index]
@@ -422,6 +425,7 @@ func (a *app) deleteMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	a.store.items = slices.Delete(a.store.items, index, index+1)
 	a.store.favoriteMediaIDs = slices.DeleteFunc(a.store.favoriteMediaIDs, func(favoriteID int) bool { return favoriteID == id })
+	a.store.topNineMediaIDs = slices.DeleteFunc(a.store.topNineMediaIDs, func(selectedID int) bool { return selectedID == id })
 	a.store.appendActivityLocked(Activity{
 		MediaID: deleted.ID, Title: deleted.Title, MediaType: deleted.Type, Action: "deleted",
 		Changes: ActivityChanges{FromStatus: deleted.Status}, OccurredAt: time.Now().UTC(),
@@ -432,6 +436,7 @@ func (a *app) deleteMedia(w http.ResponseWriter, r *http.Request) {
 		a.store.syncJobs = originalJobs
 		a.store.activities = originalActivities
 		a.store.favoriteMediaIDs = originalFavorites
+		a.store.topNineMediaIDs = originalTopNine
 		a.store.nextJobID = originalNextJobID
 		a.store.nextActivityID = originalNextActivityID
 	}

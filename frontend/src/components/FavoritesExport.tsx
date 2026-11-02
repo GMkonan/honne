@@ -11,10 +11,11 @@ interface FavoritesExportProps {
   items: FavoriteCandidate[];
   mediaType: TrackingMediaType;
   label: string;
+  disabled?: boolean;
 }
 
 export function FavoritesExport(
-  { items, mediaType, label }: FavoritesExportProps,
+  { items, mediaType, label, disabled = false }: FavoritesExportProps,
 ) {
   const [working, setWorking] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -35,7 +36,7 @@ export function FavoritesExport(
   }, [identity, mediaType]);
 
   async function handleDownload() {
-    if (activeExport.current || items.length === 0) return;
+    if (disabled || activeExport.current || items.length === 0) return;
     const controller = new AbortController();
     activeExport.current = controller;
     setWorking(true);
@@ -61,10 +62,10 @@ export function FavoritesExport(
       }
       setFeedback(
         missingCovers > 0
-          ? `Favorites downloaded. ${missingCovers} ${
+          ? `3×3 downloaded. ${missingCovers} ${
             missingCovers === 1 ? "cover was" : "covers were"
           } unavailable; title placeholders were used.`
-          : "Favorites downloaded.",
+          : "3×3 downloaded.",
       );
     } catch (caught: unknown) {
       if (!controller.signal.aborted) {
@@ -88,8 +89,8 @@ export function FavoritesExport(
     <div className="favorites-export">
       <button
         type="button"
-        aria-label={`Download ${label} favorites PNG`}
-        disabled={working}
+        aria-label={`Download ${label} 3×3 PNG`}
+        disabled={working || disabled}
         onClick={() => void handleDownload()}
       >
         <Download size={16} aria-hidden="true" />
@@ -99,7 +100,7 @@ export function FavoritesExport(
         role="status"
         className={!working && !feedback ? "sr-only" : undefined}
       >
-        {working ? "Creating your favorites image…" : feedback}
+        {working ? "Creating your 3×3 image…" : feedback}
       </p>
       {error && <p role="alert">{error}</p>}
     </div>

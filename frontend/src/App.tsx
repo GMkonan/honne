@@ -32,6 +32,12 @@ import {
 } from "lucide-react";
 import { BackupSettingsCard } from "./components/BackupSettingsCard.tsx";
 import { FavoritesPanel } from "./components/FavoritesPanel.tsx";
+import { OverviewPage } from "./components/OverviewPage.tsx";
+import {
+  activityDescription,
+  type ActivityEvent,
+  relativeTime,
+} from "./activityModel.ts";
 import { LibraryAppearanceSettingsCard } from "./components/LibraryAppearanceSettingsCard.tsx";
 import { ProfilePictureSettingsCard } from "./components/ProfilePictureSettingsCard.tsx";
 import {
@@ -113,34 +119,10 @@ interface Media extends MediaInput {
   updatedAt: string;
 }
 
-interface ActivityChanges {
-  fromStatus?: MediaStatus;
-  toStatus?: MediaStatus;
-  fromProgress?: number;
-  toProgress?: number;
-  fromRating?: number;
-  toRating?: number;
-  fromRepeatCount?: number;
-  toRepeatCount?: number;
-  fromPlannedRepeat?: boolean;
-  toPlannedRepeat?: boolean;
-  fromPlaytimeMinutes?: number;
-  toPlaytimeMinutes?: number;
-}
-
-interface ActivityEvent {
-  id: number;
-  mediaId?: number;
-  title: string;
-  mediaType: MediaType;
-  action: "added" | "updated" | "deleted" | "imported";
-  changes: ActivityChanges;
-  occurredAt: string;
-}
-
 type LibrarySort = "recent" | "added" | "title" | "rating";
 type LibraryStatusFilter = MediaStatus | "planned_repeat";
 type AppView =
+  | "overview"
   | "library"
   | "favorites"
   | "activity"
@@ -431,82 +413,6 @@ function previewCover(items: Media[], type?: MediaType): string {
   )?.coverUrl.replaceAll('"', "") || "";
 }
 
-function activityDescription(activity: ActivityEvent): string {
-  if (activity.action === "added") {
-    return `Added as ${
-      mediaStatusLabel(activity.changes.toStatus, activity.mediaType)
-    }`;
-  }
-  if (activity.action === "imported") {
-    return `Imported as ${
-      mediaStatusLabel(activity.changes.toStatus, activity.mediaType)
-    }`;
-  }
-  if (activity.action === "deleted") return "Removed from the library";
-
-  const details: string[] = [];
-  if (activity.changes.toStatus) {
-    details.push(
-      `${mediaStatusLabel(activity.changes.fromStatus, activity.mediaType)} → ${
-        mediaStatusLabel(activity.changes.toStatus, activity.mediaType)
-      }`,
-    );
-  }
-  if (activity.changes.toProgress !== undefined) {
-    const tracking = mediaTracking(activity.mediaType);
-    details.push(
-      `${tracking.tracksProgress ? tracking.unitLabel : "Progress"} ${
-        activity.changes.fromProgress ?? 0
-      } → ${activity.changes.toProgress}`,
-    );
-  }
-  if (activity.changes.toRating !== undefined) {
-    details.push(
-      activity.changes.toRating === 0
-        ? "Rating removed"
-        : `Rating ${
-          activity.changes.fromRating ?? 0
-        } → ${activity.changes.toRating}`,
-    );
-  }
-  if (activity.changes.toRepeatCount !== undefined) {
-    details.push(
-      `${mediaTracking(activity.mediaType).repeatLabel} ${
-        activity.changes.fromRepeatCount ?? 0
-      } → ${activity.changes.toRepeatCount}`,
-    );
-  }
-  if (activity.changes.toPlannedRepeat !== undefined) {
-    details.push(
-      activity.changes.toPlannedRepeat
-        ? plannedRepeatLabel(activity.mediaType)
-        : "Repeat plan cleared",
-    );
-  }
-  if (activity.changes.toPlaytimeMinutes !== undefined) {
-    details.push(
-      `Playtime ${
-        formatPlaytime(activity.changes.fromPlaytimeMinutes ?? 0)
-      } → ${formatPlaytime(activity.changes.toPlaytimeMinutes)}`,
-    );
-  }
-  return details.join(" · ") || "Updated details";
-}
-
-function relativeTime(value: string): string {
-  const elapsed = Date.now() - Date.parse(value);
-  if (!Number.isFinite(elapsed) || elapsed < 0) return "just now";
-  const minutes = Math.floor(elapsed / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" })
-    .format(new Date(value));
-}
-
 interface SearchRoute {
   query: string;
   scope: SearchScope;
@@ -546,6 +452,7 @@ function searchHash(query: string, scope: SearchScope): string {
 
 function routeFromHash(): AppView {
   const hash = globalThis.location.hash;
+  if (hash === "#library/list") return "library";
   if (hash === "#activity") return "activity";
   if (hash === "#favorites") return "favorites";
   if (["#monthly-log", "#highlights", "#recap"].includes(hash)) {
@@ -556,7 +463,7 @@ function routeFromHash(): AppView {
   if (hash.startsWith("#media/") || hash.startsWith("#catalog/")) {
     return "detail";
   }
-  return "library";
+  return "overview";
 }
 
 function safeHTTPURL(value?: string): string {
@@ -869,7 +776,7 @@ function App() {
       : storedExternalDetail();
   });
   const [detailOrigin, setDetailOrigin] = useState<
-    "library" | "favorites" | "activity" | "search"
+    "overview" | "library" | "favorites" | "activity" | "search"
   >("library");
   const [globalQuery, setGlobalQuery] = useState(
     () => searchFromHash().query,
@@ -913,6 +820,8 @@ function App() {
   const [monthlyLogGeneration, setMonthlyLogGeneration] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(true);
+  const [libraryError, setLibraryError] = useState("");
+  const [activityError, setActivityError] = useState("");
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [activeType, setActiveType] = useState<MediaType | "all">("all");
@@ -965,31 +874,52 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    void request<PublicProfile>("/api/profile").then((publicProfile) => {
-      if (active) {
-        setProfile(publicProfile);
-      }
-    }).catch((caught: unknown) => {
-      if (active) setError(`Library customization: ${errorMessage(caught)}`);
-    }).finally(() => {
-      if (active) setProfileLoading(false);
-    });
+    let refreshing = false;
+    const controller = new AbortController();
+    void request<PublicProfile>("/api/profile", { signal: controller.signal })
+      .then((publicProfile) => {
+        if (active) {
+          setProfile(publicProfile);
+        }
+      }).catch((caught: unknown) => {
+        if (active) setError(`Library customization: ${errorMessage(caught)}`);
+      }).finally(() => {
+        if (active) setProfileLoading(false);
+      });
 
     async function refresh(initial: boolean) {
+      if (!active || refreshing || (!initial && document.hidden)) return;
+      refreshing = true;
       try {
-        const [library, integration, recentActivity] = await Promise.all([
-          request<Media[]>("/api/media"),
-          request<AniListIntegrationStatus>("/api/integrations/anilist"),
-          request<ActivityEvent[]>("/api/activity?limit=100"),
-        ]);
+        const [library, integration, recentActivity] = await Promise.allSettled(
+          [
+            request<Media[]>("/api/media", { signal: controller.signal }),
+            request<AniListIntegrationStatus>("/api/integrations/anilist", {
+              signal: controller.signal,
+            }),
+            request<ActivityEvent[]>("/api/activity?limit=100", {
+              signal: controller.signal,
+            }),
+          ],
+        );
         if (active) {
-          setItems(library);
-          setAniListStatus(integration);
-          setActivities(recentActivity);
+          if (library.status === "fulfilled") {
+            setItems(library.value);
+            setLibraryError("");
+          } else {
+            setLibraryError(errorMessage(library.reason));
+            if (initial) setError(errorMessage(library.reason));
+          }
+          if (integration.status === "fulfilled") {
+            setAniListStatus(integration.value);
+          } else if (initial) setError(errorMessage(integration.reason));
+          if (recentActivity.status === "fulfilled") {
+            setActivities(recentActivity.value);
+            setActivityError("");
+          } else setActivityError(errorMessage(recentActivity.reason));
         }
-      } catch (caught: unknown) {
-        if (active && initial) setError(errorMessage(caught));
       } finally {
+        refreshing = false;
         if (active && initial) {
           setLoading(false);
           setActivityLoading(false);
@@ -1000,6 +930,7 @@ function App() {
     const timer = setInterval(() => void refresh(false), 15_000);
     return () => {
       active = false;
+      controller.abort();
       clearInterval(timer);
     };
   }, []);
@@ -1062,11 +993,24 @@ function App() {
       }
       setView(nextView);
       setMenuOpen(false);
-      globalThis.scrollTo({ top: 0, behavior: "smooth" });
+      globalThis.scrollTo({ top: 0, behavior: "instant" });
     }
     globalThis.addEventListener("hashchange", syncRoute);
     return () => globalThis.removeEventListener("hashchange", syncRoute);
   }, []);
+
+  const previousView = useRef(view);
+  useEffect(() => {
+    if (
+      previousView.current !== view &&
+      ["overview", "favorites", "library"].includes(view)
+    ) {
+      document.querySelector<HTMLElement>("main")?.focus({
+        preventScroll: true,
+      });
+    }
+    previousView.current = view;
+  }, [view]);
 
   useEffect(() => {
     if (detail?.kind !== "local") {
@@ -1238,7 +1182,11 @@ function App() {
   }, [submittedQuery, submittedSearchScope, searchGeneration]);
 
   function navigate(next: Exclude<AppView, "detail">) {
-    const hash = next === "library" ? "#library" : `#${next}`;
+    const hash = next === "library"
+      ? "#library/list"
+      : next === "overview"
+      ? "#library"
+      : `#${next}`;
     if (globalThis.location.hash === hash) {
       setView(next);
       globalThis.scrollTo({ top: 0, behavior: "smooth" });
@@ -1246,7 +1194,10 @@ function App() {
   }
 
   function rememberDetailOrigin() {
-    if (view === "favorites" || view === "activity" || view === "search") {
+    if (
+      view === "overview" || view === "favorites" || view === "activity" ||
+      view === "search"
+    ) {
       setDetailOrigin(view);
     } else if (view !== "detail") setDetailOrigin("library");
   }
@@ -1473,14 +1424,15 @@ function App() {
     : false;
   const pageUsesRawg =
     catalogSuggestionResults.some((result) => result.provider === "rawg") ||
-    ((view === "library" || view === "favorites") &&
+    ((view === "overview" || view === "library" || view === "favorites") &&
       [...filtered, ...favoriteItems].some((item) =>
         item.provider === "rawg"
       )) ||
     (view === "search" &&
       catalogSearchResults.some((result) => result.provider === "rawg")) ||
     (view === "detail" && detailUsesRawg) ||
-    ((view === "activity" || view === "monthly_log") &&
+    ((view === "overview" || view === "favorites" || view === "activity" ||
+      view === "monthly_log") &&
       (view === "monthly_log" ? monthlyLogActivities : activities).some((
         activity,
       ) =>
@@ -1663,12 +1615,14 @@ function App() {
             aria-label="Primary navigation"
           >
             <a
-              className={view === "library" || view === "favorites" ||
+              className={view === "overview" || view === "library" ||
+                  view === "favorites" ||
                   view === "monthly_log"
                 ? "active"
                 : ""}
               href="#library"
-              aria-current={view === "library" || view === "favorites" ||
+              aria-current={view === "overview" || view === "library" ||
+                  view === "favorites" ||
                   view === "monthly_log"
                 ? "page"
                 : undefined}
@@ -1756,7 +1710,7 @@ function App() {
         </div>
       </header>
 
-      {(view === "library" || view === "favorites" ||
+      {(view === "overview" || view === "library" || view === "favorites" ||
         view === "monthly_log") && (
         <LibraryHero
           profile={profile}
@@ -1767,10 +1721,34 @@ function App() {
         />
       )}
 
-      {(view === "library" || view === "favorites") && (
+      {(view === "overview" || view === "favorites") && (
+        <OverviewPage
+          items={items}
+          activities={activities}
+          loading={loading}
+          activityLoading={activityLoading}
+          error={libraryError}
+          activityError={activityError}
+          notice={error}
+          onOpen={openLocalDetail}
+          favorites={
+            <FavoritesPanel
+              items={items}
+              favoriteMediaIds={favoriteMediaIds}
+              loading={loading || favoritesLoading}
+              error={favoritesError}
+              onRetry={() => setFavoritesGeneration((current) => current + 1)}
+              onSave={saveFavorites}
+              onOpen={openLocalDetail}
+            />
+          }
+        />
+      )}
+
+      {view === "library" && (
         <>
-          <main className="page-container content" id="filters">
-            <LibrarySectionNav active="collection" />
+          <main className="page-container content" id="filters" tabIndex={-1}>
+            <LibrarySectionNav active="library" />
             <section className="filter-section" aria-label="Media type filters">
               <div className="filter-surface">
                 <div className="filter-group format-filter">
@@ -1990,16 +1968,6 @@ function App() {
                     </button>
                   </div>
                 </aside>
-                <FavoritesPanel
-                  items={items}
-                  favoriteMediaIds={favoriteMediaIds}
-                  loading={loading || favoritesLoading}
-                  error={favoritesError}
-                  onRetry={() =>
-                    setFavoritesGeneration((current) => current + 1)}
-                  onSave={saveFavorites}
-                  onOpen={openLocalDetail}
-                />
               </div>
             </div>
           </main>
