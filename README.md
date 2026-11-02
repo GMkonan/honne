@@ -25,6 +25,7 @@ Honne brings anime, series, movies, books, manga, light novels, and games into o
 - Search and filter the whole collection or focus on one media type.
 - Review a local Activity history of additions, progress, ratings, completions, and revisits.
 - Open your Library on an Overview of collection metrics, recent Activity, and favorites.
+- Explore genre distributions and recorded consumption by media type, based on completed titles.
 - Favorite as many Library titles as you like, then curate a separate top nine per media type for locally generated 3×3 PNGs.
 
 ## Rich context, optional catalogs

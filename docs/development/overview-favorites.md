@@ -6,6 +6,9 @@ local activity, and favorites. Favorites use media-type tabs, four portrait
 columns, an initial eight-cover preview, Show more, and visual editing. No
 social features, character catalog, or public profile are introduced.
 
+The read-only [completed-only genre statistics](genre-stats.md) card appears above
+favorites, with independent media-type tabs and a recorded-consumption summary.
+
 ## Independent selections
 
 Favorites may contain any number of unique current Library titles. The 3×3 is

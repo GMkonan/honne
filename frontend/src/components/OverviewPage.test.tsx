@@ -81,6 +81,31 @@ describe("Overview", () => {
     ).toBe("#activity");
   });
 
+  it("includes completed-only genre statistics before favorites without changing the Library summary", () => {
+    render(<OverviewPage {...defaults} />);
+    const stats = screen.getByRole("region", { name: "Genre stats" });
+    const favorites = screen.getByRole("complementary", { name: "Favorites" });
+    expect(
+      stats.compareDocumentPosition(favorites) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+      .toBeTruthy();
+    expect(within(stats).getByRole("tabpanel", { name: "Movies" })).not
+      .toBeNull();
+    expect(
+      within(stats).getByText("Completed").parentElement?.querySelector("dd")
+        ?.textContent,
+    )
+      .toBe("1");
+    const summary = screen.getByRole("region", { name: "At a glance" });
+    expect(
+      within(summary).getByText("Total titles").parentElement?.querySelector(
+        "dd",
+      )?.textContent,
+    )
+      .toBe("3");
+  });
+
   it("distinguishes loading, empty data, and unavailable data instead of inventing zero counts", () => {
     const { rerender } = render(
       <OverviewPage {...defaults} items={[]} loading activityLoading />,

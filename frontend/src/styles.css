@@ -1029,12 +1029,16 @@ button {
 .overview-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
-  grid-template-areas: "summary favorites" "activity favorites";
+  grid-template-areas: "main sidebar";
   align-items: start;
   gap: 28px;
 }
 .overview-main {
-  display: contents;
+  grid-area: main;
+  min-width: 0;
+  display: grid;
+  grid-template-areas: "summary" "activity";
+  gap: 28px;
 }
 .overview-summary {
   grid-area: summary;
@@ -1090,8 +1094,10 @@ button {
   color: var(--text);
 }
 .overview-sidebar {
-  grid-area: favorites;
+  grid-area: sidebar;
   min-width: 0;
+  display: grid;
+  gap: 22px;
 }
 .overview-activity {
   grid-area: activity;
@@ -1157,7 +1163,10 @@ button {
 @media (max-width: 900px) {
   .overview-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "summary" "favorites" "activity";
+    grid-template-areas: "summary" "sidebar" "activity";
+  }
+  .overview-main {
+    display: contents;
   }
   .overview-sidebar .favorites-grid {
     max-width: 560px;

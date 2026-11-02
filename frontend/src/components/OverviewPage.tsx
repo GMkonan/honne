@@ -6,11 +6,12 @@ import {
   relativeTime,
 } from "../activityModel.ts";
 import { type FavoriteCandidate, favoriteTypes } from "../favoritesModel.ts";
+import type { GenreStatsMedia } from "../genreStats.ts";
 import { FavoriteCover } from "./FavoriteCover.tsx";
+import { GenreStatsPanel } from "./GenreStatsPanel.tsx";
 import { LibrarySectionNav } from "./LibrarySectionNav.tsx";
 
-interface OverviewMedia extends FavoriteCandidate {
-  status: string;
+interface OverviewMedia extends FavoriteCandidate, GenreStatsMedia {
   rating: number;
 }
 
@@ -183,7 +184,10 @@ export function OverviewPage(
               )}
           </section>
         </div>
-        <div className="overview-sidebar">{favorites}</div>
+        <div className="overview-sidebar">
+          <GenreStatsPanel items={items} loading={loading} error={error} />
+          {favorites}
+        </div>
       </div>
     </main>
   );

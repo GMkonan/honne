@@ -1,0 +1,212 @@
+.genre-stats-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--surface);
+  border-radius: 5px;
+  background: var(--mantle);
+}
+.genre-stats-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.genre-stats-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+}
+.genre-stats-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.genre-stats-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--surface);
+}
+.genre-stats-tabs button {
+  min-width: 24px;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+.genre-stats-tabs button:hover {
+  color: var(--text);
+  background: var(--base);
+}
+.genre-stats-tabs button[aria-selected="true"] {
+  border-color: var(--surface-2);
+  color: var(--mauve);
+  background: var(--base);
+  font-weight: 600;
+}
+.genre-stats-card h4 {
+  margin: 18px 0;
+  font-size: 14px;
+}
+.genre-stats-card p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.genre-stats-visual {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: 16px;
+}
+.genre-stats-donut {
+  width: 100%;
+  max-width: 200px;
+  position: relative;
+  justify-self: center;
+  aspect-ratio: 1;
+}
+.genre-stats-donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.genre-stats-center {
+  position: absolute;
+  inset: 20%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.genre-stats-center strong {
+  font-size: clamp(22px, 2.5vw, 32px);
+}
+.genre-stats-center > span {
+  max-width: 100%;
+  max-height: 2.8em;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.genre-stats-legend {
+  min-width: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+}
+.genre-stats-legend li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.genre-stats-percent {
+  min-width: 32px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.genre-stats-name {
+  overflow-wrap: anywhere;
+}
+.genre-stats-bar {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface);
+}
+.genre-stats-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+.genre-stats-scroll-help,
+.genre-stats-coverage {
+  margin-bottom: 0;
+}
+.genre-stats-consumption {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--surface);
+  border-radius: 5px;
+  background: var(--base);
+}
+.genre-stats-consumption dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+}
+.genre-stats-consumption dt {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.genre-stats-consumption dd {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.genre-stats-consumption .genre-stats-watch-time {
+  grid-column: 1 / -1;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface);
+}
+.genre-stats-watch-time dd {
+  color: var(--mauve);
+}
+.genre-stats-consumption p {
+  margin: 12px 0 0;
+}
+.genre-stats-method {
+  margin-top: 14px;
+}
+.genre-stats-method summary {
+  width: fit-content;
+  min-height: 28px;
+  padding-block: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.genre-stats-method p {
+  margin-bottom: 0;
+}
+@media (max-width: 480px) {
+  .genre-stats-card {
+    padding: 14px;
+  }
+  .genre-stats-visual {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .genre-stats-donut {
+    max-width: 180px;
+  }
+  .genre-stats-legend li {
+    grid-template-columns: auto minmax(0, 1fr) 48px;
+  }
+}

@@ -21,6 +21,7 @@ The local source implementation now supports:
 
 - Overview as the initial Library page, with sibling tabs named Library and Monthly Log;
 - collection metrics and the eight newest local Activity events, preserving independent successful loads;
+- a completed-only genre donut with media-type tabs, recorded consumption, and explicitly partial watch-time estimates above favorites;
 - favorites without a nine-title product limit, using category tabs, a four-column cover preview, and Show more/less;
 - visual selection and manual ordering from Overview, not Settings;
 - a separately persisted 3×3 selection, chosen only from favorites, with up to nine per media type;
@@ -30,6 +31,7 @@ The local source implementation now supports:
 Next refinements:
 
 - visually validate Overview, category tabs, pickers, and mobile/200% zoom presentation with real artwork;
+- visually validate the genre card with long/many genres, missing metadata, keyboard scrolling, and partial consumption estimates;
 - visually validate full/partial PNG grids, long titles, missing covers, and crop/contrast;
 - keep favorites separate from Monthly Log history, social features, and any future public profile;
 - update a running installation only after explicit authorization and matching pre-update backups.
@@ -81,4 +83,4 @@ Prepare first-party interface copy, accessibility labels, validation messages, a
 
 ## Outside the current sequence
 
-Ideas such as a separate Cartoon or Animation category (#67), personal metrics (#34), upcoming releases (#33), offline support (#59), and public sharing remain valid but are not part of the current delivery sequence.
+Ideas such as a separate Cartoon or Animation category (#67), broader personal metrics beyond the completed-only genre card (#34), upcoming releases (#33), offline support (#59), and public sharing remain valid but are not part of the current delivery sequence.
