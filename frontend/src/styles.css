@@ -1089,6 +1089,30 @@ button {
   grid-area: favorites;
   min-width: 0;
 }
+.overview-favorites .library-favorites {
+  padding: 16px;
+}
+.overview-favorites .favorites-panel-heading h2 {
+  font-size: 16px;
+}
+.overview-favorites .favorites-category-tabs {
+  margin-top: 12px;
+}
+.overview-favorites .favorites-category-tabs button {
+  min-height: 36px;
+  padding: 7px 9px;
+}
+.overview-favorites .favorites-category-count,
+.overview-favorites .favorites-showcase,
+.overview-favorites .favorites-show-more {
+  margin-top: 8px;
+}
+.overview-favorites .favorites-grid {
+  max-width: 480px;
+}
+.overview-favorites .favorites-panel-actions {
+  margin-top: 12px;
+}
 .overview-summary {
   grid-area: summary;
   min-width: 0;
@@ -1216,9 +1240,6 @@ button {
   }
   .overview-main {
     display: contents;
-  }
-  .overview-favorites .favorites-grid {
-    max-width: 560px;
   }
 }
 @media (max-width: 480px) {

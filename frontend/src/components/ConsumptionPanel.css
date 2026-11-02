@@ -61,6 +61,9 @@
 .consumption-group p {
   margin: 12px 0 0;
 }
+.consumption-group .consumption-coverage {
+  margin: -4px 0 12px;
+}
 .consumption-method {
   border-top: 1px solid var(--surface);
   padding-top: 10px;

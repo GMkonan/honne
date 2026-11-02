@@ -53,68 +53,6 @@ export function completedGenreDistribution(
   return { completedCount: completed.length, taggedCount, genres };
 }
 
-function recordedCount(value?: number): number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
-    ? value
-    : 0;
-}
-
-export function completedGenreStats(
-  items: readonly GenreStatsMedia[],
-  type: TrackingMediaType,
-) {
-  const completed = items.filter((item) =>
-    item.type === type && item.status === "completed"
-  );
-  let unitCount = 0;
-  let missingProgressCount = 0;
-  let missingRepeatCount = 0;
-  let estimatedMinutes = 0;
-  let incompleteEstimateCount = 0;
-  let playtimeMinutes = 0;
-  let missingPlaytimeCount = 0;
-
-  for (const item of completed) {
-    if (type === "game") {
-      const minutes = recordedCount(item.playtimeMinutes);
-      playtimeMinutes += minutes;
-      if (!minutes) missingPlaytimeCount++;
-      continue;
-    }
-
-    const repeats = recordedCount(item.repeatCount);
-    const progress = recordedCount(item.progress);
-    const total = recordedCount(item.total) || recordedCount(item.catalogTotal);
-    // Completion is a viewing for movies, but does not invent episode/page progress.
-    const units = type === "movie" ? 1 + repeats : progress + repeats * total;
-    unitCount += units;
-    if (type !== "movie") {
-      if (!progress) missingProgressCount++;
-      if (repeats && !total) missingRepeatCount++;
-    }
-    if (type === "anime" || type === "series" || type === "movie") {
-      const duration = recordedCount(item.durationMinutes);
-      estimatedMinutes += units * duration;
-      if (
-        !duration || (type !== "movie" && (!progress || (repeats && !total)))
-      ) {
-        incompleteEstimateCount++;
-      }
-    }
-  }
-
-  return {
-    ...completedGenreDistribution(completed, type),
-    unitCount,
-    missingProgressCount,
-    missingRepeatCount,
-    estimatedMinutes,
-    incompleteEstimateCount,
-    playtimeMinutes,
-    missingPlaytimeCount,
-  };
-}
-
 export function genrePercentage(value: number): string {
   return value > 0 && value < 1 ? "<1%" : `${Math.round(value)}%`;
 }

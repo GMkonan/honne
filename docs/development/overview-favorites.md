@@ -11,6 +11,12 @@ activity. The smaller column contains separate read-only
 [genre and consumption statistics](genre-stats.md) cards. A shared media-type
 filter controls statistics only; favorites retain their independent category tabs.
 
+The compact presentation (owner revision, 2026-11-02) keeps the four-column,
+eight-cover preview and existing expand/edit/3×3 actions. Cap the cover grid at
+480 px at every breakpoint, retain the 3:4 portrait ratio, and reduce card/tab
+spacing without shrinking essential text below 12 px or interactive targets below
+24 px. The card remains in the larger column and fits narrower viewports.
+
 On the Library list, media-type filters sit above status in the right sidebar as
 compact vertical artwork strips. On narrow screens the sidebar precedes the
 collection. Source order follows media type, status, then collection controls,

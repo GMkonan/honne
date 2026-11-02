@@ -22,9 +22,10 @@ The local source implementation now supports:
 - Overview as the initial Library page, with sibling tabs named Library and Monthly Log;
 - collection metrics and the eight newest local Activity events, preserving independent successful loads;
 - favorites in Overview's larger column, with separate genre and consumption cards in the smaller column;
-- one shared All media/media-type filter for collection metrics, completed-only genres, and completed-only consumption, without filtering favorites or activity;
+- one shared All media/media-type filter for collection metrics, completed-only genres, and consumption from recorded progress in every status, without filtering favorites or activity;
+- completed-only fallback to known totals when progress is missing, with explicit inference and incomplete-runtime coverage rather than guessed durations;
 - Library media-type artwork filters in compact vertical strips above status in the right sidebar;
-- favorites without a nine-title product limit, using category tabs, a four-column cover preview, and Show more/less;
+- favorites without a nine-title product limit, using category tabs, a compact four-column cover preview, and Show more/less;
 - visual selection and manual ordering from Overview, not Settings;
 - a separately persisted 3×3 selection, chosen only from favorites, with up to nine per media type;
 - local PNG export from the confirmed 3×3 order rather than the full favorites list;

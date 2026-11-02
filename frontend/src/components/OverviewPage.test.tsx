@@ -182,7 +182,7 @@ describe("Overview", () => {
       .toContain("Action");
     expect(
       screen.getByRole("region", { name: "Anime consumption" }).textContent,
-    ).toContain("Episodes recorded12");
+    ).toContain("Episodes recorded20");
     await user.click(within(filters).getByRole("button", { name: "Series" }));
     expect(metric("Mean score")).toBe("9.0");
     expect(screen.getByRole("list", { name: "Series genres" }).textContent)
@@ -222,6 +222,50 @@ describe("Overview", () => {
     expect(screen.getByRole("region", { name: "Anime consumption" })).not
       .toBeNull();
     expect(screen.getByRole("region", { name: "Games consumption" })).not
+      .toBeNull();
+  });
+
+  it("includes ongoing manga consumption through the shared filter while genres remain completed-only", async () => {
+    const user = userEvent.setup();
+    render(
+      <OverviewPage
+        {...defaults}
+        items={[
+          mediaItems[0],
+          {
+            ...mediaItems[0],
+            id: 4,
+            type: "manga",
+            progress: 1000,
+            total: 1500,
+            genres: ["Adventure"],
+          },
+        ]}
+      />,
+    );
+    const filters = screen.getByRole("group", {
+      name: "Statistics media type",
+    });
+    await user.click(within(filters).getByRole("button", { name: "Manga" }));
+    const consumption = screen.getByRole("region", {
+      name: "Manga consumption",
+    });
+    expect(
+      within(consumption).getByText("Chapters recorded").parentElement
+        ?.querySelector("dd")?.textContent,
+    ).toBe("1,000");
+    const summary = screen.getByRole("region", { name: "At a glance" });
+    expect(
+      within(summary).getByText("In progress").parentElement?.querySelector(
+        "dd",
+      )?.textContent,
+    ).toBe("1");
+    const genres = screen.getByRole("region", { name: "Genre stats" });
+    expect(
+      within(genres).getByText("No completed titles in this selection yet."),
+    ).not.toBeNull();
+    expect(within(genres).queryByRole("img")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Anime consumption" }))
       .toBeNull();
   });
 
