@@ -21,7 +21,9 @@ The local source implementation now supports:
 
 - Overview as the initial Library page, with sibling tabs named Library and Monthly Log;
 - collection metrics and the eight newest local Activity events, preserving independent successful loads;
-- a completed-only genre donut with media-type tabs, recorded consumption, and explicitly partial watch-time estimates above favorites;
+- favorites in Overview's larger column, with separate genre and consumption cards in the smaller column;
+- one shared All media/media-type filter for collection metrics, completed-only genres, and completed-only consumption, without filtering favorites or activity;
+- Library media-type artwork filters in compact vertical strips above status in the right sidebar;
 - favorites without a nine-title product limit, using category tabs, a four-column cover preview, and Show more/less;
 - visual selection and manual ordering from Overview, not Settings;
 - a separately persisted 3×3 selection, chosen only from favorites, with up to nine per media type;
@@ -31,6 +33,7 @@ The local source implementation now supports:
 Next refinements:
 
 - visually validate Overview, category tabs, pickers, and mobile/200% zoom presentation with real artwork;
+- evaluate the experimental vertical Library filters at desktop/mobile/200% zoom, including keyboard order, cover contrast, and combined filter/reset behavior;
 - visually validate the genre card with long/many genres, missing metadata, keyboard scrolling, and partial consumption estimates;
 - visually validate full/partial PNG grids, long titles, missing covers, and crop/contrast;
 - keep favorites separate from Monthly Log history, social features, and any future public profile;

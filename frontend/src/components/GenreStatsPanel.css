@@ -24,34 +24,6 @@
   color: var(--muted);
   font-size: 12px;
 }
-.genre-stats-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--surface);
-}
-.genre-stats-tabs button {
-  min-width: 24px;
-  min-height: 32px;
-  padding: 6px 9px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--muted);
-  background: transparent;
-  font-size: 12px;
-  cursor: pointer;
-}
-.genre-stats-tabs button:hover {
-  color: var(--text);
-  background: var(--base);
-}
-.genre-stats-tabs button[aria-selected="true"] {
-  border-color: var(--surface-2);
-  color: var(--mauve);
-  background: var(--base);
-  font-weight: 600;
-}
 .genre-stats-card h4 {
   margin: 18px 0;
   font-size: 14px;
@@ -145,42 +117,6 @@
 .genre-stats-scroll-help,
 .genre-stats-coverage {
   margin-bottom: 0;
-}
-.genre-stats-consumption {
-  margin-top: 20px;
-  padding: 14px;
-  border: 1px solid var(--surface);
-  border-radius: 5px;
-  background: var(--base);
-}
-.genre-stats-consumption dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin: 0;
-}
-.genre-stats-consumption dt {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.genre-stats-consumption dd {
-  margin: 5px 0 0;
-  color: var(--text);
-  font-size: 18px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.genre-stats-consumption .genre-stats-watch-time {
-  grid-column: 1 / -1;
-  padding-top: 12px;
-  border-top: 1px solid var(--surface);
-}
-.genre-stats-watch-time dd {
-  color: var(--mauve);
-}
-.genre-stats-consumption p {
-  margin: 12px 0 0;
 }
 .genre-stats-method {
   margin-top: 14px;

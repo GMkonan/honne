@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  completedGenreDistribution,
   completedGenreStats,
   genrePercentage,
   type GenreStatsMedia,
@@ -15,6 +16,29 @@ const anime: GenreStatsMedia = {
 };
 
 describe("Completed genre statistics", () => {
+  it("combines completed genre counts across media types without combining consumption units", () => {
+    const items = [
+      anime,
+      { ...anime, type: "game", genres: ["Action", "Comedy"] },
+      { ...anime, type: "book", genres: undefined },
+      { ...anime, type: "series", status: "planned", genres: ["Drama"] },
+    ];
+    const stats = completedGenreDistribution(items, "all");
+    expect(stats.completedCount).toBe(3);
+    expect(stats.taggedCount).toBe(2);
+    expect(stats.genres.map(({ name }) => name)).toEqual([
+      "Comedy",
+      "Action",
+      "Romance",
+    ]);
+    expect(stats.genres[0].percentage).toBeCloseTo(200 / 3);
+    expect(stats).not.toHaveProperty("unitCount");
+    expect(completedGenreDistribution(items, "anime").genres).toEqual([
+      { name: "Comedy", count: 1, percentage: 100 },
+      { name: "Romance", count: 1, percentage: 100 },
+    ]);
+    expect(completedGenreDistribution(items, "manga").genres).toEqual([]);
+  });
   it("counts only completed titles of the selected type, once per genre regardless of rewatches", () => {
     const stats = completedGenreStats([
       { ...anime, repeatCount: 3 },

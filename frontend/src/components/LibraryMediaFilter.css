@@ -1,0 +1,40 @@
+.library-media-filter {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--surface);
+  border-radius: 4px;
+  background: var(--mantle);
+}
+.library-media-filter .filter-label {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.library-media-filter .format-options {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.library-media-filter .format-options button {
+  min-height: 48px;
+  align-items: center;
+  padding: 6px 30px 6px 10px;
+  background-position: center 35%;
+}
+.library-media-filter .format-options button.has-preview::before {
+  background: linear-gradient(90deg, rgba(17,17,27,.94), rgba(17,17,27,.6));
+}
+.library-media-filter .format-options button.has-preview.active::before {
+  background: linear-gradient(90deg, rgba(17,17,27,.94), rgba(17,17,27,.62),
+    rgba(137,180,250,.2));
+}
+.library-media-filter .format-options button > span {
+  gap: 2px;
+}
+.library-media-filter .format-options small {
+  color: var(--muted);
+}
+.library-media-filter .format-options button > .format-check {
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+}

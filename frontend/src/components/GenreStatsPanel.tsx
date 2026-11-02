@@ -1,17 +1,18 @@
-import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { useId } from "react";
 import { ChartPie } from "lucide-react";
 import { favoriteTypes } from "../favoritesModel.ts";
 import {
-  completedGenreStats,
+  completedGenreDistribution,
   genrePercentage,
   type GenreShare,
   type GenreStatsMedia,
+  type StatisticsMediaType,
 } from "../genreStats.ts";
-import { formatPlaytime, type TrackingMediaType } from "../mediaTracking.ts";
 import "./GenreStatsPanel.css";
 
 interface GenreStatsPanelProps {
   items: GenreStatsMedia[];
+  type: StatisticsMediaType;
   loading: boolean;
   error: string;
 }
@@ -25,16 +26,6 @@ const genreColors = [
   "var(--blue)",
   "var(--green)",
 ];
-
-const consumptionLabels: Record<TrackingMediaType, string> = {
-  anime: "Episodes recorded",
-  series: "Episodes recorded",
-  movie: "Viewings",
-  manga: "Chapters recorded",
-  light_novel: "Chapters recorded",
-  book: "Pages recorded",
-  game: "Recorded playtime",
-};
 
 function GenreDonut(
   { genres, label }: { genres: GenreShare[]; label: string },
@@ -86,44 +77,13 @@ function GenreDonut(
 }
 
 export function GenreStatsPanel(
-  { items, loading, error }: GenreStatsPanelProps,
+  { items, type, loading, error }: GenreStatsPanelProps,
 ) {
   const id = useId();
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const [chosenType, setChosenType] = useState<TrackingMediaType | null>(null);
-  const types = favoriteTypes.filter(({ value }) =>
-    items.some((item) => item.type === value)
-  );
-  const active = types.find(({ value }) => value === chosenType) ||
-    types.find(({ value }) =>
-      items.some((item) => item.type === value && item.status === "completed")
-    ) || types[0];
-  const type = active?.value || "anime";
-  const label = active?.label || "Anime";
-  const stats = completedGenreStats(items, type);
-  const video = type === "anime" || type === "series" || type === "movie";
-  const consumption = type === "game"
-    ? formatPlaytime(stats.playtimeMinutes)
-    : stats.unitCount > 0
-    ? stats.unitCount.toLocaleString("en")
-    : "Not tracked";
-
-  function handleTabKey(
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) {
-    let next = index;
-    if (event.key === "ArrowRight") next = (index + 1) % types.length;
-    else if (event.key === "ArrowLeft") {
-      next = (index + types.length - 1) % types.length;
-    } else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = types.length - 1;
-    else return;
-    event.preventDefault();
-    setChosenType(types[next].value);
-    tabsRef.current?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]
-      ?.focus();
-  }
+  const label = type === "all"
+    ? "All media"
+    : favoriteTypes.find(({ value }) => value === type)?.label || "Media";
+  const stats = completedGenreDistribution(items, type);
 
   return (
     <section
@@ -137,6 +97,7 @@ export function GenreStatsPanel(
         </h3>
         <span>Completed only</span>
       </header>
+      <h4>{label}</h4>
       {loading && (
         <p role="status">
           {items.length ? "Refreshing genre stats…" : "Loading genre stats…"}
@@ -150,174 +111,77 @@ export function GenreStatsPanel(
               : "Complete a title to see your genre stats."}
           </p>
         )
+        : !stats.completedCount
+        ? <p>No completed titles in this selection yet.</p>
         : (
           <>
-            <div
-              className="genre-stats-tabs"
-              role="tablist"
-              aria-label="Statistics categories"
-              ref={tabsRef}
-            >
-              {types.map(({ value, label: tabLabel }, index) => (
-                <button
-                  type="button"
-                  role="tab"
-                  id={`${id}-tab-${value}`}
-                  key={value}
-                  aria-selected={type === value}
-                  aria-controls={`${id}-panel-${value}`}
-                  tabIndex={type === value ? 0 : -1}
-                  onClick={() => setChosenType(value)}
-                  onKeyDown={(event) => handleTabKey(event, index)}
-                >
-                  {tabLabel}
-                </button>
-              ))}
-            </div>
-            <div
-              role="tabpanel"
-              id={`${id}-panel-${type}`}
-              aria-labelledby={`${id}-tab-${type}`}
-              tabIndex={0}
-            >
-              <h4>{label} stats</h4>
-              {!stats.completedCount
-                ? <p>No completed titles in this category yet.</p>
-                : (
-                  <>
-                    {stats.genres.length > 0
-                      ? (
-                        <div className="genre-stats-visual">
-                          <GenreDonut genres={stats.genres} label={label} />
-                          <ul
-                            className="genre-stats-legend"
-                            aria-label={`${label} genres`}
-                            tabIndex={0}
-                          >
-                            {stats.genres.map((genre, index) => (
-                              <li key={genre.name}>
-                                <span
-                                  className="genre-stats-percent"
-                                  style={{
-                                    color:
-                                      genreColors[index % genreColors.length],
-                                  }}
-                                >
-                                  {genrePercentage(genre.percentage)}
-                                </span>
-                                <span className="genre-stats-name">
-                                  {genre.name}
-                                  <span className="sr-only">
-                                    {", "}
-                                    {genre.count} of {stats.completedCount}
-                                    {" completed titles"}
-                                  </span>
-                                </span>
-                                <span
-                                  className="genre-stats-bar"
-                                  aria-hidden="true"
-                                >
-                                  <span
-                                    style={{
-                                      width: `${genre.percentage}%`,
-                                      background:
-                                        genreColors[index % genreColors.length],
-                                    }}
-                                  />
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )
-                      : <p>No genre metadata for completed titles yet.</p>}
-                    {stats.genres.length > 7 && (
-                      <p className="genre-stats-scroll-help">
-                        Scroll the legend to see all {stats.genres.length}{" "}
-                        genres.
-                      </p>
-                    )}
-                    {stats.taggedCount < stats.completedCount && (
-                      <p className="genre-stats-coverage">
-                        Genres available for {stats.taggedCount} of{" "}
-                        {stats.completedCount} completed titles.
-                      </p>
-                    )}
-                    <div className="genre-stats-consumption">
-                      <dl>
-                        <div>
-                          <dt>Completed</dt>
-                          <dd>{stats.completedCount.toLocaleString("en")}</dd>
-                        </div>
-                        <div>
-                          <dt>{consumptionLabels[type]}</dt>
-                          <dd>{consumption}</dd>
-                        </div>
-                        {video && (
-                          <div className="genre-stats-watch-time">
-                            <dt>Estimated watch time</dt>
-                            <dd>
-                              {stats.estimatedMinutes > 0
-                                ? formatPlaytime(stats.estimatedMinutes)
-                                : "Unavailable"}
-                            </dd>
-                          </div>
-                        )}
-                      </dl>
-                      {stats.missingProgressCount > 0 && (
-                        <p>
-                          Progress is missing for {stats.missingProgressCount}
-                          {" completed "}
-                          {stats.missingProgressCount === 1
-                            ? "title"
-                            : "titles"}.
-                        </p>
-                      )}
-                      {stats.missingRepeatCount > 0 && (
-                        <p>
-                          Some completed repeats have no known length and are
-                          not included in the progress totals.
-                        </p>
-                      )}
-                      {video && stats.incompleteEstimateCount > 0 && (
-                        <p>
-                          Watch time is incomplete for{" "}
-                          {stats.incompleteEstimateCount} of{" "}
-                          {stats.completedCount}{" "}
-                          completed titles because runtime or progress is
-                          missing.
-                        </p>
-                      )}
-                      {type === "game" && stats.missingPlaytimeCount > 0 && (
-                        <p>
-                          Playtime is missing for {stats.missingPlaytimeCount}
-                          {" completed "}
-                          {stats.missingPlaytimeCount === 1 ? "game" : "games"}.
-                        </p>
-                      )}
-                    </div>
-                    <details className="genre-stats-method">
-                      <summary>How this is calculated</summary>
-                      <p>
-                        Percentages use all completed {label.toLowerCase()}{" "}
-                        titles, including those without genres. Each title
-                        counts once per genre, regardless of repeats. Genres can
-                        overlap, so percentages may add up to more than 100%.
-                        The ring is sized by genre mentions.
-                      </p>
-                      <p>
-                        {type === "game"
-                          ? "Recorded playtime is cumulative and is not multiplied by replays."
-                          : type === "movie"
-                          ? "Each completion and recorded rewatch counts as one viewing. Watch time uses the available movie runtime."
-                          : "Consumption includes recorded progress and completed repeats with a known personal or catalog total. Missing progress is not inferred from completion."}
-                        {video && type !== "movie" &&
-                          " Watch time uses the available average runtime per episode and is an estimate, not a timer."}
-                      </p>
-                    </details>
-                  </>
-                )}
-            </div>
+            <p>
+              Based on {stats.completedCount} completed{" "}
+              {stats.completedCount === 1 ? "title" : "titles"}.
+            </p>
+            {stats.genres.length > 0
+              ? (
+                <div className="genre-stats-visual">
+                  <GenreDonut genres={stats.genres} label={label} />
+                  <ul
+                    className="genre-stats-legend"
+                    aria-label={`${label} genres`}
+                    tabIndex={0}
+                  >
+                    {stats.genres.map((genre, index) => (
+                      <li key={genre.name}>
+                        <span
+                          className="genre-stats-percent"
+                          style={{
+                            color: genreColors[index % genreColors.length],
+                          }}
+                        >
+                          {genrePercentage(genre.percentage)}
+                        </span>
+                        <span className="genre-stats-name">
+                          {genre.name}
+                          <span className="sr-only">
+                            {", "}
+                            {genre.count} of {stats.completedCount}
+                            {" completed titles"}
+                          </span>
+                        </span>
+                        <span className="genre-stats-bar" aria-hidden="true">
+                          <span
+                            style={{
+                              width: `${genre.percentage}%`,
+                              background:
+                                genreColors[index % genreColors.length],
+                            }}
+                          />
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+              : <p>No genre metadata for completed titles yet.</p>}
+            {stats.genres.length > 7 && (
+              <p className="genre-stats-scroll-help">
+                Scroll the legend to see all {stats.genres.length} genres.
+              </p>
+            )}
+            {stats.taggedCount < stats.completedCount && (
+              <p className="genre-stats-coverage">
+                Genres available for {stats.taggedCount} of{" "}
+                {stats.completedCount} completed titles.
+              </p>
+            )}
+            <details className="genre-stats-method">
+              <summary>How this is calculated</summary>
+              <p>
+                Percentages use all completed titles in the selected media type,
+                including those without genres. Each title counts once per
+                genre, regardless of repeats. Genres can overlap, so percentages
+                may add up to more than 100%. The ring is sized by genre
+                mentions.
+              </p>
+            </details>
           </>
         )}
     </section>

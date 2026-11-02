@@ -18,29 +18,17 @@ export interface GenreShare {
   percentage: number;
 }
 
-function recordedCount(value?: number): number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
-    ? value
-    : 0;
-}
+export type StatisticsMediaType = TrackingMediaType | "all";
 
-export function completedGenreStats(
+export function completedGenreDistribution(
   items: readonly GenreStatsMedia[],
-  type: TrackingMediaType,
+  type: StatisticsMediaType,
 ) {
   const completed = items.filter((item) =>
-    item.type === type && item.status === "completed"
+    (type === "all" || item.type === type) && item.status === "completed"
   );
   const counts = new Map<string, { name: string; count: number }>();
   let taggedCount = 0;
-  let unitCount = 0;
-  let missingProgressCount = 0;
-  let missingRepeatCount = 0;
-  let estimatedMinutes = 0;
-  let incompleteEstimateCount = 0;
-  let playtimeMinutes = 0;
-  let missingPlaytimeCount = 0;
-
   for (const item of completed) {
     const seen = new Set<string>();
     for (const genre of item.genres || []) {
@@ -55,7 +43,38 @@ export function completedGenreStats(
       });
     }
     if (seen.size) taggedCount++;
+  }
+  const genres: GenreShare[] = [...counts.values()].sort((a, b) =>
+    b.count - a.count || a.name.localeCompare(b.name, "en")
+  ).map((genre) => ({
+    ...genre,
+    percentage: genre.count / completed.length * 100,
+  }));
+  return { completedCount: completed.length, taggedCount, genres };
+}
 
+function recordedCount(value?: number): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : 0;
+}
+
+export function completedGenreStats(
+  items: readonly GenreStatsMedia[],
+  type: TrackingMediaType,
+) {
+  const completed = items.filter((item) =>
+    item.type === type && item.status === "completed"
+  );
+  let unitCount = 0;
+  let missingProgressCount = 0;
+  let missingRepeatCount = 0;
+  let estimatedMinutes = 0;
+  let incompleteEstimateCount = 0;
+  let playtimeMinutes = 0;
+  let missingPlaytimeCount = 0;
+
+  for (const item of completed) {
     if (type === "game") {
       const minutes = recordedCount(item.playtimeMinutes);
       playtimeMinutes += minutes;
@@ -84,17 +103,8 @@ export function completedGenreStats(
     }
   }
 
-  const genres: GenreShare[] = [...counts.values()].sort((a, b) =>
-    b.count - a.count || a.name.localeCompare(b.name, "en")
-  ).map((genre) => ({
-    ...genre,
-    percentage: genre.count / completed.length * 100,
-  }));
-
   return {
-    completedCount: completed.length,
-    taggedCount,
-    genres,
+    ...completedGenreDistribution(completed, type),
     unitCount,
     missingProgressCount,
     missingRepeatCount,

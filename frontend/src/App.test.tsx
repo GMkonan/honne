@@ -70,6 +70,65 @@ describe("Library characterization", () => {
     globalThis.sessionStorage.clear();
   });
 
+  it("places media filters before status and collection controls and preserves their combined behavior", async () => {
+    const router = createFetchRouter();
+    bootstrap(router);
+    const user = userEvent.setup();
+    render(<App />);
+    const media = await screen.findByRole("region", {
+      name: "Media type filters",
+    });
+    await within(media).findByRole("button", { name: "All media 3" });
+    const statuses = screen.getByRole("complementary", {
+      name: "Status filters",
+    });
+    expect(
+      media.compareDocumentPosition(statuses) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const search = screen.getByPlaceholderText("Search your library...");
+    expect(
+      statuses.compareDocumentPosition(search) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const anime = within(media).getByRole("button", { name: /^Anime/ });
+    anime.focus();
+    await user.keyboard("{Enter}");
+    expect(anime.getAttribute("aria-pressed")).toBe("true");
+    await user.click(
+      within(statuses).getByRole("button", { name: /^Watching\s*1$/u }),
+    );
+    expect(visibleMediaTitles()).toEqual(["Cowboy Bebop"]);
+    await user.click(within(media).getByRole("button", { name: /^Movies/ }));
+    expect(
+      within(statuses).getByRole("button", { name: /^Watching\s*0$/u })
+        .getAttribute(
+          "aria-pressed",
+        ),
+    ).toBe("true");
+    await user.click(
+      within(statuses).getByRole("button", { name: /^Completed\s*1$/u }),
+    );
+    await user.type(search, "Spirited");
+    expect(visibleMediaTitles()).toEqual(["Spirited Away"]);
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(visibleMediaTitles()).toEqual([
+      "Dune",
+      "Spirited Away",
+      "Cowboy Bebop",
+    ]);
+    expect(
+      within(media).getByRole("button", { name: "All media 3" }).getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+    expect(
+      within(statuses).getByRole("button", { name: /^All titles\s*3$/u })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(search).toHaveProperty("value", "");
+  });
+
   it("renders the current Library after successful bootstrap responses", async () => {
     const router = createFetchRouter();
     bootstrap(router);

@@ -81,19 +81,23 @@ describe("Overview", () => {
     ).toBe("#activity");
   });
 
-  it("includes completed-only genre statistics before favorites without changing the Library summary", () => {
+  it("places favorites before the separate genre and consumption cards without changing the Library summary", () => {
     render(<OverviewPage {...defaults} />);
     const stats = screen.getByRole("region", { name: "Genre stats" });
     const favorites = screen.getByRole("complementary", { name: "Favorites" });
     expect(
-      stats.compareDocumentPosition(favorites) &
+      favorites.compareDocumentPosition(stats) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     )
       .toBeTruthy();
-    expect(within(stats).getByRole("tabpanel", { name: "Movies" })).not
-      .toBeNull();
+    expect(within(stats).queryByText("Estimated watch time")).toBeNull();
+    const consumption = screen.getByRole("region", {
+      name: "Movies consumption",
+    });
     expect(
-      within(stats).getByText("Completed").parentElement?.querySelector("dd")
+      within(consumption).getByText("Completed").parentElement?.querySelector(
+        "dd",
+      )
         ?.textContent,
     )
       .toBe("1");
@@ -104,6 +108,121 @@ describe("Overview", () => {
       )?.textContent,
     )
       .toBe("3");
+  });
+
+  it("filters all statistics together without filtering favorites or activity, and resets to All media", async () => {
+    const user = userEvent.setup();
+    const items = [
+      {
+        ...mediaItems[0],
+        status: "completed",
+        progress: 12,
+        rating: 8,
+        genres: ["Comedy"],
+        durationMinutes: 24,
+      },
+      { ...mediaItems[0], id: 4, rating: 6, genres: ["Action"] },
+      {
+        ...mediaItems[2],
+        type: "series",
+        progress: 10,
+        rating: 9,
+        genres: ["Drama"],
+        durationMinutes: 45,
+      },
+      {
+        ...mediaItems[2],
+        id: 5,
+        type: "game",
+        rating: 7,
+        genres: ["Adventure"],
+        playtimeMinutes: 120,
+      },
+    ];
+    const activities: ActivityEvent[] = [{
+      id: 1,
+      mediaId: 1,
+      title: "Anime event",
+      mediaType: "anime",
+      action: "updated",
+      changes: {},
+      occurredAt: "2026-01-01T00:00:00Z",
+    }, {
+      id: 2,
+      mediaId: 5,
+      title: "Game event",
+      mediaType: "game",
+      action: "updated",
+      changes: {},
+      occurredAt: "2026-01-02T00:00:00Z",
+    }];
+    render(
+      <OverviewPage {...defaults} items={items} activities={activities} />,
+    );
+    const filters = screen.getByRole("group", {
+      name: "Statistics media type",
+    });
+    const summary = screen.getByRole("region", { name: "At a glance" });
+    const metric = (label: string) =>
+      within(summary).getByText(label).parentElement?.querySelector("dd")
+        ?.textContent;
+    expect(metric("Total titles")).toBe("4");
+    expect(metric("Mean score")).toBe("7.5");
+    const animeFilter = within(filters).getByRole("button", { name: "Anime" });
+    animeFilter.focus();
+    await user.keyboard("{Enter}");
+    expect(animeFilter.getAttribute("aria-pressed")).toBe("true");
+    expect(metric("Total titles")).toBe("2");
+    expect(metric("Completed")).toBe("1");
+    expect(metric("In progress")).toBe("1");
+    expect(metric("Mean score")).toBe("7.0");
+    expect(screen.getByRole("list", { name: "Anime genres" }).textContent)
+      .toContain("100%Comedy");
+    expect(screen.getByRole("list", { name: "Anime genres" }).textContent).not
+      .toContain("Action");
+    expect(
+      screen.getByRole("region", { name: "Anime consumption" }).textContent,
+    ).toContain("Episodes recorded12");
+    await user.click(within(filters).getByRole("button", { name: "Series" }));
+    expect(metric("Mean score")).toBe("9.0");
+    expect(screen.getByRole("list", { name: "Series genres" }).textContent)
+      .toContain("100%Drama");
+    expect(
+      screen.getByRole("region", { name: "Series consumption" }).textContent,
+    ).toContain("7h 30m");
+    await user.click(within(filters).getByRole("button", { name: "Games" }));
+    expect(metric("Total titles")).toBe("1");
+    expect(metric("Mean score")).toBe("7.0");
+    expect(screen.getByRole("list", { name: "Games genres" }).textContent)
+      .toContain("100%Adventure");
+    expect(
+      screen.getByRole("region", { name: "Games consumption" }).textContent,
+    ).toContain("Recorded playtime2h");
+    expect(screen.queryByRole("region", { name: "Anime consumption" }))
+      .toBeNull();
+    await user.click(within(filters).getByRole("button", { name: "Books" }));
+    expect(metric("Total titles")).toBe("0");
+    expect(metric("Mean score")).toBe("—");
+    expect(within(summary).getByText("No titles in this selection yet.")).not
+      .toBeNull();
+    expect(screen.queryByRole("img", { name: /genre distribution/u }))
+      .toBeNull();
+    expect(screen.getByRole("complementary", { name: "Favorites" }).textContent)
+      .toBe("Favorite covers");
+    expect(
+      within(screen.getByRole("region", { name: "Recent activity" }))
+        .getAllByRole("button"),
+    ).toHaveLength(2);
+    const allFilter = within(filters).getByRole("button", {
+      name: "All media",
+    });
+    allFilter.focus();
+    await user.keyboard(" ");
+    expect(metric("Total titles")).toBe("4");
+    expect(screen.getByRole("region", { name: "Anime consumption" })).not
+      .toBeNull();
+    expect(screen.getByRole("region", { name: "Games consumption" })).not
+      .toBeNull();
   });
 
   it("distinguishes loading, empty data, and unavailable data instead of inventing zero counts", () => {

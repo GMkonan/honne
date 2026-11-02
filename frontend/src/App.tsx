@@ -24,7 +24,6 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
-  SlidersHorizontal,
   Sparkles,
   Star,
   Tv,
@@ -61,6 +60,7 @@ import { MediaDetailPage } from "./components/MediaDetailPage.tsx";
 import { ProviderAttribution } from "./components/ProviderAttribution.tsx";
 import { MonthlyLogPage } from "./components/MonthlyLogPage.tsx";
 import { LibrarySectionNav } from "./components/LibrarySectionNav.tsx";
+import { LibraryMediaFilter } from "./components/LibraryMediaFilter.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
   formatPlaytime,
@@ -405,12 +405,6 @@ function mediaToInput(item: Media): MediaInput {
       ? item.catalogPlatforms
       : [],
   };
-}
-
-function previewCover(items: Media[], type?: MediaType): string {
-  return items.find((item) =>
-    (!type || item.type === type) && item.coverUrl.trim()
-  )?.coverUrl.replaceAll('"', "") || "";
 }
 
 interface SearchRoute {
@@ -1749,64 +1743,68 @@ function App() {
         <>
           <main className="page-container content" id="filters" tabIndex={-1}>
             <LibrarySectionNav active="library" />
-            <section className="filter-section" aria-label="Media type filters">
-              <div className="filter-surface">
-                <div className="filter-group format-filter">
-                  <span className="filter-label">Media type</span>
-                  <div className="format-options">
+            <div className="library-layout" id="collection">
+              <div className="library-sidebar">
+                <LibraryMediaFilter
+                  items={items}
+                  options={typeOptions}
+                  activeType={activeType}
+                  onChange={setActiveType}
+                />
+                <aside className="library-panel" aria-label="Status filters">
+                  <div className="panel-title">
+                    <span>Status</span>
+                    <strong>{statusScope.length}</strong>
+                  </div>
+                  <div className="status-list">
                     <button
                       type="button"
-                      aria-pressed={activeType === "all"}
-                      className={activeType === "all" ? "active" : ""}
-                      onClick={() => setActiveType("all")}
+                      aria-pressed={activeStatus === "all"}
+                      className={`all ${
+                        activeStatus === "all" ? "active" : ""
+                      }`}
+                      onClick={() => setActiveStatus("all")}
                     >
-                      <SlidersHorizontal size={17} />
-                      <span>
-                        <strong>All media</strong>
-                        <small>{items.length}</small>
-                      </span>
-                      {activeType === "all" && (
-                        <Check className="format-check" size={15} />
-                      )}
+                      <span>All titles</span>
+                      <strong>{statusScope.length}</strong>
                     </button>
-                    {typeOptions.map(
-                      ({ value, label, jpLabel, icon: Icon }) => {
-                        const cover = previewCover(items, value);
-                        return (
-                          <button
-                            type="button"
-                            aria-pressed={activeType === value}
-                            className={`${
-                              activeType === value ? "active" : ""
-                            } ${cover ? "has-preview" : ""}`}
-                            style={cover
-                              ? { backgroundImage: `url("${cover}")` }
-                              : undefined}
-                            onClick={() => setActiveType(value)}
-                            key={value}
-                          >
-                            <Icon size={17} />
-                            <span>
-                              <strong>{label}</strong>
-                              <small>
-                                {jpLabel} ·{" "}
-                                {items.filter((item) => item.type === value)
-                                  .length}
-                              </small>
-                            </span>
-                            {activeType === value && (
-                              <Check className="format-check" size={15} />
-                            )}
-                          </button>
-                        );
-                      },
-                    )}
+                    {statusOptions.map((status) => (
+                      <button
+                        type="button"
+                        aria-pressed={activeStatus === status.value}
+                        className={`${status.value} ${
+                          activeStatus === status.value ? "active" : ""
+                        }`}
+                        onClick={() => setActiveStatus(status.value)}
+                        key={status.value}
+                      >
+                        <span>
+                          {mediaStatusLabel(status.value, activeType)}
+                        </span>
+                        <strong>
+                          {statusScope.filter((item) =>
+                            item.status === status.value
+                          ).length}
+                        </strong>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      aria-pressed={activeStatus === "planned_repeat"}
+                      className={`planned-repeat ${
+                        activeStatus === "planned_repeat" ? "active" : ""
+                      }`}
+                      onClick={() => setActiveStatus("planned_repeat")}
+                    >
+                      <span>{plannedRepeatLabel(activeType)}</span>
+                      <strong>
+                        {statusScope.filter((item) => item.plannedRepeat)
+                          .length}
+                      </strong>
+                    </button>
                   </div>
-                </div>
+                </aside>
               </div>
-            </section>
-
-            <div className="library-layout" id="collection">
               <section className="library-main">
                 <label className="library-search">
                   <Search size={20} />
@@ -1913,62 +1911,6 @@ function App() {
                     </div>
                   )}
               </section>
-
-              <div className="library-sidebar">
-                <aside className="library-panel" aria-label="Status filters">
-                  <div className="panel-title">
-                    <span>Status</span>
-                    <strong>{statusScope.length}</strong>
-                  </div>
-                  <div className="status-list">
-                    <button
-                      type="button"
-                      aria-pressed={activeStatus === "all"}
-                      className={`all ${
-                        activeStatus === "all" ? "active" : ""
-                      }`}
-                      onClick={() => setActiveStatus("all")}
-                    >
-                      <span>All titles</span>
-                      <strong>{statusScope.length}</strong>
-                    </button>
-                    {statusOptions.map((status) => (
-                      <button
-                        type="button"
-                        aria-pressed={activeStatus === status.value}
-                        className={`${status.value} ${
-                          activeStatus === status.value ? "active" : ""
-                        }`}
-                        onClick={() => setActiveStatus(status.value)}
-                        key={status.value}
-                      >
-                        <span>
-                          {mediaStatusLabel(status.value, activeType)}
-                        </span>
-                        <strong>
-                          {statusScope.filter((item) =>
-                            item.status === status.value
-                          ).length}
-                        </strong>
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      aria-pressed={activeStatus === "planned_repeat"}
-                      className={`planned-repeat ${
-                        activeStatus === "planned_repeat" ? "active" : ""
-                      }`}
-                      onClick={() => setActiveStatus("planned_repeat")}
-                    >
-                      <span>{plannedRepeatLabel(activeType)}</span>
-                      <strong>
-                        {statusScope.filter((item) => item.plannedRepeat)
-                          .length}
-                      </strong>
-                    </button>
-                  </div>
-                </aside>
-              </div>
             </div>
           </main>
         </>

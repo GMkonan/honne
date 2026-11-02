@@ -582,6 +582,7 @@ button {
   transform: scaleX(1);
 }
 .library-sidebar {
+  grid-area: sidebar;
   min-width: 0;
   display: grid;
   gap: 28px;
@@ -1037,8 +1038,56 @@ button {
   grid-area: main;
   min-width: 0;
   display: grid;
-  grid-template-areas: "summary" "activity";
+  grid-template-areas: "summary" "favorites" "activity";
   gap: 28px;
+}
+.overview-statistics-filter {
+  min-width: 0;
+  margin: 0 0 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--surface);
+  border-radius: 5px;
+  background: var(--mantle);
+}
+.overview-statistics-filter legend {
+  padding-inline: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.overview-statistics-filter > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.overview-statistics-filter button {
+  min-height: 32px;
+  min-width: 24px;
+  padding: 6px 10px;
+  border: 1px solid var(--surface);
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--base);
+  font-size: 12px;
+  cursor: pointer;
+}
+.overview-statistics-filter button:hover {
+  border-color: var(--surface-2);
+  color: var(--text);
+}
+.overview-statistics-filter button[aria-pressed="true"] {
+  border-color: var(--blue);
+  color: var(--blue);
+  font-weight: 600;
+}
+.overview-statistics-filter p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.overview-favorites {
+  grid-area: favorites;
+  min-width: 0;
 }
 .overview-summary {
   grid-area: summary;
@@ -1163,12 +1212,12 @@ button {
 @media (max-width: 900px) {
   .overview-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "summary" "sidebar" "activity";
+    grid-template-areas: "summary" "favorites" "sidebar" "activity";
   }
   .overview-main {
     display: contents;
   }
-  .overview-sidebar .favorites-grid {
+  .overview-favorites .favorites-grid {
     max-width: 560px;
   }
 }
@@ -1441,11 +1490,13 @@ button {
 .library-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-areas: "main sidebar";
   align-items: start;
   gap: 20px;
   scroll-margin-top: 20px;
 }
 .library-main {
+  grid-area: main;
   min-width: 0;
 }
 .library-search {
@@ -4880,13 +4931,14 @@ button {
   }
   .library-layout {
     grid-template-columns: 1fr;
+    grid-template-areas: "sidebar" "main";
   }
   .library-sidebar {
-    display: contents;
+    display: grid;
+    gap: 16px;
   }
   .library-panel {
     position: static;
-    grid-row: 1;
   }
   .status-list {
     display: grid;

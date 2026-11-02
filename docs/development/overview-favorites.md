@@ -6,8 +6,17 @@ local activity, and favorites. Favorites use media-type tabs, four portrait
 columns, an initial eight-cover preview, Show more, and visual editing. No
 social features, character catalog, or public profile are introduced.
 
-The read-only [completed-only genre statistics](genre-stats.md) card appears above
-favorites, with independent media-type tabs and a recorded-consumption summary.
+Favorites occupy the larger Overview column, between At a glance and recent
+activity. The smaller column contains separate read-only
+[genre and consumption statistics](genre-stats.md) cards. A shared media-type
+filter controls statistics only; favorites retain their independent category tabs.
+
+On the Library list, media-type filters sit above status in the right sidebar as
+compact vertical artwork strips. On narrow screens the sidebar precedes the
+collection. Source order follows media type, status, then collection controls,
+preserving keyboard order at both layouts. Media type, status, search, sorting,
+and Clear filters retain their previous combined behavior. Cover previews reuse
+the existing HTTP(S)-only, credential-free URL validation.
 
 ## Independent selections
 

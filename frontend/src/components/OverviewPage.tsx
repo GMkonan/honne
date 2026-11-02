@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { ArrowRight, Clock3 } from "lucide-react";
 import {
   activityDescription,
@@ -6,7 +6,8 @@ import {
   relativeTime,
 } from "../activityModel.ts";
 import { type FavoriteCandidate, favoriteTypes } from "../favoritesModel.ts";
-import type { GenreStatsMedia } from "../genreStats.ts";
+import type { GenreStatsMedia, StatisticsMediaType } from "../genreStats.ts";
+import { ConsumptionPanel } from "./ConsumptionPanel.tsx";
 import { FavoriteCover } from "./FavoriteCover.tsx";
 import { GenreStatsPanel } from "./GenreStatsPanel.tsx";
 import { LibrarySectionNav } from "./LibrarySectionNav.tsx";
@@ -40,7 +41,17 @@ export function OverviewPage(
     onOpen,
   }: OverviewPageProps,
 ) {
-  const rated = items.filter((item) =>
+  const [statisticsType, setStatisticsType] = useState<StatisticsMediaType>(
+    "all",
+  );
+  const statisticsItems = items.filter((item) =>
+    statisticsType === "all" || item.type === statisticsType
+  );
+  const selectedLabel = statisticsType === "all"
+    ? "All media"
+    : favoriteTypes.find(({ value }) => value === statisticsType)?.label ||
+      "Media";
+  const rated = statisticsItems.filter((item) =>
     Number.isFinite(item.rating) && item.rating > 0 && item.rating <= 10
   );
   const mean = rated.length
@@ -48,14 +59,16 @@ export function OverviewPage(
       .toFixed(1)
     : "—";
   const metrics = [
-    { label: "Total titles", value: items.length },
+    { label: "Total titles", value: statisticsItems.length },
     {
       label: "Completed",
-      value: items.filter((item) => item.status === "completed").length,
+      value:
+        statisticsItems.filter((item) => item.status === "completed").length,
     },
     {
       label: "In progress",
-      value: items.filter((item) => item.status === "in_progress").length,
+      value:
+        statisticsItems.filter((item) => item.status === "in_progress").length,
     },
     { label: "Mean score", value: mean },
   ];
@@ -80,6 +93,31 @@ export function OverviewPage(
       {(error || notice) && (
         <p className="error-banner" role="alert">{error || notice}</p>
       )}
+      <fieldset className="overview-statistics-filter">
+        <legend>Statistics media type</legend>
+        <div>
+          <button
+            type="button"
+            aria-pressed={statisticsType === "all"}
+            onClick={() => setStatisticsType("all")}
+          >
+            All media
+          </button>
+          {favoriteTypes.map(({ value, label }) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={statisticsType === value}
+              onClick={() => setStatisticsType(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p>
+          Filters statistics only. Favorites and recent activity are unchanged.
+        </p>
+      </fieldset>
       <div className="overview-layout">
         <div className="overview-main">
           <section
@@ -88,6 +126,7 @@ export function OverviewPage(
             aria-busy={loading}
           >
             <h3 id="overview-summary-title">At a glance</h3>
+            <p className="overview-statistics-scope">{selectedLabel}</p>
             <dl className="overview-metrics">
               {metrics.map(({ label, value }) => (
                 <div key={label}>
@@ -100,19 +139,21 @@ export function OverviewPage(
             </dl>
             {loading
               ? <p role="status">Loading your Library…</p>
-              : !error && items.length === 0
+              : !error && statisticsItems.length === 0
               ? (
                 <p>
-                  Your Library is empty. Add a title to start your collection.
+                  {items.length === 0
+                    ? "Your Library is empty. Add a title to start your collection."
+                    : "No titles in this selection yet."}
                 </p>
               )
-              : items.length > 0 && (
+              : statisticsItems.length > 0 && (
                 <ul
                   className="overview-media-summary"
                   aria-label="Titles by media type"
                 >
                   {favoriteTypes.map(({ value, label }) => {
-                    const count = items.filter((item) =>
+                    const count = statisticsItems.filter((item) =>
                       item.type === value
                     ).length;
                     return count
@@ -127,6 +168,7 @@ export function OverviewPage(
                 </ul>
               )}
           </section>
+          <div className="overview-favorites">{favorites}</div>
           <section
             className="overview-activity"
             aria-labelledby="overview-activity-title"
@@ -185,8 +227,18 @@ export function OverviewPage(
           </section>
         </div>
         <div className="overview-sidebar">
-          <GenreStatsPanel items={items} loading={loading} error={error} />
-          {favorites}
+          <GenreStatsPanel
+            items={items}
+            type={statisticsType}
+            loading={loading}
+            error={error}
+          />
+          <ConsumptionPanel
+            items={items}
+            type={statisticsType}
+            loading={loading}
+            error={error}
+          />
         </div>
       </div>
     </main>

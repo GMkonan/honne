@@ -13,24 +13,20 @@ const anime: GenreStatsMedia = {
   durationMinutes: 24,
 };
 
-function metric(panel: HTMLElement, label: string): string | null | undefined {
-  return within(panel).getByText(label).parentElement?.querySelector("dd")
-    ?.textContent;
-}
+const defaults = { type: "anime" as const, loading: false, error: "" };
 
 describe("Genre stats panel", () => {
-  it("shows the completed-only distribution, overlapping percentages, and consumption above a calculation explanation", async () => {
+  it("shows overlapping completed-only percentages without embedding consumption", async () => {
     const user = userEvent.setup();
     render(
       <GenreStatsPanel
+        {...defaults}
         items={[
           anime,
           { ...anime, genres: ["Comedy", "Action"] },
           { ...anime, genres: [] },
           { ...anime, status: "in_progress", genres: ["Horror"] },
         ]}
-        loading={false}
-        error=""
       />,
     );
     const panel = screen.getByRole("region", { name: "Genre stats" });
@@ -45,13 +41,13 @@ describe("Genre stats panel", () => {
     expect(rows).toHaveLength(3);
     expect(rows[0].textContent).toContain("67%Comedy, 2 of 3 completed titles");
     expect(within(legend).queryByText("Horror")).toBeNull();
-    expect(metric(panel, "Completed")).toBe("3");
-    expect(metric(panel, "Episodes recorded")).toBe("36");
-    expect(metric(panel, "Estimated watch time")).toBe("14h 24m");
+    expect(within(panel).queryByText("Episodes recorded")).toBeNull();
+    expect(within(panel).queryByText("Estimated watch time")).toBeNull();
+    expect(within(panel).getByText("Based on 3 completed titles.")).not
+      .toBeNull();
     expect(
       within(panel).getByText("Genres available for 2 of 3 completed titles."),
-    )
-      .not.toBeNull();
+    ).not.toBeNull();
     const method = within(panel).getByText("How this is calculated");
     await user.click(method);
     expect(method.parentElement?.hasAttribute("open")).toBe(true);
@@ -59,174 +55,102 @@ describe("Genre stats panel", () => {
       .not.toBeNull();
   });
 
-  it("supports category tabs with arrows, wrapping, Home and End, keeping categories isolated", async () => {
-    const user = userEvent.setup();
-    render(
-      <GenreStatsPanel
-        items={[
-          anime,
-          { ...anime, type: "manga", genres: ["Drama"], progress: 30 },
-          {
-            ...anime,
-            type: "game",
-            genres: ["Adventure"],
-            playtimeMinutes: 90,
-          },
-        ]}
-        loading={false}
-        error=""
-      />,
+  it("follows the shared selected type and supports All media without local tabs", () => {
+    const items = [anime, { ...anime, type: "manga", genres: ["Drama"] }, {
+      ...anime,
+      type: "game",
+      genres: ["Adventure"],
+    }];
+    const { rerender } = render(
+      <GenreStatsPanel {...defaults} items={items} />,
     );
-    const tabs = screen.getByRole("tablist", { name: "Statistics categories" });
-    const animeTab = within(tabs).getByRole("tab", { name: "Anime" });
-    animeTab.focus();
-    await user.keyboard("{ArrowRight}");
-    const mangaTab = within(tabs).getByRole("tab", { name: "Manga" });
-    expect(document.activeElement).toBe(mangaTab);
-    expect(mangaTab.getAttribute("aria-selected")).toBe("true");
-    expect(animeTab.tabIndex).toBe(-1);
-    let panel = screen.getByRole("tabpanel", { name: "Manga" });
-    expect(metric(panel, "Chapters recorded")).toBe("30");
-    expect(within(panel).queryByText("Estimated watch time")).toBeNull();
+    expect(screen.getByRole("list", { name: "Anime genres" }).textContent).not
+      .toContain("Drama");
+    rerender(<GenreStatsPanel {...defaults} items={items} type="manga" />);
+    expect(screen.getByRole("list", { name: "Manga genres" }).textContent)
+      .toContain("100%Drama");
     expect(screen.queryByRole("list", { name: "Anime genres" })).toBeNull();
-    await user.keyboard("{End}");
-    panel = screen.getByRole("tabpanel", { name: "Games" });
-    expect(metric(panel, "Recorded playtime")).toBe("1h 30m");
-    expect(within(panel).queryByText("Episodes recorded")).toBeNull();
-    await user.keyboard("{ArrowRight}");
-    expect(document.activeElement).toBe(animeTab);
-    await user.keyboard("{ArrowLeft}");
-    expect(document.activeElement).toBe(
-      within(tabs).getByRole("tab", { name: "Games" }),
-    );
-    await user.keyboard("{Home}");
-    expect(document.activeElement).toBe(animeTab);
-    await user.click(mangaTab);
-    expect(screen.getByRole("tabpanel", { name: "Manga" })).not.toBeNull();
+    rerender(<GenreStatsPanel {...defaults} items={items} type="all" />);
+    expect(
+      screen.getByRole("img", {
+        name: "Completed All media genre distribution",
+      }),
+    ).not.toBeNull();
+    expect(screen.getByRole("list", { name: "All media genres" }).textContent)
+      .toContain("33%Drama");
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 
-  it("selects a completed category initially and falls back when its last title is removed", async () => {
-    const user = userEvent.setup();
+  it("keeps the selected category empty when it has no completions or its last title is removed", () => {
     const items = [{ ...anime, status: "planned" }, {
       ...anime,
       type: "manga",
     }];
     const { rerender } = render(
-      <GenreStatsPanel items={items} loading={false} error="" />,
+      <GenreStatsPanel {...defaults} items={items} />,
     );
-    expect(screen.getByRole("tabpanel", { name: "Manga" })).not.toBeNull();
-    await user.click(screen.getByRole("tab", { name: "Anime" }));
-    expect(screen.getByText("No completed titles in this category yet."))
-      .not.toBeNull();
-    expect(screen.queryByText("Episodes recorded")).toBeNull();
-    rerender(<GenreStatsPanel items={[items[1]]} loading={false} error="" />);
-    expect(screen.getByRole("tabpanel", { name: "Manga" })).not.toBeNull();
-    expect(screen.queryByRole("tab", { name: "Anime" })).toBeNull();
+    expect(screen.getByText("No completed titles in this selection yet.")).not
+      .toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
+    rerender(<GenreStatsPanel {...defaults} items={[items[1]]} />);
+    expect(screen.getByText("No completed titles in this selection yet.")).not
+      .toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
   });
 
-  it("distinguishes initial loading, empty data, load failure, and refresh failure with retained data", () => {
+  it("distinguishes initial loading, empty data, failures, and refreshes with retained data", () => {
     const { rerender } = render(
-      <GenreStatsPanel items={[]} loading error="" />,
+      <GenreStatsPanel {...defaults} items={[]} loading />,
     );
     expect(screen.getByRole("status").textContent).toBe("Loading genre stats…");
     expect(screen.queryByText("Complete a title to see your genre stats."))
       .toBeNull();
-    expect(screen.queryByRole("img")).toBeNull();
-    rerender(<GenreStatsPanel items={[]} loading={false} error="" />);
-    expect(screen.getByText("Complete a title to see your genre stats."))
-      .not.toBeNull();
-    rerender(
-      <GenreStatsPanel items={[]} loading={false} error="Unavailable" />,
-    );
+    rerender(<GenreStatsPanel {...defaults} items={[]} />);
+    expect(screen.getByText("Complete a title to see your genre stats.")).not
+      .toBeNull();
+    rerender(<GenreStatsPanel {...defaults} items={[]} error="Unavailable" />);
     expect(screen.getByText(/Genre stats are unavailable/u)).not.toBeNull();
     expect(screen.queryByText("Complete a title to see your genre stats."))
       .toBeNull();
-    rerender(<GenreStatsPanel items={[anime]} loading error="" />);
+    rerender(<GenreStatsPanel {...defaults} items={[anime]} loading />);
     expect(screen.getByRole("status").textContent).toBe(
       "Refreshing genre stats…",
     );
     expect(screen.getByRole("img")).not.toBeNull();
     rerender(
-      <GenreStatsPanel
-        items={[anime]}
-        loading={false}
-        error="Refresh failed"
-      />,
+      <GenreStatsPanel {...defaults} items={[anime]} error="Refresh failed" />,
     );
     expect(screen.getByRole("img")).not.toBeNull();
     expect(screen.queryByText(/Genre stats are unavailable/u)).toBeNull();
   });
 
-  it("preserves consumption without genre metadata and marks missing progress and runtime instead of fabricating zeros", () => {
+  it("reports missing genre metadata without fabricating a chart", () => {
     render(
       <GenreStatsPanel
-        items={[{
-          ...anime,
-          genres: undefined,
-          progress: 0,
-          durationMinutes: 0,
-        }]}
-        loading={false}
-        error=""
+        {...defaults}
+        items={[{ ...anime, genres: undefined }]}
       />,
     );
-    const panel = screen.getByRole("region", { name: "Genre stats" });
-    expect(
-      within(panel).getByText("No genre metadata for completed titles yet."),
-    )
+    expect(screen.getByText("No genre metadata for completed titles yet.")).not
+      .toBeNull();
+    expect(screen.getByText("Genres available for 0 of 1 completed titles."))
       .not.toBeNull();
-    expect(within(panel).queryByRole("img")).toBeNull();
-    expect(metric(panel, "Completed")).toBe("1");
-    expect(metric(panel, "Episodes recorded")).toBe("Not tracked");
-    expect(metric(panel, "Estimated watch time")).toBe("Unavailable");
-    expect(
-      within(panel).getByText("Progress is missing for 1 completed title."),
-    )
-      .not.toBeNull();
-    expect(within(panel).getByText(/Watch time is incomplete for 1 of 1/u))
-      .not.toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
   });
 
-  it("reports partial repeat and playtime coverage in the corresponding categories", async () => {
-    const user = userEvent.setup();
-    render(
-      <GenreStatsPanel
-        items={[
-          { ...anime, repeatCount: 2, total: 0 },
-          { ...anime, type: "game", playtimeMinutes: 0 },
-        ]}
-        loading={false}
-        error=""
-      />,
-    );
-    expect(screen.getByText(/Some completed repeats have no known length/u))
-      .not.toBeNull();
-    await user.click(screen.getByRole("tab", { name: "Games" }));
-    const panel = screen.getByRole("tabpanel", { name: "Games" });
-    expect(metric(panel, "Recorded playtime")).toBe("Not tracked");
-    expect(within(panel).getByText("Playtime is missing for 1 completed game."))
-      .not.toBeNull();
-  });
-
-  it("keeps every genre and long untrusted labels as accessible text, with a keyboard-scrollable legend", () => {
+  it("keeps all long and untrusted genre labels as accessible text in a keyboard-scrollable legend", () => {
     const genres = [
       '<img src=x onerror="alert(1)">',
       "A very long genre name that should wrap rather than enlarge the page",
       ...Array.from({ length: 10 }, (_, index) => `Genre ${index + 1}`),
     ];
-    render(
-      <GenreStatsPanel
-        items={[{ ...anime, genres }]}
-        loading={false}
-        error=""
-      />,
-    );
+    render(<GenreStatsPanel {...defaults} items={[{ ...anime, genres }]} />);
     const legend = screen.getByRole("list", { name: "Anime genres" });
     expect(within(legend).getAllByRole("listitem")).toHaveLength(12);
     expect(legend.tabIndex).toBe(0);
     expect(legend.textContent).toContain(genres[0]);
     expect(legend.querySelector("img")).toBeNull();
-    expect(screen.getByText("Scroll the legend to see all 12 genres."))
-      .not.toBeNull();
+    expect(screen.getByText("Scroll the legend to see all 12 genres.")).not
+      .toBeNull();
   });
 });
