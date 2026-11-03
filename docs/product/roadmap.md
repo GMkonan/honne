@@ -76,6 +76,11 @@ Review issue #9 and the unintegrated `issue-10` work before resuming it. Priorit
 
 ## 7. Define an optional public profile
 
+Tracked in [#38](https://github.com/GMkonan/honne/issues/38). An optional hub for
+independently managed public profiles is tracked separately in
+[#46](https://github.com/GMkonan/honne/issues/46); its initial scope explicitly
+excludes social feeds and follows.
+
 A public projection must remain opt-in, expose only explicitly selected data, avoid publishing private management capabilities, and keep Honne private by default. Favorites may feed it later, but Library favorites and their PNG exports must not imply publication.
 
 ## 8. Internationalize with Weblate
@@ -91,3 +96,60 @@ Prepare first-party interface copy, accessibility labels, validation messages, a
 ## Outside the current sequence
 
 Ideas such as a separate Cartoon or Animation category (#67), broader personal metrics beyond the completed-only genre card (#34), upcoming releases (#33), offline support (#59), and public sharing remain valid but are not part of the current delivery sequence.
+
+The following ideas were requested by the owner on 2026-11-03. They are recorded
+for refinement, not implementation commitments or changes to the priorities above.
+
+### Hosted interactive demo
+
+Host a demo where prospective users can click through Honne, explore a populated
+Library and Overview, and understand the product before installing it.
+
+Guardrails and decisions to refine before exposing it:
+
+- Use curated synthetic/demo data, isolated from every real installation. Never
+  seed it from an owner's private backup or expose credentials, private notes,
+  integration state, or real synchronization jobs.
+- Decide between read-only browsing and isolated, temporary editing. Visitors
+  must not be able to add arbitrary persistent content or damage the shared demo.
+  Define session isolation, reset behavior, and cleanup if editing is offered.
+- Enforce restrictions in the backend, not only by hiding interface controls.
+  Review mutation endpoints, uploads, backup/restore, integration connections,
+  and outbound provider operations for the chosen demo mode.
+- Decide which discovery features use fixtures or cached data, and define bounded
+  requests, storage, rate limits, and provider/hosting budgets. Public traffic
+  must not turn into uncontrolled catalog API usage or remote writes.
+- Choose hosting and maintenance ownership separately. Do not expose an existing
+  private instance or introduce an obligatory hosted dependency for self-hosters.
+
+The demo does not depend on public profiles or the hub. Its security model and
+interactive capabilities remain open decisions; no hosted deployment is approved.
+
+### Optional friends' activity in Overview
+
+After the opt-in public profile in #38, explore an optional social area in
+Overview showing activity from friends or followed profiles. The local personal
+Overview must remain useful without enabling social features.
+
+Scope and questions to refine:
+
+- Read only activity explicitly published by participating profiles. Define
+  friend/follow relationships, account identity, visibility, unfollowing,
+  unpublishing, and cached-data retention before choosing an architecture.
+- Investigate whether external services such as AniList can supply friends'
+  public or properly authorized activity, including available API capabilities,
+  consent, permissions, limits, attribution, and refresh behavior. This is an
+  exploration, not a promise that existing Honne synchronization supports it.
+- Distinguish read-only feed aggregation from bidirectional synchronization.
+  Viewing a friend's activity must not modify the owner's Library, create local
+  personal Activity events, or enqueue remote writes.
+- If multiple installations need discovery or aggregation, evaluate the optional
+  hub in #46 without adding social features to that issue's initial scope or
+  requiring a centralized service for private Honne use.
+- Keep sources identifiable, avoid duplicate events, and preserve local data and
+  navigation when a remote source is unavailable. Choose the smallest useful
+  slice before adding broader social behavior.
+
+Demo exposure, public-profile publication, hub participation, and social/provider
+integration are separate capabilities and require their own explicit design and
+authorization before implementation or deployment.
