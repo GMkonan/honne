@@ -49,12 +49,29 @@ Source changes do not authorize updating a running installation.
   pages/chapters, or recorded game time to estimated watch time.
 - Video time uses recorded episode consumption times the available average episode
   duration, or movie viewings times runtime. Label it as an estimate and identify
-  incomplete coverage. A positive estimate with missing runtime/progress is labeled
-  `Partial estimated watch time`; an entirely unknown estimate is `Unavailable`.
+  incomplete coverage. Watch-time values use `~` (with an accessible `Estimated`
+  prefix), with a visible `Partial` badge when runtime/progress is missing. An
+  entirely unknown time is `Unknown`; unrecorded consumption is `Not tracked`.
   Missing data is not represented as a known zero or replaced with guessed runtimes.
 - Keep valid statistics visible while the Library refreshes or a refresh fails.
   Distinguish initial loading, an empty Library, unavailable data, a category with
   no completions, completed titles without genres, and no recorded consumption.
+
+## Presentation
+
+Owner revision (2026-11-03): Consumption prioritizes each media type's consumed
+units and, for video, watch time side by side. Use short labels, larger numbers,
+and readable 14 px labels instead of repeated title/completion counts and small
+explanatory paragraphs. Completed counts already appear in At a glance.
+
+Keep a single native `Details` disclosure, closed initially, for calculation rules,
+per-type coverage/completion counts, inferred totals, and missing progress,
+repeat-length, runtime, or playtime notes. Missing values and positive partial
+totals remain explicit in the compact view; simplification must not change the
+calculation contract, merge unrelated units, or hide incomplete totals as complete.
+Tests cover Tab reachability and native pointer expand/collapse. The installed
+user-event does not synthesize Enter/Space activation for `summary`; verify those
+native keys in a real browser rather than adding a duplicate keyboard handler.
 
 ## Validation
 
@@ -118,3 +135,19 @@ not visually validated. No browser dependency was installed.
 - The browser tool still reports that Chromium/Google Chrome is not installed.
   Compact cover sizing, 320 px/tablet/desktop/200% zoom, and real-artwork layout
   remain visually unverified; no dependency was installed.
+
+### Executed checks for the simplified presentation (2026-11-03)
+
+- Repository format, lint, strict typecheck, all 187 workspace frontend tests,
+  production build, Go vet/race tests, and Compose configuration passed.
+- The staged feature, excluding the previous season-progress work, also passed
+  format, lint, strict typecheck, all 182 tests, and production build.
+- The 38 focused Consumption/Overview/favorites/3×3 tests passed. Coverage includes
+  collapsed calculation notes, Tab reachability and pointer expand/collapse,
+  positive partial chapter/game totals, explicit unknown time, unchanged shared
+  filtering, and preserved favorites editing/preview/3×3 behavior.
+- Consumption/genre calculation modules and backend files are unchanged. The
+  presentation still includes ongoing progress and completed known-total fallbacks.
+- Real-browser cover wrapping, artwork, 320 px/tablet/desktop/200% zoom, and native
+  summary-key activation remain pending because no browser is available. No
+  dependency or custom keyboard workaround was introduced.

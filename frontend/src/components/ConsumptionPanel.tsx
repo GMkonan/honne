@@ -14,13 +14,13 @@ interface ConsumptionPanelProps {
 }
 
 const consumptionLabels: Record<TrackingMediaType, string> = {
-  anime: "Episodes recorded",
-  series: "Episodes recorded",
+  anime: "Episodes",
+  series: "Episodes",
   movie: "Viewings",
-  manga: "Chapters recorded",
-  light_novel: "Chapters recorded",
-  book: "Pages recorded",
-  game: "Recorded playtime",
+  manga: "Chapters",
+  light_novel: "Chapters",
+  book: "Pages",
+  game: "Playtime",
 };
 
 export function ConsumptionPanel(
@@ -46,7 +46,6 @@ export function ConsumptionPanel(
         <h3 id={`${id}-heading`}>
           <Clock3 size={18} aria-hidden="true" /> Consumption
         </h3>
-        <span>Progress across all statuses</span>
       </header>
       {loading && (
         <p role="status">
@@ -69,6 +68,10 @@ export function ConsumptionPanel(
             : stats.unitCount > 0
             ? stats.unitCount.toLocaleString("en")
             : "Not tracked";
+          const partialConsumption = groupType === "game"
+            ? stats.playtimeMinutes > 0 && stats.missingPlaytimeCount > 0
+            : stats.unitCount > 0 &&
+              (stats.missingProgressCount > 0 || stats.missingRepeatCount > 0);
           return (
             <section
               key={groupType}
@@ -76,103 +79,111 @@ export function ConsumptionPanel(
               aria-label={`${label} consumption`}
             >
               <h4>{label}</h4>
-              <p className="consumption-coverage">
-                Based on {stats.titleCount}{" "}
-                {stats.titleCount === 1 ? "title" : "titles"}.
-              </p>
               <dl>
                 <div>
-                  <dt>Completed</dt>
-                  <dd>{stats.completedCount.toLocaleString("en")}</dd>
-                </div>
-                <div>
                   <dt>{consumptionLabels[groupType]}</dt>
-                  <dd>{consumption}</dd>
+                  <dd>
+                    {consumption}
+                    {partialConsumption && (
+                      <span className="consumption-badge">Partial</span>
+                    )}
+                  </dd>
                 </div>
                 {video && (
-                  <div className="consumption-watch-time">
-                    <dt>
-                      {stats.estimatedMinutes > 0 &&
-                          stats.incompleteEstimateCount > 0
-                        ? "Partial estimated watch time"
-                        : "Estimated watch time"}
-                    </dt>
+                  <div>
+                    <dt>Watch time</dt>
                     <dd>
                       {stats.estimatedMinutes > 0
-                        ? formatPlaytime(stats.estimatedMinutes)
-                        : "Unavailable"}
+                        ? (
+                          <span>
+                            <span className="sr-only">
+                              {"Estimated "}
+                            </span>~{formatPlaytime(stats.estimatedMinutes)}
+                          </span>
+                        )
+                        : "Unknown"}
+                      {stats.estimatedMinutes > 0 &&
+                        stats.incompleteEstimateCount > 0 && (
+                        <span className="consumption-badge">Partial</span>
+                      )}
                     </dd>
                   </div>
                 )}
               </dl>
-              {stats.inferredProgressCount > 0 && (
-                <p>
-                  Known totals are used for {stats.inferredProgressCount}{" "}
-                  completed{" "}
-                  {stats.inferredProgressCount === 1 ? "title" : "titles"}{" "}
-                  without recorded progress.
-                </p>
-              )}
-              {stats.missingProgressCount > 0 && (
-                <p>
-                  Progress is missing for {stats.missingProgressCount} completed
-                  {" "}
-                  {stats.missingProgressCount === 1 ? "title" : "titles"}.
-                </p>
-              )}
-              {stats.missingRepeatCount > 0 && (
-                <p>
-                  Some completed repeats have no known length and are not
-                  included in the progress totals.
-                </p>
-              )}
-              {video && stats.incompleteEstimateCount > 0 && (
-                <p>
-                  Watch time is incomplete for {stats.incompleteEstimateCount}
-                  {" "}
-                  of {stats.titleCount}{" "}
-                  included titles because runtime or progress is missing.
-                </p>
-              )}
-              {groupType === "game" && stats.missingPlaytimeCount > 0 && (
-                <p>
-                  Playtime is missing for {stats.missingPlaytimeCount} included
-                  {" "}
-                  {stats.missingPlaytimeCount === 1 ? "game" : "games"}.
-                </p>
-              )}
             </section>
           );
         })}
       {groups.length > 0 && (
         <details className="consumption-method">
-          <summary>How consumption is calculated</summary>
+          <summary>Details</summary>
           <p>
-            Consumption includes recorded progress across all statuses,
-            including watching, reading, playing, paused, and dropped titles.
-            Planned titles without recorded consumption do not contribute. All
-            media keeps each type and its units separate.
+            Includes recorded progress in every status. Unstarted titles are
+            excluded. Each media type keeps its own units.
           </p>
           <p>
-            Episode, chapter, and page totals include recorded progress and
-            completed repeats with a known personal or catalog total. Only when
-            a completed title has no recorded progress, its personal total or,
-            if absent, its catalog total is used. Partial progress is never
-            replaced by the available total. Saved progress is not changed.
+            Completed titles without progress use known totals. Repeats use
+            known lengths. Saved progress is not changed.
           </p>
           <p>
-            Movie viewings use completion or recorded rewatches, not episode
-            progress. Watch time uses available movie runtimes or average
-            episode durations and is an estimate, not a timer. Titles without
-            runtime or progress make the estimate incomplete; missing durations
-            are not guessed.
+            ~ marks estimated watch time from available runtimes. Partial totals
+            exclude missing data; durations are not guessed. Game playtime is
+            cumulative, not multiplied by replays. Reading time is not
+            estimated.
           </p>
-          <p>
-            Recorded game playtime is cumulative and is not multiplied by
-            replays. Reading time and unrecorded game time are not estimated.
-          </p>
+          {groups.map(({ type: groupType, label, stats }) => (
+            <ConsumptionDetails key={groupType} label={label} stats={stats} />
+          ))}
         </details>
       )}
+    </section>
+  );
+}
+
+function ConsumptionDetails({ label, stats }: {
+  label: string;
+  stats: ReturnType<typeof consumptionStats>;
+}) {
+  return (
+    <section aria-label={`${label} calculation details`}>
+      <h4>{label}</h4>
+      <p>
+        {stats.titleCount} {stats.titleCount === 1 ? "title" : "titles"},{" "}
+        {stats.completedCount} completed.
+      </p>
+      <ul>
+        {stats.inferredProgressCount > 0 && (
+          <li>
+            Known totals used for {stats.inferredProgressCount} completed{" "}
+            {stats.inferredProgressCount === 1 ? "title" : "titles"}{" "}
+            without progress.
+          </li>
+        )}
+        {stats.missingProgressCount > 0 && (
+          <li>
+            Progress missing for {stats.missingProgressCount} completed{" "}
+            {stats.missingProgressCount === 1 ? "title" : "titles"}.
+          </li>
+        )}
+        {stats.missingRepeatCount > 0 && (
+          <li>
+            {stats.missingRepeatCount} {stats.missingRepeatCount === 1
+              ? "title has repeats"
+              : "titles have repeats"} with unknown length.
+          </li>
+        )}
+        {stats.incompleteEstimateCount > 0 && (
+          <li>
+            Watch time missing data for {stats.incompleteEstimateCount} of{" "}
+            {stats.titleCount} {stats.titleCount === 1 ? "title" : "titles"}.
+          </li>
+        )}
+        {stats.missingPlaytimeCount > 0 && (
+          <li>
+            Playtime missing for {stats.missingPlaytimeCount}{" "}
+            {stats.missingPlaytimeCount === 1 ? "game" : "games"}.
+          </li>
+        )}
+      </ul>
     </section>
   );
 }

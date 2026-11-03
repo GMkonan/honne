@@ -1108,7 +1108,7 @@ button {
   margin-top: 8px;
 }
 .overview-favorites .favorites-grid {
-  max-width: 480px;
+  grid-template-columns: repeat(auto-fill, minmax(min(96px, 100%), 1fr));
 }
 .overview-favorites .favorites-panel-actions {
   margin-top: 12px;

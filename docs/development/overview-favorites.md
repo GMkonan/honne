@@ -2,7 +2,7 @@
 
 Owner decisions (2026-11-02): Library opens on Overview; its sibling list tab is
 named Library, not Collection. Overview combines a collection summary, recent
-local activity, and favorites. Favorites use media-type tabs, four portrait
+local activity, and favorites. Favorites use media-type tabs, responsive portrait
 columns, an initial eight-cover preview, Show more, and visual editing. No
 social features, character catalog, or public profile are introduced.
 
@@ -11,11 +11,13 @@ activity. The smaller column contains separate read-only
 [genre and consumption statistics](genre-stats.md) cards. A shared media-type
 filter controls statistics only; favorites retain their independent category tabs.
 
-The compact presentation (owner revision, 2026-11-02) keeps the four-column,
-eight-cover preview and existing expand/edit/3×3 actions. Cap the cover grid at
-480 px at every breakpoint, retain the 3:4 portrait ratio, and reduce card/tab
-spacing without shrinking essential text below 12 px or interactive targets below
-24 px. The card remains in the larger column and fits narrower viewports.
+The compact presentation (owner revisions, 2026-11-02 and 2026-11-03) keeps the
+eight-cover preview and existing expand/edit/3×3 actions. Fill the available card
+width with compact, automatically wrapping columns starting at 96 px rather than
+limiting the grid to four columns or 480 px. Retain the 3:4 portrait ratio and
+reduced card/tab spacing without shrinking essential text below 12 px or
+interactive targets below 24 px. The card remains in the larger column and fits
+narrower viewports; fewer favorites do not expand to fill the entire row.
 
 On the Library list, media-type filters sit above status in the right sidebar as
 compact vertical artwork strips. On narrow screens the sidebar precedes the

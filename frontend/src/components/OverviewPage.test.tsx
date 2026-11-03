@@ -81,7 +81,7 @@ describe("Overview", () => {
     ).toBe("#activity");
   });
 
-  it("places favorites before the separate genre and consumption cards without changing the Library summary", () => {
+  it("places favorites before the separate cards and keeps consumption focused on units", () => {
     render(<OverviewPage {...defaults} />);
     const stats = screen.getByRole("region", { name: "Genre stats" });
     const favorites = screen.getByRole("complementary", { name: "Favorites" });
@@ -95,7 +95,7 @@ describe("Overview", () => {
       name: "Movies consumption",
     });
     expect(
-      within(consumption).getByText("Completed").parentElement?.querySelector(
+      within(consumption).getByText("Viewings").parentElement?.querySelector(
         "dd",
       )
         ?.textContent,
@@ -182,7 +182,7 @@ describe("Overview", () => {
       .toContain("Action");
     expect(
       screen.getByRole("region", { name: "Anime consumption" }).textContent,
-    ).toContain("Episodes recorded20");
+    ).toContain("Episodes20");
     await user.click(within(filters).getByRole("button", { name: "Series" }));
     expect(metric("Mean score")).toBe("9.0");
     expect(screen.getByRole("list", { name: "Series genres" }).textContent)
@@ -197,7 +197,7 @@ describe("Overview", () => {
       .toContain("100%Adventure");
     expect(
       screen.getByRole("region", { name: "Games consumption" }).textContent,
-    ).toContain("Recorded playtime2h");
+    ).toContain("Playtime2h");
     expect(screen.queryByRole("region", { name: "Anime consumption" }))
       .toBeNull();
     await user.click(within(filters).getByRole("button", { name: "Books" }));
@@ -251,7 +251,7 @@ describe("Overview", () => {
       name: "Manga consumption",
     });
     expect(
-      within(consumption).getByText("Chapters recorded").parentElement
+      within(consumption).getByText("Chapters").parentElement
         ?.querySelector("dd")?.textContent,
     ).toBe("1,000");
     const summary = screen.getByRole("region", { name: "At a glance" });
