@@ -23,3 +23,9 @@ same time. Each suite already uses parallel workers; concurrent suites can exhau
 host resources and cause existing 5-second tests to time out. When that happens,
 rerun without a competing suite before diagnosing an application regression.
 Do not raise timeouts or weaken assertions to conceal resource contention.
+
+Do not use `set -e` as the only failure propagation inside a validation group that
+is itself followed by `||`: Bash can ignore errexit throughout that group. Run
+the group as an unconditionally executed command under `set -e`, or connect every
+required check with `&&`. Confirm individual test/build outcomes before claiming
+that validation passed.
