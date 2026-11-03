@@ -122,7 +122,10 @@ export function MonthlyLogPage(
   }
 
   return (
-    <main className="page-container standalone-page monthly-log-page">
+    <main
+      className="page-container standalone-page monthly-log-page"
+      tabIndex={-1}
+    >
       <LibrarySectionNav active="monthly_log" />
       <header className="page-heading monthly-log-heading">
         <div>

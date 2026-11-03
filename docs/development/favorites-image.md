@@ -1,7 +1,9 @@
 # Overview favorites and independent 3×3 export
 
-Library opens on Overview (`#library`, with `#overview` and legacy `#favorites`
-links also supported). The sibling Library tab (`#library/list`) contains the
+Overview is the default start page (`#library`, with `#overview` and legacy
+`#favorites` links also supported). The installation-wide
+[start-page preference](start-page.md) changes only the root landing tab.
+The sibling Library tab (`#library/list`) contains the
 media lists; Monthly Log remains a separate chronological experience. Overview
 shows collection metrics, the eight newest local Activity events, and a favorites
 widget. Independent loading failures retain valid Library and favorites data.

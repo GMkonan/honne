@@ -6,6 +6,10 @@ local activity, and favorites. Favorites use media-type tabs, responsive portrai
 columns, an initial eight-cover preview, Show more, and visual editing. No
 social features, character catalog, or public profile are introduced.
 
+Overview remains the default. The installation-wide
+[start-page preference](start-page.md) can choose a different root landing tab;
+explicit Overview and Library links keep their existing targets.
+
 Favorites occupy the larger Overview column, between At a glance and recent
 activity. The smaller column contains separate read-only
 [genre and consumption statistics](genre-stats.md) cards. A shared media-type

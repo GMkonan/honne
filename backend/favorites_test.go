@@ -94,9 +94,9 @@ func legacyFavoritesSchema(version int) string {
 	end := strings.Index(sqliteSchema, "CREATE TABLE library_appearance")
 	schema := sqliteSchema[:start] + sqliteSchema[end:]
 	if version == 3 {
-		return strings.NewReplacer("BETWEEN 1 AND 10", "BETWEEN 1 AND 8", "CHECK (position >= 0),\n  FOREIGN KEY", "CHECK (position BETWEEN 0 AND 8),\n  FOREIGN KEY", "user_version = 5", "user_version = 3").Replace(schema)
+		return strings.NewReplacer("BETWEEN 1 AND 11", "BETWEEN 1 AND 8", "CHECK (position >= 0),\n  FOREIGN KEY", "CHECK (position BETWEEN 0 AND 8),\n  FOREIGN KEY", "user_version = 6", "user_version = 3").Replace(schema)
 	}
-	return strings.NewReplacer("BETWEEN 1 AND 10", "BETWEEN 1 AND 9", "CHECK (position >= 0),\n  FOREIGN KEY", "CHECK (position BETWEEN 0 AND 62),\n  FOREIGN KEY", "user_version = 5", "user_version = 4").Replace(schema)
+	return strings.NewReplacer("BETWEEN 1 AND 11", "BETWEEN 1 AND 9", "CHECK (position >= 0),\n  FOREIGN KEY", "CHECK (position BETWEEN 0 AND 62),\n  FOREIGN KEY", "user_version = 6", "user_version = 4").Replace(schema)
 }
 
 func TestFavoritesSchemaThreeMigrationPreservesSelection(t *testing.T) {

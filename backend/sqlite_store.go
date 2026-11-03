@@ -17,7 +17,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 5
+const sqliteSchemaVersion = 6
 
 // openRuntimeStore opens the operational SQLite store. On the first start it
 // migrates a non-empty legacy JSON snapshot without changing that source. A
@@ -220,6 +220,20 @@ func migrateSQLiteSchema(path string) error {
 			"CREATE TABLE top_nine (media_id INTEGER PRIMARY KEY CHECK (media_id > 0), position INTEGER NOT NULL UNIQUE CHECK (position BETWEEN 0 AND 62), FOREIGN KEY (media_id) REFERENCES favorites(media_id) ON DELETE RESTRICT)",
 			"INSERT INTO top_nine SELECT media_id, position FROM favorites",
 			"PRAGMA user_version = 5",
+		}); err != nil {
+			return err
+		}
+		version = 5
+	}
+	if version == 5 {
+		if err := applySQLiteMigration(db, []string{
+			"ALTER TABLE store_meta RENAME TO store_meta_v5",
+			"CREATE TABLE store_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), json_version INTEGER NOT NULL CHECK (json_version BETWEEN 1 AND 11), next_media_id INTEGER NOT NULL CHECK (next_media_id > 0), next_job_id INTEGER NOT NULL CHECK (next_job_id > 0), next_activity_id INTEGER NOT NULL CHECK (next_activity_id > 0))",
+			"INSERT INTO store_meta SELECT singleton, 11, next_media_id, next_job_id, next_activity_id FROM store_meta_v5",
+			"DROP TABLE store_meta_v5",
+			"CREATE TABLE app_preferences (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), start_page TEXT NOT NULL DEFAULT 'overview' CHECK (start_page IN ('overview', 'library', 'monthly_log', 'activity')))",
+			"INSERT INTO app_preferences (singleton) VALUES (1)",
+			"PRAGMA user_version = 6",
 		}); err != nil {
 			return err
 		}
@@ -429,6 +443,7 @@ func replaceSQLiteSnapshot(db *sql.DB, snapshot persistedStore) error {
 		"DELETE FROM top_nine",
 		"DELETE FROM favorites",
 		"DELETE FROM library_appearance",
+		"DELETE FROM app_preferences",
 		"DELETE FROM activities",
 		"DELETE FROM sync_jobs",
 		"DELETE FROM media",
@@ -490,6 +505,10 @@ func insertSQLiteSnapshot(tx *sql.Tx, snapshot persistedStore) error {
 		if _, err := tx.Exec("INSERT INTO top_nine (media_id, position) VALUES (?, ?)", mediaID, position); err != nil {
 			return fmt.Errorf("write SQLite 3×3 selection: %w", err)
 		}
+	}
+	preferences := preferencesFromSnapshot(snapshot)
+	if _, err := tx.Exec("INSERT INTO app_preferences (singleton, start_page) VALUES (1, ?)", preferences.StartPage); err != nil {
+		return fmt.Errorf("write SQLite application preferences: %w", err)
 	}
 	bannerData := snapshot.Appearance.BannerData
 	if bannerData == nil {
@@ -559,6 +578,11 @@ func loadSQLiteSnapshot(path string) (persistedStore, error) {
 	if snapshot.Appearance, err = readSQLiteAppearance(db); err != nil {
 		return snapshot, err
 	}
+	var preferences appPreferences
+	if err := db.QueryRow("SELECT start_page FROM app_preferences WHERE singleton = 1").Scan(&preferences.StartPage); err != nil {
+		return snapshot, fmt.Errorf("read SQLite application preferences: %w", err)
+	}
+	snapshot.Preferences = &preferences
 	canonical, err := json.Marshal(snapshot)
 	if err != nil {
 		return snapshot, err

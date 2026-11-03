@@ -160,9 +160,9 @@ After the containers are healthy, reload every open Honne tab so it uses the fro
 
 ### Roll back from a SQLite release
 
-Before switching to a JSON-only backend, use **Settings → Download backup** to preserve the latest SQLite state. The unchanged `/data/media.json` from the original migration does not contain post-migration writes. The current export uses JSON version 8: it can only be restored by a binary that explicitly supports that version. A `.json` extension does not make it compatible with an older release.
+Before switching to a JSON-only backend, use **Settings → Download backup** to preserve the latest SQLite state. The unchanged `/data/media.json` from the original migration does not contain post-migration writes. The current source exports JSON version 11: it can only be restored by a binary that explicitly supports that version. A `.json` extension does not make it compatible with an older release.
 
-For an older binary that cannot read JSON version 8, use its matching pre-update backup or stopped-volume copy instead. This returns the collection to that recovery point; post-update changes remain only in the current backup and are not automatically converted. Stop the backend, preserve the complete data directory, move `honne.db` aside, restore the compatible snapshot as `/data/media.json`, and only then start the older image. Pending AniList jobs remain account-bound.
+For an older binary that cannot read the exported JSON version, use its matching pre-update backup or stopped-volume copy instead. This returns the collection to that recovery point; post-update changes remain only in the current backup and are not automatically converted. Stop the backend, preserve the complete data directory, move `honne.db` aside, restore the compatible snapshot as `/data/media.json`, and only then start the older image. Pending AniList jobs remain account-bound.
 
 After restoring data compatible with the target version, download the Compose asset from that exact tag. The following commands only switch images; they do not restore or convert data:
 
@@ -182,6 +182,14 @@ Starting with v0.4.0, the first successful Library write upgrades the snapshot t
 The customization updates use JSON version 8 and SQLite schema version 3. Schema upgrades run transactionally: version 1 adds favorites and banner storage, then version 2 adds profile-picture storage. Before installing a release containing these changes, download a portable backup and copy the stopped data volume. Older backends do not understand the newer schema or JSON contract. Rolling back requires the pre-update volume or pre-update JSON backup; it intentionally does not discard favorites or images to manufacture an older snapshot.
 
 The Overview/favorites update uses SQLite schema 5 and JSON 10. Favorites no longer have a nine-title limit; a separate ordered 3×3 selection is chosen from favorites, with up to nine per type. Existing favorites initialize both selections on upgrade. Preserve a portable pre-update backup, a stopped-volume copy, and matching images before applying it: older images cannot open the new schema or portable format. See [the source upgrade plan](development/overview-favorites.md).
+
+The configurable start-page update uses SQLite schema 6 and JSON 11. Choose
+**Settings → Start page → Initial tab** and save to apply Overview, Library,
+Monthly Log, or Activity as the root landing page on every device. Explicit page
+links are not redirected. Existing stores and older backups default to Overview;
+new backups include the saved choice. This upgrade also requires pre-update
+portable/volume backups and matching images for rollback. See
+[the start-page upgrade plan](development/start-page.md).
 
 Do not use the simple image-only rollback sequence for v0.1.0 either. Its Compose asset predates embedded image tags, and its backend cannot read the persistence-v5 snapshot written by v0.2.0. Before validating or starting v0.1.0:
 

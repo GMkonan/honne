@@ -117,15 +117,15 @@ sequenceDiagram
     end
 ```
 
-A user-visible success is never returned before the SQLite commit. Library data, Activity, counters, favorites, independent 3×3 selections, appearance, and AniList jobs share the same transaction and rollback boundary.
+A user-visible success is never returned before the SQLite commit. Library data, Activity, counters, favorites, independent 3×3 selections, appearance, application preferences, and AniList jobs share the same transaction and rollback boundary.
 
 ## JSON migration and restore
 
 ```mermaid
 flowchart TD
     Input[Legacy or backup JSON] --> Limit[Enforce 32 MiB limit]
-    Limit --> Decode[Strict decode\nlegacy array or versions 1–10]
-    Decode --> Validate[Validate IDs, references, counters,\nfavorites, top nine, appearance, and payloads]
+    Limit --> Decode[Strict decode\nlegacy array or versions 1–11]
+    Decode --> Validate[Validate IDs, references, counters,\nfavorites, top nine, appearance, preferences, and payloads]
     Validate --> Tx[Write new or replacement SQLite snapshot\nin one transaction]
     Tx --> Integrity[Integrity check and reopen]
     Integrity --> Ready[Use SQLite as operational source]
@@ -140,7 +140,7 @@ Startup migration creates `honne.db` only when it does not exist and never chang
 
 ```mermaid
 flowchart LR
-    SQLite[(SQLite snapshot)] --> Export[Version 10 JSON]
+    SQLite[(SQLite snapshot)] --> Export[Version 11 JSON]
     Export --> Media[Library]
     Export --> Activity[Activity]
     Export --> Outbox[AniList outbox]
@@ -148,5 +148,6 @@ flowchart LR
     Export --> Favorites[Favorite order]
     Export --> TopNine[Independent 3×3 order]
     Export --> Appearance[Custom banner and profile picture]
+    Export --> Preferences[Installation start page]
     Secret[OAuth token] -. excluded .-> Export
 ```

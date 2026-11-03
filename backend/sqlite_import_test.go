@@ -64,7 +64,7 @@ func TestSQLiteImportPreflightPreservesSourceAndDurableState(t *testing.T) {
 }
 
 func TestSQLiteImportSupportedLegacyVersions(t *testing.T) {
-	for _, source := range []string{`[]`, `[{"id":1,"title":"Legacy","type":"anime"}]`, `{"version":1,"items":[]}`, `{"version":2,"items":[]}`, `{"version":3,"items":[]}`, `{"version":4,"items":[]}`, `{"version":5,"items":[]}`, `{"version":6,"items":[]}`, `{"version":7,"items":[]}`, `{"version":8,"items":[]}`, `{"version":9,"items":[]}`, `{"version":10,"items":[]}`} {
+	for _, source := range []string{`[]`, `[{"id":1,"title":"Legacy","type":"anime"}]`, `{"version":1,"items":[]}`, `{"version":2,"items":[]}`, `{"version":3,"items":[]}`, `{"version":4,"items":[]}`, `{"version":5,"items":[]}`, `{"version":6,"items":[]}`, `{"version":7,"items":[]}`, `{"version":8,"items":[]}`, `{"version":9,"items":[]}`, `{"version":10,"items":[]}`, `{"version":11,"items":[]}`} {
 		t.Run(source, func(t *testing.T) {
 			snapshot, err := decodeSQLiteImport([]byte(source))
 			if err != nil {
@@ -81,7 +81,7 @@ func TestSQLiteImportSupportedLegacyVersions(t *testing.T) {
 }
 
 func TestSQLiteImportRejectsUnsafeSources(t *testing.T) {
-	for _, source := range []string{"", " ", "{", "null", `{"version":11}`, `{"version":0}`, `[] []`, `{"version":6,"unknown":"do not silently discard"}`, `[{"id":0}]`, `[{"id":1},{"id":1}]`, `{"version":6,"nextId":-1}`, `{"version":6,"nextJobId":9223372036854775807}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":0}]}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":2},{"id":1,"mediaId":3}]}`, `{"version":6,"activities":[{"id":1,"mediaId":-2}]}`, `{"version":6,"activities":[{"id":1},{"id":1}]}`} {
+	for _, source := range []string{"", " ", "{", "null", `{"version":12}`, `{"version":0}`, `[] []`, `{"version":6,"unknown":"do not silently discard"}`, `[{"id":0}]`, `[{"id":1},{"id":1}]`, `{"version":6,"nextId":-1}`, `{"version":6,"nextJobId":9223372036854775807}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":0}]}`, `{"version":6,"syncJobs":[{"id":1,"mediaId":2},{"id":1,"mediaId":3}]}`, `{"version":6,"activities":[{"id":1,"mediaId":-2}]}`, `{"version":6,"activities":[{"id":1},{"id":1}]}`} {
 		t.Run(source, func(t *testing.T) {
 			if _, err := decodeSQLiteImport([]byte(source)); err == nil {
 				t.Fatal("unsafe source accepted")

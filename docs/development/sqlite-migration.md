@@ -14,8 +14,8 @@ The implementation uses **modernc.org/sqlite v1.60.1**, a pinned BSD-3-Clause pu
 
 At startup:
 
-1. if `honne.db` exists, the backend transactionally upgrades schema versions 1–4 through version 5 when needed, validates its integrity, payloads, positions, counters, and opens it as the runtime store;
-2. if the database is absent and a non-empty legacy `media.json` exists, the backend validates JSON versions 1–10, creates the database exclusively, imports the complete snapshot transactionally, closes/reopens it, verifies logical equality, and leaves `media.json` unchanged;
+1. if `honne.db` exists, the backend transactionally upgrades schema versions 1–5 through version 6 when needed, validates its integrity, payloads, positions, counters, and opens it as the runtime store;
+2. if the database is absent and a non-empty legacy `media.json` exists, the backend validates JSON versions 1–11, creates the database exclusively, imports the complete snapshot transactionally, closes/reopens it, verifies logical equality, and leaves `media.json` unchanged;
 3. if neither store exists, or the legacy source is empty, the backend creates an empty versioned database.
 
 A failed migration removes incomplete database and journal artifacts and does not change the JSON source. A pre-existing destination is never overwritten. Once SQLite receives new writes, the frozen legacy JSON is only a pre-migration recovery point and is no longer a current backup.
@@ -27,6 +27,7 @@ Migration and runtime persistence preserve:
 - media IDs and monotonic counters, including deleted IDs referenced by Activity or jobs;
 - collection metadata, notes, platforms, planned revisits, and empty-array contracts;
 - manually ordered favorites, the local custom Library banner, and the custom profile picture;
+- installation-wide application preferences, including the default start page;
 - Activity order and payloads;
 - AniList jobs, generation, account ownership, retry state, and tombstone references.
 
@@ -40,15 +41,21 @@ The HTTP server owns explicit read/header/write/idle timeouts. On `SIGINT` or `S
 
 ## Backup, restore, and rollback
 
-- **Portable backup:** `GET /api/backup` exports the current logical versioned JSON snapshot, including ordered favorites, the independent 3×3 selection, the local Library banner, and the profile picture, and excludes OAuth credentials.
-- **In-app restore:** Settings uploads the raw JSON to `POST /api/backup/preview`, shows validated counts, then sends the confirmed file to `POST /api/backup/restore`. Restore requires an explicit confirmation header and a disconnected AniList integration. The 32 MiB bounded input is decoded strictly, any in-flight AniList worker pass is joined, and Library, Activity, counters, favorites, appearance, and outbox are then replaced in one SQLite transaction, with in-memory rollback on persistence failure.
+- **Portable backup:** `GET /api/backup` exports the current logical versioned JSON snapshot, including ordered favorites, the independent 3×3 selection, the local Library banner, the profile picture, and application preferences, and excludes OAuth credentials.
+- **In-app restore:** Settings uploads the raw JSON to `POST /api/backup/preview`, shows validated counts, then sends the confirmed file to `POST /api/backup/restore`. Restore requires an explicit confirmation header and a disconnected AniList integration. The 32 MiB bounded input is decoded strictly, any in-flight AniList worker pass is joined, and Library, Activity, counters, favorites, appearance, preferences, and outbox are then replaced in one SQLite transaction, with in-memory rollback on persistence failure.
 - **Operational backup:** stop the backend before copying `/data`; the directory contains `honne.db`, the frozen legacy source when upgraded, and the separate AniList authorization file.
 - **Volume restore:** stop the backend, preserve `/data`, remove or move the current `honne.db`, place the downloaded snapshot at `/data/media.json`, and start the current backend. It imports that snapshot into a new database.
-- **Rollback to an older binary:** while the current version is still available, download a fresh portable backup to preserve the latest state. The export uses JSON version 10 and is readable only by a binary supporting that contract; the retained JSON writer in the current source is not proof that a published older binary supports it. For an incompatible older binary, restore its matching pre-update backup or stopped-volume copy. Stop the backend and preserve `/data` before changing storage or images. Returning to a pre-update backup does not preserve subsequent writes in the running collection; keep the fresh export as their recovery artifact. Do not drop favorites or images to manufacture an older format.
+- **Rollback to an older binary:** while the current version is still available, download a fresh portable backup to preserve the latest state. The export uses JSON version 11 and is readable only by a binary supporting that contract; the retained JSON writer in the current source is not proof that a published older binary supports it. For an incompatible older binary, restore its matching pre-update backup or stopped-volume copy. Stop the backend and preserve `/data` before changing storage or images. Returning to a pre-update backup does not preserve subsequent writes in the running collection; keep the fresh export as their recovery artifact. Do not drop favorites, images, or preferences to manufacture an older format.
 
 Schema version 4 widens favorite positions from 0–8 to 0–62 without changing media IDs or saved order. That older contract enforced nine titles per media type. The schema-3 upgrade rebuilds favorites and store metadata in one transaction; any failed statement rolls back the original tables and version. Before deploying this upgrade, retain a portable pre-update backup and a stopped-volume copy for rollback. Older SQLite binaries reject schema 4, and older backup readers reject JSON 9; neither should be bypassed by editing version numbers.
 
 Schema version 5 removes the favorite-position upper bound, initializes `top_nine` from the old favorites in the same transaction, and adds JSON version 10 with `topNineMediaIds`. Only the separate 3×3 selection remains limited to nine per media type and must reference saved favorites. Older JSON versions initialize both selections without changing the old order; current snapshots preserve an intentionally empty 3×3. See [the Overview plan](overview-favorites.md) for invariants, tests, and rollback.
+
+Schema version 6 adds installation-wide application preferences and JSON version
+11 with `preferences.startPage`. Existing stores and older backups default to
+Overview. Preference writes share the snapshot transaction and rollback boundary;
+current backups restore the saved choice. See [the start-page plan](start-page.md)
+for supported tabs, API behavior, compatibility, and rollback.
 
 Pending remote jobs remain account-bound. Never run two backend instances against the same volume, and never rehearse migration with real provider calls enabled.
 

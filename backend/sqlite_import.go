@@ -112,6 +112,9 @@ func decodeSQLiteImport(data []byte) (persistedStore, error) {
 	if snapshot.FavoriteMediaIDs == nil {
 		snapshot.FavoriteMediaIDs = []int{}
 	}
+	if err := normalizeSnapshotPreferences(&snapshot); err != nil {
+		return snapshot, err
+	}
 	if snapshot.NextID < 0 || snapshot.NextJobID < 0 || snapshot.NextActivityID < 0 {
 		return snapshot, errors.New("migration counters must be nonnegative")
 	}

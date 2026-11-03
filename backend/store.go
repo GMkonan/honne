@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-const persistedStoreVersion = 10
+const persistedStoreVersion = 11
 
 type libraryAppearance struct {
 	BannerContentType string `json:"bannerContentType,omitempty"`
@@ -31,6 +31,7 @@ type persistedStore struct {
 	FavoriteMediaIDs []int             `json:"favoriteMediaIds,omitempty"`
 	TopNineMediaIDs  []int             `json:"topNineMediaIds,omitempty"`
 	Appearance       libraryAppearance `json:"appearance,omitempty"`
+	Preferences      *appPreferences   `json:"preferences,omitempty"`
 	NextID           int               `json:"nextId,omitempty"`
 	NextJobID        int64             `json:"nextJobId,omitempty"`
 	NextActivityID   int64             `json:"nextActivityId,omitempty"`
@@ -48,6 +49,7 @@ type store struct {
 	favoriteMediaIDs []int
 	topNineMediaIDs  []int
 	appearance       libraryAppearance
+	preferences      appPreferences
 	nextID           int
 	nextJobID        int64
 	nextActivityID   int64
@@ -78,6 +80,9 @@ func newStore(path string) (*store, error) {
 		if persisted.Version < 1 || persisted.Version > persistedStoreVersion {
 			return nil, fmt.Errorf("unsupported data file version %d", persisted.Version)
 		}
+		if err := normalizeSnapshotPreferences(&persisted); err != nil {
+			return nil, err
+		}
 		s.loadSnapshot(persisted)
 	}
 	s.normalizeLoadedState()
@@ -87,7 +92,8 @@ func newStore(path string) (*store, error) {
 func emptyStore(path string) *store {
 	return &store{
 		path: path, items: []Media{}, syncJobs: []syncJob{}, activities: []Activity{}, favoriteMediaIDs: []int{}, topNineMediaIDs: []int{},
-		nextID: 1, nextJobID: 1, nextActivityID: 1,
+		preferences: defaultPreferences(),
+		nextID:      1, nextJobID: 1, nextActivityID: 1,
 	}
 }
 
@@ -106,6 +112,7 @@ func (s *store) loadSnapshot(snapshot persistedStore) {
 		s.topNineMediaIDs = snapshot.TopNineMediaIDs
 	}
 	s.appearance = snapshot.Appearance
+	s.preferences = preferencesFromSnapshot(snapshot)
 	if snapshot.NextID > s.nextID {
 		s.nextID = snapshot.NextID
 	}
@@ -167,10 +174,15 @@ func (s *store) normalizeLoadedState() {
 }
 
 func (s *store) snapshotLocked() persistedStore {
+	preferences := s.preferences
+	if preferences.StartPage == "" {
+		preferences = defaultPreferences()
+	}
 	return persistedStore{
 		Version: persistedStoreVersion, Items: s.items, SyncJobs: s.syncJobs, Activities: s.activities,
 		FavoriteMediaIDs: s.favoriteMediaIDs, TopNineMediaIDs: s.topNineMediaIDs, Appearance: s.appearance,
-		NextID: s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
+		Preferences: &preferences,
+		NextID:      s.nextID, NextJobID: s.nextJobID, NextActivityID: s.nextActivityID,
 	}
 }
 
@@ -193,6 +205,7 @@ func (s *store) restoreSnapshotLocked(snapshot persistedStore) {
 	s.favoriteMediaIDs = snapshot.FavoriteMediaIDs
 	s.topNineMediaIDs = snapshot.TopNineMediaIDs
 	s.appearance = snapshot.Appearance
+	s.preferences = preferencesFromSnapshot(snapshot)
 	s.nextID = snapshot.NextID
 	s.nextJobID = snapshot.NextJobID
 	s.nextActivityID = snapshot.NextActivityID

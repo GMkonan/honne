@@ -7,7 +7,7 @@ This document records the owner's current priority order. It is a planning guide
 The local `main` now contains the operational SQLite store, non-destructive JSON migration, graceful shutdown, portable backup restore, custom Library images, and the first favorites slice. Before remote delivery:
 
 - visually validate the current source build at desktop, mobile, and 200% zoom;
-- rehearse SQLite schema upgrades through version 5 using synthetic data;
+- rehearse SQLite schema upgrades through version 6 using synthetic data;
 - verify a JSON backup before and after banner/profile-picture/favorites changes;
 - review release and rollback notes as one coherent upgrade path;
 - split or retain the local commits so migration, restore, customization, and documentation remain reviewable;
@@ -20,6 +20,8 @@ The running release installation and real owner data must remain unchanged durin
 The local source implementation now supports:
 
 - Overview as the initial Library page, with sibling tabs named Library and Monthly Log;
+- an installation-wide start-page choice in Settings (Overview, Library, Monthly Log, or Activity), applied only when opening without an explicit route;
+- schema-6/JSON-11 preference persistence, upgrade defaults, backup/restore, and failed-write rollback;
 - collection metrics and the eight newest local Activity events, preserving independent successful loads;
 - favorites in Overview's larger column, with separate genre and consumption cards in the smaller column;
 - one shared All media/media-type filter for collection metrics, completed-only genres, and consumption from recorded progress in every status, without filtering favorites or activity;

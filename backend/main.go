@@ -147,6 +147,8 @@ func applicationHandler(application *app, cfg config) http.Handler {
 	mux.HandleFunc("GET /api/health", application.health)
 	mux.HandleFunc("GET /api/auth/check", application.authCheck)
 	mux.HandleFunc("GET /api/profile", application.getProfile)
+	mux.HandleFunc("GET /api/preferences", application.getPreferences)
+	mux.HandleFunc("PUT /api/preferences", application.updatePreferences)
 	mux.HandleFunc("GET /api/profile/banner", application.getLibraryBanner)
 	mux.HandleFunc("PUT /api/profile/banner", application.updateLibraryBanner)
 	mux.HandleFunc("DELETE /api/profile/banner", application.resetLibraryBanner)

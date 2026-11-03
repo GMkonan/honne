@@ -39,6 +39,9 @@ import {
 } from "./activityModel.ts";
 import { LibraryAppearanceSettingsCard } from "./components/LibraryAppearanceSettingsCard.tsx";
 import { ProfilePictureSettingsCard } from "./components/ProfilePictureSettingsCard.tsx";
+import { StartPageSettingsCard } from "./components/StartPageSettingsCard.tsx";
+import { type AppView, pageHash, routeFromHash } from "./appNavigation.ts";
+import { useStartPage } from "./useStartPage.ts";
 import {
   type CatalogContributor,
   catalogCoverStyle,
@@ -121,15 +124,6 @@ interface Media extends MediaInput {
 
 type LibrarySort = "recent" | "added" | "title" | "rating";
 type LibraryStatusFilter = MediaStatus | "planned_repeat";
-type AppView =
-  | "overview"
-  | "library"
-  | "favorites"
-  | "activity"
-  | "monthly_log"
-  | "settings"
-  | "search"
-  | "detail";
 type DetailSelection =
   | { kind: "local"; mediaId: number }
   | { kind: "external"; result: DiscoveryResult };
@@ -442,22 +436,6 @@ function searchHash(query: string, scope: SearchScope): string {
   return scope === "all"
     ? `#search/${encodedQuery}`
     : `#search/${scope}/${encodedQuery}`;
-}
-
-function routeFromHash(): AppView {
-  const hash = globalThis.location.hash;
-  if (hash === "#library/list") return "library";
-  if (hash === "#activity") return "activity";
-  if (hash === "#favorites") return "favorites";
-  if (["#monthly-log", "#highlights", "#recap"].includes(hash)) {
-    return "monthly_log";
-  }
-  if (hash === "#settings") return "settings";
-  if (hash.startsWith("#search")) return "search";
-  if (hash.startsWith("#media/") || hash.startsWith("#catalog/")) {
-    return "detail";
-  }
-  return "overview";
 }
 
 function safeHTTPURL(value?: string): string {
@@ -866,6 +844,8 @@ function App() {
   const [favoritesGeneration, setFavoritesGeneration] = useState(0);
   const [profileLoading, setProfileLoading] = useState(true);
 
+  useStartPage(view, setView, setError);
+
   useEffect(() => {
     let active = true;
     let refreshing = false;
@@ -997,7 +977,9 @@ function App() {
   useEffect(() => {
     if (
       previousView.current !== view &&
-      ["overview", "favorites", "library"].includes(view)
+      ["overview", "favorites", "library", "monthly_log", "activity"].includes(
+        view,
+      )
     ) {
       document.querySelector<HTMLElement>("main")?.focus({
         preventScroll: true,
@@ -1175,12 +1157,8 @@ function App() {
     };
   }, [submittedQuery, submittedSearchScope, searchGeneration]);
 
-  function navigate(next: Exclude<AppView, "detail">) {
-    const hash = next === "library"
-      ? "#library/list"
-      : next === "overview"
-      ? "#library"
-      : `#${next}`;
+  function navigate(next: Exclude<AppView, "detail" | "start">) {
+    const hash = pageHash(next);
     if (globalThis.location.hash === hash) {
       setView(next);
       globalThis.scrollTo({ top: 0, behavior: "smooth" });
@@ -1704,6 +1682,15 @@ function App() {
         </div>
       </header>
 
+      {view === "start" && (
+        <main
+          className="page-container standalone-page"
+          aria-label="Opening Honne"
+        >
+          <p role="status">Loading start page…</p>
+        </main>
+      )}
+
       {(view === "overview" || view === "library" || view === "favorites" ||
         view === "monthly_log") && (
         <LibraryHero
@@ -2122,7 +2109,10 @@ function ActivityPage(
   },
 ) {
   return (
-    <main className="page-container standalone-page activity-page">
+    <main
+      className="page-container standalone-page activity-page"
+      tabIndex={-1}
+    >
       <header className="page-heading">
         <span className="eyebrow">JOURNAL</span>
         <h1>Activity</h1>
@@ -2200,6 +2190,8 @@ function SettingsPage(
     onBackupRestored: () => Promise<void>;
   },
 ) {
+  const [preferencesGeneration, setPreferencesGeneration] = useState(0);
+
   return (
     <main className="page-container standalone-page settings-page">
       <header className="page-heading">
@@ -2210,6 +2202,7 @@ function SettingsPage(
           your data.
         </p>
       </header>
+      <StartPageSettingsCard key={preferencesGeneration} />
       <ProfilePictureSettingsCard
         avatarUrl={profile.avatarUrl}
         profileName={profile.name}
@@ -2280,7 +2273,10 @@ function SettingsPage(
       </section>
       <BackupSettingsCard
         anilistConnected={status?.connected}
-        onRestored={onBackupRestored}
+        onRestored={async () => {
+          setPreferencesGeneration((current) => current + 1);
+          await onBackupRestored();
+        }}
       />
     </main>
   );

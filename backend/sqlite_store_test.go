@@ -189,7 +189,8 @@ func TestSQLiteMigrationRoundTripPreservesSnapshotAndJSONSource(t *testing.T) {
 	legacySnapshot := persistedStore{
 		Version: persistedStoreVersion, Items: legacy.items, SyncJobs: legacy.syncJobs,
 		Activities: legacy.activities, FavoriteMediaIDs: legacy.favoriteMediaIDs, TopNineMediaIDs: legacy.topNineMediaIDs, Appearance: legacy.appearance,
-		NextID: legacy.nextID, NextJobID: legacy.nextJobID, NextActivityID: legacy.nextActivityID,
+		Preferences: &legacy.preferences,
+		NextID:      legacy.nextID, NextJobID: legacy.nextJobID, NextActivityID: legacy.nextActivityID,
 	}
 	if !reflect.DeepEqual(legacySnapshot, plan.Snapshot) {
 		t.Fatal("rollback JSON export is not logically identical")
@@ -215,7 +216,7 @@ func TestSQLiteMigrationRejectsUnsafeDestinationsAndCleansFailures(t *testing.T)
 	}
 
 	invalidDestination := filepath.Join(dir, "invalid.db")
-	if err := os.WriteFile(source, []byte(`{"version":11}`), 0o600); err != nil {
+	if err := os.WriteFile(source, []byte(`{"version":12}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := migrateJSONToSQLite(source, invalidDestination); err == nil {

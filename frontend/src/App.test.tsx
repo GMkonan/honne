@@ -47,6 +47,7 @@ function bootstrap(
 ) {
   router
     .json("GET", "/api/profile", profile)
+    .json("GET", "/api/preferences", { startPage: "overview" })
     .json("GET", "/api/favorites", { mediaIds: [] })
     .json("GET", "/api/media", items)
     .json("GET", "/api/integrations/anilist", disconnectedAniList)
@@ -849,7 +850,7 @@ describe("Library characterization", () => {
     );
     expect(button.hasAttribute("disabled")).toBe(false);
     await user.click(button);
-    expect(router.fetch).toHaveBeenCalledTimes(7);
+    expect(router.fetch).toHaveBeenCalledTimes(8);
   });
 
   it("previews and restores a JSON backup with explicit replacement confirmation", async () => {
