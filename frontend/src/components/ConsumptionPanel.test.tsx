@@ -1,5 +1,4 @@
 import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { GenreStatsMedia } from "../genreStats.ts";
 import { ConsumptionPanel } from "./ConsumptionPanel.tsx";
@@ -18,8 +17,7 @@ const metric = (panel: HTMLElement, label: string) =>
     ?.textContent;
 
 describe("Consumption card", () => {
-  it("combines completed and ongoing progress, repeats, and estimated watch time without a genre chart", async () => {
-    const user = userEvent.setup();
+  it("combines completed and ongoing progress with inline units and estimated watch time", () => {
     render(
       <ConsumptionPanel
         {...defaults}
@@ -34,20 +32,12 @@ describe("Consumption card", () => {
       name: "Anime consumption",
     });
     expect(within(group).queryByText("Completed")).toBeNull();
-    expect(metric(group, "Episodes")).toBe("29");
+    expect(metric(group, "Episodes")).toBe("29 episodes");
     expect(metric(group, "Watch time")).toBe("Estimated ~11h 36m");
     expect(within(group).queryByText(/Based on/u)).toBeNull();
     expect(within(card).queryByText("Progress across all statuses")).toBeNull();
     expect(within(card).queryByRole("img")).toBeNull();
-    const method = within(card).getByText("Details");
-    expect(method.parentElement?.hasAttribute("open")).toBe(false);
-    await user.click(method);
-    expect(method.parentElement?.hasAttribute("open")).toBe(true);
-    expect(
-      screen.getByRole("region", { name: "Anime calculation details" })
-        .textContent,
-    ).toContain("2 titles, 1 completed.");
-    expect(within(card).getByText(/not multiplied by replays/u)).not.toBeNull();
+    expect(within(card).queryByText("Details")).toBeNull();
   });
 
   it.each(["manga", "anime", "series"] as const)(
@@ -73,13 +63,12 @@ describe("Consumption card", () => {
           group,
           type === "manga" ? "Chapters" : "Episodes",
         ),
-      ).toBe("1,000");
+      ).toBe(type === "manga" ? "1,000 chapters" : "1,000 episodes");
       expect(within(group).queryByText(/Known totals are used/u)).toBeNull();
     },
   );
 
-  it("keeps inferred-progress notes in collapsed details without changing saved progress", async () => {
-    const user = userEvent.setup();
+  it("preserves inferred completed totals without changing saved progress or adding explanations", () => {
     const item = Object.freeze({
       ...anime,
       progress: 0,
@@ -88,19 +77,9 @@ describe("Consumption card", () => {
     });
     render(<ConsumptionPanel {...defaults} items={[item]} />);
     const group = screen.getByRole("region", { name: "Anime consumption" });
-    expect(metric(group, "Episodes")).toBe("12");
+    expect(metric(group, "Episodes")).toBe("12 episodes");
     expect(within(group).queryByText(/Known totals/u)).toBeNull();
-    const details = screen.getByText("Details");
-    expect(details.parentElement?.hasAttribute("open")).toBe(false);
-    await user.click(details);
-    const notes = screen.getByRole("region", {
-      name: "Anime calculation details",
-    });
-    expect(
-      within(notes).getByText(
-        "Known totals used for 1 completed title without progress.",
-      ),
-    ).not.toBeNull();
+    expect(screen.queryByText("Details")).toBeNull();
     expect(within(group).queryByText(/Progress is missing/u)).toBeNull();
     expect(item.progress).toBe(0);
   });
@@ -118,12 +97,11 @@ describe("Consumption card", () => {
       />,
     );
     const group = screen.getByRole("region", { name: "Anime consumption" });
-    expect(metric(group, "Episodes")).toBe("15");
-    expect(metric(group, "Watch time")).toBe("Estimated ~4h 48mPartial");
+    expect(metric(group, "Episodes")).toBe("15 episodes");
+    expect(metric(group, "Watch time")).toBe("Estimated ~4h 48m Partial");
     expect(within(group).getByText("Partial")).not.toBeNull();
     expect(within(group).queryByText(/Watch time missing data/u)).toBeNull();
-    expect(screen.getByText("Details").parentElement?.hasAttribute("open"))
-      .toBe(false);
+    expect(screen.queryByText("Details")).toBeNull();
   });
 
   it("keeps all media types and units separate and follows the shared filter", () => {
@@ -144,7 +122,7 @@ describe("Consumption card", () => {
         screen.getByRole("region", { name: "Anime consumption" }),
         "Episodes",
       ),
-    ).toBe("12");
+    ).toBe("12 episodes");
     expect(
       metric(
         screen.getByRole("region", { name: "Series consumption" }),
@@ -156,25 +134,25 @@ describe("Consumption card", () => {
         screen.getByRole("region", { name: "Movies consumption" }),
         "Viewings",
       ),
-    ).toBe("2");
+    ).toBe("2 viewings");
     expect(
       metric(
         screen.getByRole("region", { name: "Books consumption" }),
         "Pages",
       ),
-    ).toBe("412");
+    ).toBe("412 pages");
     expect(
       metric(
         screen.getByRole("region", { name: "Manga consumption" }),
         "Chapters",
       ),
-    ).toBe("30");
+    ).toBe("30 chapters");
     expect(
       metric(
         screen.getByRole("region", { name: "Light novels consumption" }),
         "Chapters",
       ),
-    ).toBe("20");
+    ).toBe("20 chapters");
     const game = screen.getByRole("region", { name: "Games consumption" });
     expect(metric(game, "Playtime")).toBe("1h 30m");
     expect(within(game).queryByText("Watch time")).toBeNull();
@@ -186,8 +164,7 @@ describe("Consumption card", () => {
     expect(screen.queryByText("Pages")).toBeNull();
   });
 
-  it("keeps unavailable values explicit and moves missing-data explanations into details", async () => {
-    const user = userEvent.setup();
+  it("keeps missing progress and time explicit without explanatory sections", () => {
     render(
       <ConsumptionPanel
         {...defaults}
@@ -205,26 +182,12 @@ describe("Consumption card", () => {
     );
     const group = screen.getByRole("region", { name: "Anime consumption" });
     expect(metric(group, "Episodes")).toBe("Not tracked");
-    expect(metric(group, "Watch time")).toBe("Unknown");
+    expect(metric(group, "Watch time")).toBe("Time unknown");
     expect(within(group).queryByText(/Progress missing/u)).toBeNull();
-    await user.click(screen.getByText("Details"));
-    const notes = screen.getByRole("region", {
-      name: "Anime calculation details",
-    });
-    expect(
-      within(notes).getByText("Progress missing for 1 completed title."),
-    ).not.toBeNull();
-    expect(
-      within(notes).getByText("1 title has repeats with unknown length."),
-    ).not.toBeNull();
-    expect(
-      within(notes).getByText("Watch time missing data for 1 of 1 title."),
-    ).not
-      .toBeNull();
+    expect(screen.queryByText("Details")).toBeNull();
   });
 
-  it("reports missing game playtime in details without inventing zero hours", async () => {
-    const user = userEvent.setup();
+  it("does not turn missing game playtime into zero hours or a synthetic estimate", () => {
     render(
       <ConsumptionPanel
         {...defaults}
@@ -235,15 +198,10 @@ describe("Consumption card", () => {
     const group = screen.getByRole("region", { name: "Games consumption" });
     expect(metric(group, "Playtime")).toBe("Not tracked");
     expect(within(group).queryByText(/Playtime missing/u)).toBeNull();
-    await user.click(screen.getByText("Details"));
-    const notes = screen.getByRole("region", {
-      name: "Games calculation details",
-    });
-    expect(within(notes).getByText("Playtime missing for 1 game."))
-      .not.toBeNull();
+    expect(within(group).queryByText("Watch time")).toBeNull();
   });
 
-  it("keeps positive incomplete chapter totals visibly partial without expanding details", () => {
+  it("keeps positive incomplete chapter totals visibly partial", () => {
     render(
       <ConsumptionPanel
         {...defaults}
@@ -255,10 +213,9 @@ describe("Consumption card", () => {
       />,
     );
     const group = screen.getByRole("region", { name: "Manga consumption" });
-    expect(metric(group, "Chapters")).toBe("12Partial");
+    expect(metric(group, "Chapters")).toBe("12 chapters Partial");
     expect(within(group).getByText("Partial")).not.toBeNull();
-    expect(screen.getByText("Details").parentElement?.hasAttribute("open"))
-      .toBe(false);
+    expect(screen.queryByText("Details")).toBeNull();
   });
 
   it("keeps positive incomplete game hours visibly partial without estimating missing playtime", () => {
@@ -273,22 +230,48 @@ describe("Consumption card", () => {
       />,
     );
     const group = screen.getByRole("region", { name: "Games consumption" });
-    expect(metric(group, "Playtime")).toBe("1h 30mPartial");
+    expect(metric(group, "Playtime")).toBe("1h 30m Partial");
     expect(within(group).getByText("Partial")).not.toBeNull();
     expect(within(group).queryByText("Watch time")).toBeNull();
   });
 
-  it("keeps native calculation details in the tab order and supports expand/collapse", async () => {
-    const user = userEvent.setup();
+  it("removes Details and calculation-note regions entirely", () => {
     render(<ConsumptionPanel {...defaults} items={[anime]} />);
-    const summary = screen.getByText("Details");
-    await user.tab();
-    expect(document.activeElement).toBe(summary);
-    await user.click(summary);
-    expect(summary.parentElement?.hasAttribute("open")).toBe(true);
-    await user.click(summary);
-    expect(summary.parentElement?.hasAttribute("open")).toBe(false);
+    const card = screen.getByRole("region", { name: "Consumption" });
+    expect(within(card).queryByText("Details")).toBeNull();
+    expect(
+      within(card).queryByRole("region", {
+        name: /calculation details/u,
+        hidden: true,
+      }),
+    ).toBeNull();
+    expect(within(card).queryByRole("button")).toBeNull();
+    expect(within(card).queryByText(/Saved progress/u)).toBeNull();
   });
+
+  it.each(
+    [
+      ["anime", "Episodes", "episode"],
+      ["series", "Episodes", "episode"],
+      ["manga", "Chapters", "chapter"],
+      ["light_novel", "Chapters", "chapter"],
+      ["book", "Pages", "page"],
+      ["movie", "Viewings", "viewing"],
+    ] as const,
+  )(
+    "uses a singular inline unit for one consumed %s unit",
+    (type, label, unit) => {
+      render(
+        <ConsumptionPanel
+          {...defaults}
+          type={type}
+          items={[{ ...anime, type, progress: 1, total: 1 }]}
+        />,
+      );
+      const group = screen.getByRole("region", { name: /consumption$/u });
+      expect(metric(group, label)).toBe(`1 ${unit}`);
+    },
+  );
 
   it("distinguishes initial loading, empty selection, unavailable data, and retained data during refreshes", () => {
     const { rerender } = render(

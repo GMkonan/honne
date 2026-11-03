@@ -34,7 +34,7 @@ Source changes do not authorize updating a running installation.
   status: watching/reading/playing, paused, dropped, and even planned entries with
   existing recorded consumption. Unstarted entries do not contribute.
 - Only for `completed` titles with absent or zero progress, use the personal total
-  or, if absent, the catalog total. Disclose the number of inferred entries. Never
+  or, if absent, the catalog total. This is a read-only display inference. Never
   replace positive progress with the available total, infer consumption for an
   unfinished title, mutate saved data, or turn invalid counters into estimates.
   Identify completed titles with neither progress nor a known total and repeats
@@ -51,7 +51,7 @@ Source changes do not authorize updating a running installation.
   duration, or movie viewings times runtime. Label it as an estimate and identify
   incomplete coverage. Watch-time values use `~` (with an accessible `Estimated`
   prefix), with a visible `Partial` badge when runtime/progress is missing. An
-  entirely unknown time is `Unknown`; unrecorded consumption is `Not tracked`.
+  entirely unknown time is `Time unknown`; unrecorded consumption is `Not tracked`.
   Missing data is not represented as a known zero or replaced with guessed runtimes.
 - Keep valid statistics visible while the Library refreshes or a refresh fails.
   Distinguish initial loading, an empty Library, unavailable data, a category with
@@ -59,19 +59,20 @@ Source changes do not authorize updating a running installation.
 
 ## Presentation
 
-Owner revision (2026-11-03): Consumption prioritizes each media type's consumed
-units and, for video, watch time side by side. Use short labels, larger numbers,
-and readable 14 px labels instead of repeated title/completion counts and small
-explanatory paragraphs. Completed counts already appear in At a glance.
+Owner revision (2026-11-03, compact list): remove `Details` and all explanatory
+sections entirely. Use one compact row per media type: name on the left, consumed
+quantity with an inline singular/plural unit on the right, and estimated video
+time beneath it. Game time is the primary value, without a redundant unit label.
+Keep semantic definition-list labels available to assistive technology without
+repeating them visibly. Completed counts already appear in At a glance.
 
-Keep a single native `Details` disclosure, closed initially, for calculation rules,
-per-type coverage/completion counts, inferred totals, and missing progress,
-repeat-length, runtime, or playtime notes. Missing values and positive partial
-totals remain explicit in the compact view; simplification must not change the
-calculation contract, merge unrelated units, or hide incomplete totals as complete.
-Tests cover Tab reachability and native pointer expand/collapse. The installed
-user-event does not synthesize Enter/Space activation for `summary`; verify those
-native keys in a real browser rather than adding a duplicate keyboard handler.
+Use 18 px primary values, readable 14 px media/unit/time text, subtle separators,
+and wrapping that fits narrow viewports. Retain `~` and its accessible `Estimated`
+prefix, visible `Partial` badges for positive incomplete totals, and explicit
+unknown/untracked values. There are no calculation notes or disclosure controls
+in this card. Calculation rules remain documented here and must not change with
+presentation, merge unrelated units, mutate saved data, or make partial totals
+look complete.
 
 ## Validation
 
@@ -80,7 +81,7 @@ metadata, deduplication, stable ordering, all consumption units, repeats, partia
 time estimates, cumulative game playtime, invalid counters, and rare genres.
 Consumption regressions cover 1,000 consumed units of 1,500 available for each
 numeric media type, recorded progress in every status, completed-only total
-fallbacks without mutation, inferred-progress disclosures, incomplete time labels,
+fallbacks without mutation, inferred completed progress, incomplete time labels,
 and ongoing-only selections through the shared filter while genres stay unchanged.
 Component coverage checks accessible labels, shared native-button filtering by
 keyboard, unchanged favorites/activity, empty selected categories, loading and
@@ -151,3 +152,21 @@ not visually validated. No browser dependency was installed.
 - Real-browser cover wrapping, artwork, 320 px/tablet/desktop/200% zoom, and native
   summary-key activation remain pending because no browser is available. No
   dependency or custom keyboard workaround was introduced.
+
+### Executed checks for the compact list without Details (2026-11-03)
+
+- Repository format, lint, strict typecheck, all 193 workspace frontend tests,
+  production build, Go vet/race tests, and Compose configuration passed.
+- The staged feature, excluding the previous season-progress work, also passed
+  format, lint, strict typecheck, all 188 tests, and production build.
+- Component coverage verifies complete removal of Details and its note regions,
+  inline singular/plural units for all six numeric media types, shared filtering,
+  ongoing and inferred completed progress, explicit unknown/untracked values,
+  and positive partial episode/chapter/game-time totals. Calculation modules and
+  backend files are unchanged.
+- Simultaneous full/staged runs exceeded existing 5-second limits in unrelated
+  tests. Both sequential reruns passed without changing test timeouts or
+  assertions; the execution constraint is recorded in the validation guideline.
+- Real-browser row wrapping, right alignment, long labels/large counters,
+  320 px/tablet/desktop/200% zoom, and screen-reader output remain unverified
+  because no browser is available. No dependency was installed.

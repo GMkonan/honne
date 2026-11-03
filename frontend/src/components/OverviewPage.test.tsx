@@ -100,7 +100,7 @@ describe("Overview", () => {
       )
         ?.textContent,
     )
-      .toBe("1");
+      .toBe("1 viewing");
     const summary = screen.getByRole("region", { name: "At a glance" });
     expect(
       within(summary).getByText("Total titles").parentElement?.querySelector(
@@ -253,7 +253,7 @@ describe("Overview", () => {
     expect(
       within(consumption).getByText("Chapters").parentElement
         ?.querySelector("dd")?.textContent,
-    ).toBe("1,000");
+    ).toBe("1,000 chapters");
     const summary = screen.getByRole("region", { name: "At a glance" });
     expect(
       within(summary).getByText("In progress").parentElement?.querySelector(

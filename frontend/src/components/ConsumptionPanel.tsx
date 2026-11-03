@@ -72,6 +72,7 @@ export function ConsumptionPanel(
             ? stats.playtimeMinutes > 0 && stats.missingPlaytimeCount > 0
             : stats.unitCount > 0 &&
               (stats.missingProgressCount > 0 || stats.missingRepeatCount > 0);
+          const unitLabel = consumptionLabels[groupType].toLowerCase();
           return (
             <section
               key={groupType}
@@ -81,17 +82,26 @@ export function ConsumptionPanel(
               <h4>{label}</h4>
               <dl>
                 <div>
-                  <dt>{consumptionLabels[groupType]}</dt>
+                  <dt className="sr-only">{consumptionLabels[groupType]}</dt>
                   <dd>
                     {consumption}
+                    {groupType !== "game" && stats.unitCount > 0 && (
+                      <span className="consumption-unit">
+                        {` ${
+                          stats.unitCount === 1
+                            ? unitLabel.slice(0, -1)
+                            : unitLabel
+                        }`}
+                      </span>
+                    )}
                     {partialConsumption && (
-                      <span className="consumption-badge">Partial</span>
+                      <span className="consumption-badge">&#32;Partial</span>
                     )}
                   </dd>
                 </div>
                 {video && (
-                  <div>
-                    <dt>Watch time</dt>
+                  <div className="consumption-watch-time">
+                    <dt className="sr-only">Watch time</dt>
                     <dd>
                       {stats.estimatedMinutes > 0
                         ? (
@@ -101,10 +111,10 @@ export function ConsumptionPanel(
                             </span>~{formatPlaytime(stats.estimatedMinutes)}
                           </span>
                         )
-                        : "Unknown"}
+                        : "Time unknown"}
                       {stats.estimatedMinutes > 0 &&
                         stats.incompleteEstimateCount > 0 && (
-                        <span className="consumption-badge">Partial</span>
+                        <span className="consumption-badge">&#32;Partial</span>
                       )}
                     </dd>
                   </div>
@@ -113,77 +123,6 @@ export function ConsumptionPanel(
             </section>
           );
         })}
-      {groups.length > 0 && (
-        <details className="consumption-method">
-          <summary>Details</summary>
-          <p>
-            Includes recorded progress in every status. Unstarted titles are
-            excluded. Each media type keeps its own units.
-          </p>
-          <p>
-            Completed titles without progress use known totals. Repeats use
-            known lengths. Saved progress is not changed.
-          </p>
-          <p>
-            ~ marks estimated watch time from available runtimes. Partial totals
-            exclude missing data; durations are not guessed. Game playtime is
-            cumulative, not multiplied by replays. Reading time is not
-            estimated.
-          </p>
-          {groups.map(({ type: groupType, label, stats }) => (
-            <ConsumptionDetails key={groupType} label={label} stats={stats} />
-          ))}
-        </details>
-      )}
-    </section>
-  );
-}
-
-function ConsumptionDetails({ label, stats }: {
-  label: string;
-  stats: ReturnType<typeof consumptionStats>;
-}) {
-  return (
-    <section aria-label={`${label} calculation details`}>
-      <h4>{label}</h4>
-      <p>
-        {stats.titleCount} {stats.titleCount === 1 ? "title" : "titles"},{" "}
-        {stats.completedCount} completed.
-      </p>
-      <ul>
-        {stats.inferredProgressCount > 0 && (
-          <li>
-            Known totals used for {stats.inferredProgressCount} completed{" "}
-            {stats.inferredProgressCount === 1 ? "title" : "titles"}{" "}
-            without progress.
-          </li>
-        )}
-        {stats.missingProgressCount > 0 && (
-          <li>
-            Progress missing for {stats.missingProgressCount} completed{" "}
-            {stats.missingProgressCount === 1 ? "title" : "titles"}.
-          </li>
-        )}
-        {stats.missingRepeatCount > 0 && (
-          <li>
-            {stats.missingRepeatCount} {stats.missingRepeatCount === 1
-              ? "title has repeats"
-              : "titles have repeats"} with unknown length.
-          </li>
-        )}
-        {stats.incompleteEstimateCount > 0 && (
-          <li>
-            Watch time missing data for {stats.incompleteEstimateCount} of{" "}
-            {stats.titleCount} {stats.titleCount === 1 ? "title" : "titles"}.
-          </li>
-        )}
-        {stats.missingPlaytimeCount > 0 && (
-          <li>
-            Playtime missing for {stats.missingPlaytimeCount}{" "}
-            {stats.missingPlaytimeCount === 1 ? "game" : "games"}.
-          </li>
-        )}
-      </ul>
     </section>
   );
 }
