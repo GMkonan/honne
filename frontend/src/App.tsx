@@ -594,6 +594,7 @@ function sanitizeTMDBSeasons(
       coverUrl: safeHTTPURL(season.coverUrl),
       startDate: safeStoredDate(season.startDate),
       episodeCount: safeStoredNumber(season.episodeCount, 0, 10_000),
+      completed: season.completed === true,
     });
     if (seasons.length === 100) break;
   }
@@ -1001,11 +1002,15 @@ function App() {
     void refreshMediaMetadata(item);
   }, [detail, items]);
 
-  const detailSource = view === "detail"
-    ? detail?.kind === "local"
-      ? items.find((item) => item.id === detail.mediaId)
-      : detail?.result
-    : undefined;
+  const detailSource =
+    (managedItem?.type === "series" && managedItem.provider === "tmdb"
+      ? managedItem
+      : undefined) ||
+    (view === "detail"
+      ? detail?.kind === "local"
+        ? items.find((item) => item.id === detail.mediaId)
+        : detail?.result
+      : undefined);
   const supportsCatalogContext = detailSource?.provider === "anilist" &&
       ["anime", "manga", "light_novel"].includes(detailSource.type) ||
     detailSource?.provider === "tmdb" &&
@@ -2066,6 +2071,9 @@ function App() {
         <ManageMediaModal
           key={managedItem.id}
           item={managedItem}
+          seasons={catalogContext.identity === catalogContextIdentity
+            ? catalogContext.detail?.seasons || []
+            : []}
           onClose={() => setManagedItem(undefined)}
           onEditDetails={() => {
             setModalItem(managedItem);

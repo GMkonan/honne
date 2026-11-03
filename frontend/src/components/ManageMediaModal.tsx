@@ -7,6 +7,8 @@ import {
   useState,
 } from "react";
 import { Check, FilePenLine, Trash2, X } from "lucide-react";
+import type { CatalogSeason } from "./GlobalSearchBox.tsx";
+import { SeasonProgressSelect } from "./SeasonProgressSelect.tsx";
 import {
   type DetailLibraryMedia,
   type DetailMediaStatus,
@@ -36,6 +38,7 @@ export interface ManagedMediaValues {
 
 interface ManageMediaModalProps {
   item: DetailLibraryMedia;
+  seasons?: CatalogSeason[];
   onClose: () => void;
   onEditDetails: () => void;
   onSave: (values: ManagedMediaValues) => Promise<void>;
@@ -68,7 +71,8 @@ function errorMessage(error: unknown): string {
 }
 
 export function ManageMediaModal(
-  { item, onClose, onEditDetails, onSave, onDelete }: ManageMediaModalProps,
+  { item, seasons = [], onClose, onEditDetails, onSave, onDelete }:
+    ManageMediaModalProps,
 ) {
   const tracking = mediaTracking(item.type);
   const [form, setForm] = useState<ManagedMediaValues>({
@@ -309,6 +313,20 @@ export function ManageMediaModal(
           )}
           {tracking.tracksProgress && (
             <>
+              {item.type === "series" && (
+                <SeasonProgressSelect
+                  seasons={seasons}
+                  progress={form.progress}
+                  onChange={(progress) =>
+                    setForm((current) => ({
+                      ...current,
+                      progress,
+                      total: current.total > 0
+                        ? Math.max(current.total, progress)
+                        : current.total,
+                    }))}
+                />
+              )}
               <label>
                 {tracking.progressLabel}
                 <input

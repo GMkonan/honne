@@ -3203,6 +3203,59 @@ describe("Library characterization", () => {
     );
   });
 
+  it("loads seasons from a Library card and persists their episode sum", async () => {
+    const router = createFetchRouter();
+    const series = {
+      ...mediaItems[0],
+      type: "series",
+      status: "dropped",
+      total: 60,
+      provider: "tmdb",
+      providerId: "1396",
+    };
+    bootstrap(router, [series]);
+    router.json(
+      "GET",
+      "/api/discovery/detail?provider=tmdb&type=series&id=1396",
+      {
+        ...series,
+        seasons: [12, 13, 16].map((episodeCount, index) => ({
+          providerId: String(index + 1),
+          seasonNumber: index + 1,
+          title: `Season ${index + 1}`,
+          episodeCount,
+          completed: true,
+        })),
+      },
+    );
+    let submitted: Record<string, unknown> | undefined;
+    router.json("PATCH", "/api/media/1", async (request: Request) => {
+      submitted = await request.json() as Record<string, unknown>;
+      return Response.json({ ...series, ...submitted });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Edit Cowboy Bebop Library entry",
+      }),
+    );
+    await user.selectOptions(
+      await screen.findByRole("combobox", {
+        name: /Completed seasons/u,
+      }),
+      "3",
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(submitted).toMatchObject({
+        progress: 41,
+        status: "dropped",
+        total: 60,
+      })
+    );
+  });
+
   it("updates personal tracking without losing catalog metadata", async () => {
     const router = createFetchRouter();
     let submitted: Record<string, unknown> | undefined;

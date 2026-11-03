@@ -61,6 +61,25 @@ docker compose config --quiet
 git diff --check
 ```
 
+### Season progress manual check
+
+Use synthetic Library entries, not production data. With TMDB configured, open
+`Edit Library` for a linked series from both its Library card and detail page.
+Select `Completed seasons` and verify that episodes equal the sum of regular
+seasons from season 1, excluding specials. Only contiguous seasons with known,
+positive episode counts and confirmed aired completion are offered. TMDB's last
+aired episode and next scheduled season establish completion conservatively;
+missing, future, ongoing, or conflicting metadata cannot confirm it. Partial
+seasons are not included in the
+selected count; their episodes can be entered manually.
+
+Verify that status stays unchanged, direct episode edits still work, and saving
+and reopening retains progress. Without season metadata, manual tracking must
+remain usable. Check keyboard selection, focus containment, Escape and focus
+restoration, plus layout at 320 px, tablet, desktop, and 200% zoom. This shortcut
+uses existing episode persistence; it does not store a separate season count or
+change the behavior of the Completed status.
+
 ## API
 
 All application responses disable caching. When Basic Auth is configured, every route except health checks is protected.

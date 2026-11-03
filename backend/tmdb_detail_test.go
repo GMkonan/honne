@@ -28,6 +28,7 @@ func TestTMDBSeriesDetailMapsCreatorsSeasonsRecommendationsAndUsesCache(t *testi
 			"id":1399,"name":"Game of Thrones","original_name":"Game of Thrones","overview":"Seven kingdoms.",
 			"poster_path":"/show.jpg","first_air_date":"2011-04-17","last_air_date":"2019-05-19",
 			"episode_run_time":[60],"number_of_episodes":73,"status":"Ended","vote_average":8.4,
+			"last_episode_to_air":{"season_number":8,"episode_number":6,"air_date":"2019-05-19"},
 			"genres":[{"name":"Drama"}],"created_by":[{"name":"David Benioff","profile_path":"/benioff.jpg"},{"name":"D. B. Weiss"}],
 			"seasons":[
 				{"id":10,"name":"Specials","season_number":0,"episode_count":5,"air_date":"2010-12-05","poster_path":"/specials.jpg"},
@@ -61,6 +62,9 @@ func TestTMDBSeriesDetailMapsCreatorsSeasonsRecommendationsAndUsesCache(t *testi
 	}
 	if len(detail.Seasons) != 2 || detail.Seasons[0].SeasonNumber != 0 || detail.Seasons[1].EpisodeCount != 10 {
 		t.Fatalf("unexpected seasons: %+v", detail.Seasons)
+	}
+	if detail.Seasons[0].Completed || !detail.Seasons[1].Completed {
+		t.Fatalf("unexpected season tracking eligibility: %+v", detail.Seasons)
 	}
 	if len(detail.Recommendations) != 1 || detail.Recommendations[0].ProviderID != "1402" || detail.Recommendations[0].Type != "series" {
 		t.Fatalf("unexpected recommendations: %+v", detail.Recommendations)

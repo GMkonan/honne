@@ -65,6 +65,7 @@ type discoverySeason struct {
 	CoverURL     string `json:"coverUrl,omitempty"`
 	StartDate    string `json:"startDate,omitempty"`
 	EpisodeCount int    `json:"episodeCount,omitempty"`
+	Completed    bool   `json:"completed"`
 }
 
 type discoveryContributor struct {

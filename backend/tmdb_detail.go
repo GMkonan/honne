@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -19,23 +20,25 @@ const (
 )
 
 type tmdbDetailPayload struct {
-	ID               int            `json:"id"`
-	Adult            bool           `json:"adult"`
-	Title            string         `json:"title"`
-	Name             string         `json:"name"`
-	OriginalTitle    string         `json:"original_title"`
-	OriginalName     string         `json:"original_name"`
-	Overview         string         `json:"overview"`
-	PosterPath       string         `json:"poster_path"`
-	ReleaseDate      string         `json:"release_date"`
-	FirstAirDate     string         `json:"first_air_date"`
-	LastAirDate      string         `json:"last_air_date"`
-	Runtime          int            `json:"runtime"`
-	EpisodeRunTime   []int          `json:"episode_run_time"`
-	NumberOfEpisodes int            `json:"number_of_episodes"`
-	Status           string         `json:"status"`
-	VoteAverage      float64        `json:"vote_average"`
-	Genres           []providerName `json:"genres"`
+	ID               int             `json:"id"`
+	Adult            bool            `json:"adult"`
+	Title            string          `json:"title"`
+	Name             string          `json:"name"`
+	OriginalTitle    string          `json:"original_title"`
+	OriginalName     string          `json:"original_name"`
+	Overview         string          `json:"overview"`
+	PosterPath       string          `json:"poster_path"`
+	ReleaseDate      string          `json:"release_date"`
+	FirstAirDate     string          `json:"first_air_date"`
+	LastAirDate      string          `json:"last_air_date"`
+	Runtime          int             `json:"runtime"`
+	EpisodeRunTime   []int           `json:"episode_run_time"`
+	NumberOfEpisodes int             `json:"number_of_episodes"`
+	Status           string          `json:"status"`
+	LastEpisodeToAir *tmdbEpisodeAir `json:"last_episode_to_air"`
+	NextEpisodeToAir *tmdbEpisodeAir `json:"next_episode_to_air"`
+	VoteAverage      float64         `json:"vote_average"`
+	Genres           []providerName  `json:"genres"`
 	CreatedBy        []struct {
 		ID          int    `json:"id"`
 		Name        string `json:"name"`
@@ -69,6 +72,12 @@ type tmdbDetailPayload struct {
 	Recommendations struct {
 		Results []tmdbTitleSummary `json:"results"`
 	} `json:"recommendations"`
+}
+
+type tmdbEpisodeAir struct {
+	SeasonNumber  int    `json:"season_number"`
+	EpisodeNumber int    `json:"episode_number"`
+	AirDate       string `json:"air_date"`
 }
 
 type tmdbTitleSummary struct {
@@ -193,22 +202,42 @@ func tmdbSeasons(item tmdbDetailPayload, mediaType string) []discoverySeason {
 		return result
 	}
 	seen := make(map[int]bool)
+	today := time.Now().UTC().Format(time.DateOnly)
 	for _, season := range item.Seasons {
 		title := limitedProviderText(season.Name, 200)
 		if season.ID < 1 || season.SeasonNumber < 0 || title == "" || seen[season.SeasonNumber] {
 			continue
 		}
 		seen[season.SeasonNumber] = true
+		startDate := boundedTMDBDate(season.AirDate)
 		result = append(result, discoverySeason{
 			ProviderID: strconv.Itoa(season.ID), SeasonNumber: season.SeasonNumber, Title: title,
 			Description: limitedProviderText(season.Overview, 10_000), CoverURL: tmdbCoverURL(season.PosterPath),
-			StartDate: boundedTMDBDate(season.AirDate), EpisodeCount: boundedPositive(season.EpisodeCount, 10_000),
+			StartDate: startDate, EpisodeCount: boundedPositive(season.EpisodeCount, 10_000),
+			Completed: len(startDate) == 10 && startDate <= today && tmdbSeasonCompleted(item, season.SeasonNumber, season.EpisodeCount, today),
 		})
 		if len(result) == maxTMDBSeasons {
 			break
 		}
 	}
 	return result
+}
+
+func tmdbSeasonCompleted(item tmdbDetailPayload, number, episodes int, today string) bool {
+	last := item.LastEpisodeToAir
+	if number < 1 || episodes < 1 || episodes > 10_000 || last == nil ||
+		last.SeasonNumber < 1 || last.SeasonNumber > maxTMDBSeasons ||
+		last.EpisodeNumber < 1 || last.EpisodeNumber > 10_000 {
+		return false
+	}
+	date := boundedTMDBDate(last.AirDate)
+	if len(date) != 10 || date > today {
+		return false
+	}
+	if next := item.NextEpisodeToAir; next != nil && next.SeasonNumber > 0 && next.SeasonNumber <= number {
+		return false
+	}
+	return number < last.SeasonNumber || number == last.SeasonNumber && last.EpisodeNumber >= episodes
 }
 
 func (s *discoveryService) fetchTMDBCollection(ctx context.Context, collectionID int, currentID string) ([]discoveryResult, error) {

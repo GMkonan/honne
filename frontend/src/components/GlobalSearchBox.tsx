@@ -247,6 +247,7 @@ export interface CatalogSeason {
   coverUrl?: string;
   startDate?: string;
   episodeCount?: number;
+  completed?: boolean;
 }
 
 export interface CatalogContributor extends SearchMediaCredit {
