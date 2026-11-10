@@ -112,7 +112,11 @@ export function FavoritesPanel(
           <Heart size={18} aria-hidden="true" /> Favorites
         </h2>
       </header>
-      {loading && <p role="status">Loading favorites…</p>}
+      {loading && (
+        <p role="status">
+          {favorites.length ? "Refreshing favorites…" : "Loading favorites…"}
+        </p>
+      )}
       {error && (
         <div className="favorites-load-error">
           <p role="alert">{error}</p>
@@ -121,7 +125,7 @@ export function FavoritesPanel(
           </button>
         </div>
       )}
-      {!loading && !error && (
+      {((!loading && !error) || favorites.length > 0) && (
         <>
           <div
             className="favorites-category-tabs"
@@ -182,7 +186,7 @@ export function FavoritesPanel(
           <div className="favorites-panel-actions">
             <button
               type="button"
-              disabled={!!editing || topNineLoading}
+              disabled={loading || !!error || !!editing || topNineLoading}
               onClick={() => setEditing("favorites")}
               aria-haspopup="dialog"
             >
@@ -191,7 +195,8 @@ export function FavoritesPanel(
             </button>
             <button
               type="button"
-              disabled={!!editing || topNineLoading || favorites.length === 0}
+              disabled={loading || !!error || !!editing || topNineLoading ||
+                favorites.length === 0}
               onClick={() => void openTopNine()}
               aria-haspopup="dialog"
             >

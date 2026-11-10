@@ -140,10 +140,9 @@ export function GenreStatsPanel(
                         </span>
                         <span className="genre-stats-name">
                           {genre.name}
-                          <span className="sr-only">
-                            {", "}
-                            {genre.count} of {stats.completedCount}
-                            {" completed titles"}
+                          <span className="genre-stats-count">
+                            {genre.count} / {stats.completedCount}
+                            <span className="sr-only">completed titles</span>
                           </span>
                         </span>
                         <span className="genre-stats-bar" aria-hidden="true">

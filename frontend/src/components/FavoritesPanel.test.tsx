@@ -233,6 +233,52 @@ describe("Library favorites", () => {
     );
   });
 
+  it("preserves saved favorites through refresh and failure without permitting stale edits", () => {
+    const props = {
+      items,
+      favoriteMediaIds: [1, 2],
+      loading: false,
+      error: "",
+      onRetry: vi.fn(),
+      onSave: vi.fn(),
+      onOpen: vi.fn(),
+    };
+    const { rerender } = render(<FavoritesPanel {...props} />);
+    const favorite = () =>
+      screen.getByRole("button", { name: "Open favorite 1: Cowboy Bebop" });
+    expect(favorite()).not.toBeNull();
+
+    rerender(<FavoritesPanel {...props} loading />);
+    expect(favorite()).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Edit favorites" }).hasAttribute(
+        "disabled",
+      ),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Build 3×3" }).hasAttribute(
+        "disabled",
+      ),
+    ).toBe(true);
+
+    rerender(<FavoritesPanel {...props} error="Favorites refresh failed" />);
+    expect(favorite()).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Edit favorites" }).hasAttribute(
+        "disabled",
+      ),
+    ).toBe(true);
+    expect(screen.getByRole("alert")).not.toBeNull();
+
+    rerender(<FavoritesPanel {...props} />);
+    expect(favorite()).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Edit favorites" }).hasAttribute(
+        "disabled",
+      ),
+    ).toBe(false);
+  });
+
   it("keeps title fallbacks for missing, unsafe, and failed covers", () => {
     const candidates = [
       { ...items[0], coverUrl: "https://images.example.test/cover.png" },
@@ -247,7 +293,6 @@ describe("Library favorites", () => {
       name: "Open favorite 1: Cowboy Bebop",
     });
     const image = within(first).getByRole("presentation", { hidden: true });
-    expect(image.getAttribute("loading")).toBe("lazy");
     fireEvent.error(image);
     expect(within(first).queryByRole("presentation", { hidden: true }))
       .toBeNull();

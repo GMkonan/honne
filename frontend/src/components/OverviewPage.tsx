@@ -132,12 +132,15 @@ export function OverviewPage(
                 <div key={label}>
                   <dt>{label}</dt>
                   <dd>
-                    {loading || (error && items.length === 0) ? "—" : value}
+                    {items.length === 0 && (loading || error) ? "—" : value}
                   </dd>
                 </div>
               ))}
             </dl>
-            {loading
+            {loading && items.length > 0 && (
+              <p role="status">Refreshing your Library…</p>
+            )}
+            {loading && items.length === 0
               ? <p role="status">Loading your Library…</p>
               : !error && statisticsItems.length === 0
               ? (
@@ -180,8 +183,11 @@ export function OverviewPage(
                 View all <ArrowRight size={14} aria-hidden="true" />
               </a>
             </header>
+            {activityLoading && recent.length > 0 && (
+              <p role="status">Refreshing recent activity…</p>
+            )}
             {activityError && <p role="alert">{activityError}</p>}
-            {activityLoading
+            {activityLoading && recent.length === 0
               ? <p role="status">Loading recent activity…</p>
               : activityError && recent.length === 0
               ? <p>Recent activity could not be loaded.</p>

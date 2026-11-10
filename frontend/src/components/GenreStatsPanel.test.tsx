@@ -39,7 +39,7 @@ describe("Genre stats panel", () => {
     const legend = within(panel).getByRole("list", { name: "Anime genres" });
     const rows = within(legend).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
-    expect(rows[0].textContent).toContain("67%Comedy, 2 of 3 completed titles");
+    expect(within(rows[0]).getByText("67%")).not.toBeNull();
     expect(within(legend).queryByText("Horror")).toBeNull();
     expect(within(panel).queryByText("Episodes recorded")).toBeNull();
     expect(within(panel).queryByText("Estimated watch time")).toBeNull();

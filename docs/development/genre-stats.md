@@ -28,6 +28,10 @@ Source changes do not authorize updating a running installation.
   both denominators in the accessible chart description and calculation details.
 - Retain all genres, including long names. The legend scrolls vertically and is
   keyboard-focusable; no genre disappears because of a top-seven cutoff.
+  Show the supporting completed-title count (`count / completedCount`) below each
+  genre name. Keep the percentage unbroken and the count readable when names wrap;
+  do not clamp percentage points to a 0–1 fraction or normalize title shares to
+  make their sum 100%.
 - Episode, chapter, and page totals use recorded progress plus additional completed
   repeats multiplied by the personal total, falling back to the catalog total
   only when the personal total is absent. Include positive progress regardless of
@@ -170,3 +174,30 @@ not visually validated. No browser dependency was installed.
 - Real-browser row wrapping, right alignment, long labels/large counters,
   320 px/tablet/desktop/200% zoom, and screen-reader output remain unverified
   because no browser is available. No dependency was installed.
+
+### Overview review (2026-11-10)
+
+The previously reported uniform `1%` state was not captured in the inspected
+running/source builds, so this review does not identify a numeric root cause for
+that earlier state. The existing `count / completedCount * 100` calculation and
+completed-only denominator remain unchanged. The legend now exposes its supporting
+counts, and percentage labels cannot wrap into misleading fragments.
+
+Real Chrome checks used synthetic data, including overlapping genres, missing
+metadata, common and sub-1% genres, long labels, all-type and per-type filters,
+ongoing consumption, empty categories, initial loading, and failed refreshes.
+Component checks covered 320 px, tablet, desktop, and a 200%-equivalent viewport
+(720 CSS px at device scale 2), plus native keyboard scrolling. An isolated full
+application/backend run verified favorites retained during a pending/failed
+navigation refresh, retry recovery, keyboard navigation into a favorite, and the
+320 px Overview. No owner data or running installation was changed.
+
+See [Overview behavior](overview-favorites.md) for retained-data and mutation
+boundaries. Screen-reader speech output remains unverified; browser roles,
+accessible controls, and keyboard behavior were inspected.
+
+Validation passed after this review: frontend formatting, lint, strict typecheck,
+all 221 frontend tests (one worker, without a competing suite), production build,
+Go vet/race tests and formatting, and Docker Compose configuration. The new
+regressions cover confirmed metrics/activity during refresh and readable cached
+favorites with stale editing blocked until recovery.

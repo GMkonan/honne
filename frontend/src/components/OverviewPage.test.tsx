@@ -294,6 +294,38 @@ describe("Overview", () => {
       .toBeNull();
   });
 
+  it("keeps confirmed metrics and activity readable while refreshing", () => {
+    const activity: ActivityEvent = {
+      id: 1,
+      mediaId: 1,
+      title: "Cowboy Bebop",
+      mediaType: "anime",
+      action: "updated",
+      changes: {},
+      occurredAt: "2026-01-01T00:00:00Z",
+    };
+    render(
+      <OverviewPage
+        {...defaults}
+        activities={[activity]}
+        loading
+        activityLoading
+      />,
+    );
+    const summary = screen.getByRole("region", { name: "At a glance" });
+    expect(
+      within(summary).getByText("Total titles").parentElement?.querySelector(
+        "dd",
+      )
+        ?.textContent,
+    ).toBe("3");
+    expect(within(summary).getByRole("status")).not.toBeNull();
+    const feed = screen.getByRole("region", { name: "Recent activity" });
+    expect(within(feed).getByRole("status")).not.toBeNull();
+    expect(within(feed).getByRole("button", { name: /Cowboy Bebop/u }))
+      .not.toBeNull();
+  });
+
   it("keeps valid summary and activity data visible when an independent refresh fails", () => {
     const activity: ActivityEvent = {
       id: 1,

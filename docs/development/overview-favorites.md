@@ -15,6 +15,13 @@ activity. The smaller column contains separate read-only
 [genre and consumption statistics](genre-stats.md) cards. A shared media-type
 filter controls statistics only; favorites retain their independent category tabs.
 
+During refresh, keep confirmed summary metrics, recent activity, and saved
+favorites readable rather than replacing them with placeholders or empty cards.
+Show refreshing status separately. An independent failed refresh keeps other
+valid data visible. Cached favorites remain navigable, but editing and 3×3
+selection are disabled until their refresh succeeds; an initial load failure
+without confirmed favorites must not pretend that the selection is empty.
+
 The compact presentation (owner revisions, 2026-11-02 and 2026-11-03) keeps the
 eight-cover preview and existing expand/edit/3×3 actions. Fill the available card
 width with compact, automatically wrapping columns starting at 96 px rather than
