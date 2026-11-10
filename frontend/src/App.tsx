@@ -64,6 +64,7 @@ import { ProviderAttribution } from "./components/ProviderAttribution.tsx";
 import { MonthlyLogPage } from "./components/MonthlyLogPage.tsx";
 import { LibrarySectionNav } from "./components/LibrarySectionNav.tsx";
 import { LibraryMediaFilter } from "./components/LibraryMediaFilter.tsx";
+import { LibraryCover } from "./components/LibraryCover.tsx";
 import { LibraryHero, type PublicProfile } from "./components/LibraryHero.tsx";
 import {
   formatPlaytime,
@@ -1892,9 +1893,10 @@ function App() {
                   )
                   : (
                     <div className="media-grid">
-                      {filtered.map((item) => (
+                      {filtered.map((item, index) => (
                         <MediaCard
                           item={item}
+                          priority={index === 0}
                           onOpen={() => openLocalDetail(item.id)}
                           onEdit={() => setManagedItem(item)}
                           key={item.id}
@@ -3033,8 +3035,9 @@ function movieCardHighlight(item: Media): {
 }
 
 function MediaCard(
-  { item, onOpen, onEdit }: {
+  { item, priority, onOpen, onEdit }: {
     item: Media;
+    priority: boolean;
     onOpen: () => void;
     onEdit: () => void;
   },
@@ -3063,22 +3066,21 @@ function MediaCard(
       <div className="card-cover">
         <button
           type="button"
-          className={`cover ${item.coverUrl ? "" : "fallback-cover"}`}
-          style={{
-            backgroundImage: item.coverUrl
-              ? `url("${item.coverUrl.replaceAll('"', "")}")`
-              : undefined,
-          }}
+          className="cover"
           onClick={onOpen}
           aria-label={`View details for ${item.title}. Status: ${
             mediaStatusLabel(item.status, item.type)
           }${item.plannedRepeat ? `. ${plannedRepeatLabel(item.type)}` : ""}`}
         >
-          {!item.coverUrl && (
-            <span className="fallback-label">
-              <Icon size={18} /> {type?.label}
-            </span>
-          )}
+          <LibraryCover
+            coverUrl={item.coverUrl}
+            priority={priority}
+            fallback={
+              <span className="fallback-label">
+                <Icon size={18} /> {type?.label}
+              </span>
+            }
+          />
           <span className={`status ${item.status}`}>
             {status ? mediaStatusLabel(status.value, item.type) : ""}
           </span>

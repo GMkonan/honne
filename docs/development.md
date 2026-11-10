@@ -80,6 +80,31 @@ restoration, plus layout at 320 px, tablet, desktop, and 200% zoom. This shortcu
 uses existing episode persistence; it does not store a separate season count or
 change the behavior of the Completed status.
 
+### Library cover loading
+
+Library cards use native images with a fixed aspect ratio. The first result is
+eager/high-priority; other covers use browser-native lazy loading, which starts
+visible and nearby images without fetching the entire collection immediately.
+TMDB posters use responsive width variants; Open Library covers use medium/large
+density variants. Other providers and custom URLs retain their original URL.
+If a size variant fails, the card tries the stored original once, then shows its
+media-type fallback. No image URLs are changed in persistence.
+
+Covers still load directly from their providers and use the browser/provider
+cache; Honne does not add a local cover cache or make covers available offline.
+
+To check this behavior, use an isolated backend and synthetic Library entries:
+
+- With browser caching disabled and enough rows to extend well below the viewport,
+  inspect image requests before scrolling. Distant covers should remain deferred;
+  scrolling to them should load them.
+- Inspect the selected TMDB/Open Library image at desktop, mobile, and high pixel
+  density. Check 320 px, tablet, desktop, and a 200%-equivalent viewport; poster
+  proportions, status badges, and keyboard access to details must remain intact.
+- Block a resized cover request and confirm that its original URL is tried. Block
+  both and confirm the media-type fallback, with no retry loop. Missing covers
+  should show the same fallback without making an image request.
+
 ## API
 
 All application responses disable caching. When Basic Auth is configured, every route except health checks is protected.
